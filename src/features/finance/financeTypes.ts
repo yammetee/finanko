@@ -14,6 +14,7 @@ import type {
 } from "../../shared/types/finance";
 
 export type TransactionFilter = "all" | "income" | "expense";
+export type CurrencyDisplayMode = Currency | "native";
 
 export interface NewAccountInput {
   name: string;
@@ -56,6 +57,7 @@ export interface FinanceState {
   activePortfolioId: string;
   timeframe: Timeframe;
   transactionFilter: TransactionFilter;
+  currencyDisplay: CurrencyDisplayMode;
   portfolios: Portfolio[];
   accounts: Account[];
   categories: Category[];
@@ -65,11 +67,13 @@ export interface FinanceState {
   setActivePortfolio: (id: string) => void;
   setTimeframe: (timeframe: Timeframe) => void;
   setTransactionFilter: (filter: TransactionFilter) => void;
+  setCurrencyDisplay: (currencyDisplay: CurrencyDisplayMode) => void;
   addPortfolio: (name: string, baseCurrency: Currency) => void;
   deletePortfolio: (id: string) => void;
   addAccount: (input: NewAccountInput) => void;
   updateAccount: (id: string, input: NewAccountInput) => void;
   archiveAccount: (id: string) => void;
+  repairAccountCurrencies: () => void;
   addCategory: (input: NewCategoryInput) => void;
   addTransaction: (input: NewTransactionInput) => void;
   updateTransaction: (id: string, input: NewTransactionInput) => void;
@@ -84,6 +88,7 @@ export interface FinanceSnapshot {
   activePortfolioId: string;
   timeframe: Timeframe;
   transactionFilter: TransactionFilter;
+  currencyDisplay: CurrencyDisplayMode;
   portfolios: Portfolio[];
   accounts: Account[];
   categories: Category[];

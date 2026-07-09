@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { FinanceState } from "./financeTypes";
 import { createSeedSnapshot, defaultCategories } from "./seedData";
-import type { Transaction } from "../../shared/types/finance";
+import type { Account, Currency, Transaction } from "../../shared/types/finance";
 import { getDueRecurringTransactions } from "../recurring/recurring";
 import {
   isLiabilityAccountType,
@@ -12,6 +12,30 @@ import {
 
 const now = dayjs();
 const seedSnapshot = createSeedSnapshot();
+
+function inferAccountCurrency(account: Pick<Account, "name" | "type" | "currency" | "initialBalance">): Currency {
+  if (/(?:₽|rub|ruble|rubles|руб|рубл)/i.test(account.name)) return "RUB";
+  if (/(?:₾|gel|lari|лари)/i.test(account.name)) return "GEL";
+  if (/(?:฿|thb|baht|бат)/i.test(account.name)) return "THB";
+  if (/(?:\$|usd|dollar|dollars|доллар)/i.test(account.name)) return "USD";
+
+  const looksLikeRussianLiability =
+    isLiabilityAccountType(account.type) &&
+    account.currency === "USD" &&
+    Math.abs(account.initialBalance) >= 100_000 &&
+    /(?:сбер|sber|тиньк|tinkoff|альфа|alfa|втб|vtb)/i.test(account.name);
+
+  return looksLikeRussianLiability ? "RUB" : account.currency;
+}
+
+function normalizeAccountCurrency<T extends Pick<Account, "name" | "type" | "currency" | "initialBalance">>(
+  account: T,
+) {
+  return {
+    ...account,
+    currency: inferAccountCurrency(account),
+  };
+}
 
 function uid(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -33,6 +57,7 @@ export const useFinanceStore = create<FinanceState>()(
       setActivePortfolio: (id) => set({ activePortfolioId: id }),
       setTimeframe: (timeframe) => set({ timeframe }),
       setTransactionFilter: (transactionFilter) => set({ transactionFilter }),
+      setCurrencyDisplay: (currencyDisplay) => set({ currencyDisplay }),
       addPortfolio: (name, baseCurrency) => {
         const id = uid("portfolio");
         set((state) => ({
@@ -67,7 +92,7 @@ export const useFinanceStore = create<FinanceState>()(
               color: ["#4fb6e8", "#5fd38a", "#e8b94c", "#9b82e6"][
                 state.accounts.length % 4
               ],
-              ...input,
+              ...normalizeAccountCurrency(input),
               initialBalance: normalizeAccountInitialBalance(
                 input.type,
                 input.initialBalance,
@@ -85,7 +110,7 @@ export const useFinanceStore = create<FinanceState>()(
             account.id === id
               ? {
                   ...account,
-                  ...input,
+                  ...normalizeAccountCurrency(input),
                   initialBalance: normalizeAccountInitialBalance(
                     input.type,
                     input.initialBalance,
@@ -105,6 +130,10 @@ export const useFinanceStore = create<FinanceState>()(
               ? { ...account, isArchived: true, deletedAt: new Date().toISOString() }
               : account,
           ),
+        })),
+      repairAccountCurrencies: () =>
+        set((state) => ({
+          accounts: state.accounts.map((account) => normalizeAccountCurrency(account)),
         })),
       addCategory: (input) =>
         set((state) => {
@@ -269,17 +298,32 @@ export const useFinanceStore = create<FinanceState>()(
           activePortfolioId: state.activePortfolioId,
           timeframe: state.timeframe,
           transactionFilter: state.transactionFilter,
+          currencyDisplay: state.currencyDisplay,
           portfolios: state.portfolios,
           accounts: state.accounts,
           categories: state.categories,
           transactions: state.transactions,
-          transactionItems: state.transactionItems ?? [],
-          recurringRules: state.recurringRules,
-        };
+        transactionItems: state.transactionItems ?? [],
+        recurringRules: state.recurringRules,
+      };
       },
       importSnapshot: (snapshot) => set(snapshot),
       resetDemoData: () => set(createSeedSnapshot()),
     }),
-    { name: "finanko-local-state-v3" },
+    {
+      name: "finanko-local-state-v3",
+      version: 4,
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== "object") return persistedState;
+        const state = persistedState as FinanceState;
+        return {
+          ...state,
+          currencyDisplay: state.currencyDisplay ?? "native",
+          accounts: Array.isArray(state.accounts)
+            ? state.accounts.map((account) => normalizeAccountCurrency(account))
+            : state.accounts,
+        };
+      },
+    },
   ),
 );

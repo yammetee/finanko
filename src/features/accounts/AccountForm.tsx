@@ -11,6 +11,8 @@ import { AccountTypeSelect, CurrencySelect } from "../../shared/ui/FormSelects";
 import type { Account, AccountType, Currency, InterestFrequency } from "../../shared/types/finance";
 import { isLiabilityAccountType } from "../../shared/lib/accounts";
 
+const SAME_ACCOUNT_VALUE = "__same_account__";
+
 export interface AccountFormValues {
   name: string;
   type: AccountType;
@@ -37,13 +39,27 @@ export function AccountForm({
   onFinish,
 }: AccountFormProps) {
   const { t } = useI18n();
+  function submit(values: AccountFormValues) {
+    onFinish({
+      ...values,
+      interestAllocationAccountId:
+        values.interestAllocationAccountId === SAME_ACCOUNT_VALUE
+          ? undefined
+          : values.interestAllocationAccountId,
+    });
+  }
 
   return (
     <Form
       form={form}
       layout="vertical"
-      initialValues={{ type: "custom", currency: "USD", initialBalance: 0 }}
-      onFinish={onFinish}
+      initialValues={{
+        type: "custom",
+        currency: "USD",
+        initialBalance: 0,
+        interestAllocationAccountId: SAME_ACCOUNT_VALUE,
+      }}
+      onFinish={submit}
     >
       <Form.Item name="name" label={t("form.name")} rules={[{ required: true }]}>
         <Input placeholder={t("placeholder.savingsName")} />
@@ -102,12 +118,18 @@ export function AccountForm({
                 <Form.Item name="interestAllocationAccountId" label={t("form.interestAllocationAccount")}>
                   <Select
                     allowClear
-                    options={accounts
-                      .filter((account) => account.id !== editingAccountId)
-                      .map((account) => ({
-                        value: account.id,
-                        label: getAccountName(account, t),
-                      }))}
+                    options={[
+                      {
+                        value: SAME_ACCOUNT_VALUE,
+                        label: t("account.sameAccount"),
+                      },
+                      ...accounts
+                        .filter((account) => account.id !== editingAccountId)
+                        .map((account) => ({
+                          value: account.id,
+                          label: getAccountName(account, t),
+                        })),
+                    ]}
                   />
                 </Form.Item>
               ) : null}

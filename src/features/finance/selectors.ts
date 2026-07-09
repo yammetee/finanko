@@ -22,12 +22,12 @@ export function getPeriod(timeframe: Timeframe) {
     return null;
   }
   if (timeframe === "week") {
-    return { start: now.subtract(6, "day").startOf("day"), end: now.endOf("day") };
+    return { start: now.startOf("isoWeek"), end: now.endOf("isoWeek") };
   }
   if (timeframe === "year") {
-    return { start: now.subtract(359, "day").startOf("day"), end: now.endOf("day") };
+    return { start: now.startOf("year"), end: now.endOf("year") };
   }
-  return { start: now.subtract(29, "day").startOf("day"), end: now.endOf("day") };
+  return { start: now.startOf("month"), end: now.endOf("month") };
 }
 
 export function filterVisibleTransactions(
@@ -124,22 +124,25 @@ function buildTimeBuckets(transactions: Transaction[], timeframe: Timeframe) {
   const now = dayjs();
 
   if (timeframe === "week") {
+    const start = now.startOf("isoWeek");
     return Array.from({ length: 7 }, (_, index) => {
-      const date = now.subtract(6 - index, "day").startOf("day");
+      const date = start.add(index, "day").startOf("day");
       return { key: getBucketKey(date, timeframe), date, label: getTrendLabel(date, timeframe) };
     });
   }
 
   if (timeframe === "month") {
-    return Array.from({ length: 30 }, (_, index) => {
-      const date = now.subtract(29 - index, "day").startOf("day");
+    const start = now.startOf("month");
+    return Array.from({ length: now.daysInMonth() }, (_, index) => {
+      const date = start.add(index, "day").startOf("day");
       return { key: getBucketKey(date, timeframe), date, label: getTrendLabel(date, timeframe) };
     });
   }
 
   if (timeframe === "year") {
+    const start = now.startOf("year");
     return Array.from({ length: 12 }, (_, index) => {
-      const date = now.subtract(11 - index, "month").startOf("month");
+      const date = start.add(index, "month").startOf("month");
       return { key: getBucketKey(date, timeframe), date, label: getTrendLabel(date, timeframe) };
     });
   }
@@ -163,17 +166,7 @@ function getInitialBaseBalance(accounts: Account[], baseCurrency: Currency) {
     .reduce(
       (sum, account) =>
         sum +
-        convertMoney(
-          account.interestAllocationAccountId
-            ? normalizeAccountInitialBalance(account.type, account.initialBalance)
-            : applyAccountInterest(
-                normalizeAccountInitialBalance(account.type, account.initialBalance),
-                account,
-                dayjs(),
-              ),
-          account.currency,
-          baseCurrency,
-        ),
+        getAccountBalanceInCurrency(account, [], baseCurrency, undefined, accounts),
       0,
     );
 }

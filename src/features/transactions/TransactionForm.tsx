@@ -50,8 +50,8 @@ interface TransactionFormProps {
   categories: Category[];
   onModeChange: (mode: string) => void;
   onFinish: (values: TransactionFormValues) => void;
-  onParseText: (values: { text: string }) => void;
-  onParseReceipt: (values: { fileName: string }) => void;
+  onParseText: (values: { text: string }) => void | Promise<void>;
+  onParseReceipt: (values: { fileName: string }) => void | Promise<void>;
 }
 
 export function TransactionForm({
@@ -68,8 +68,29 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const { t } = useI18n();
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
+  const [receiptParsing, setReceiptParsing] = useState(false);
+  const [textParsing, setTextParsing] = useState(false);
   const parsedItems = Form.useWatch("items", form) ?? [];
   const recurring = Form.useWatch("recurring", form);
+
+  async function parseText(values: { text: string }) {
+    setTextParsing(true);
+    try {
+      await onParseText(values);
+    } finally {
+      setTextParsing(false);
+    }
+  }
+
+  async function parseReceipt(fileName: string) {
+    setReceiptFileName(fileName);
+    setReceiptParsing(true);
+    try {
+      await onParseReceipt({ fileName });
+    } finally {
+      setReceiptParsing(false);
+    }
+  }
 
   return (
     <>
@@ -85,11 +106,17 @@ export function TransactionForm({
         style={{ marginBottom: 18 }}
       />
       {mode === "text" ? (
-        <Form form={textParserForm} layout="vertical" onFinish={onParseText}>
+        <Form form={textParserForm} layout="vertical" onFinish={parseText}>
           <Form.Item name="text" label={t("form.expenseText")} rules={[{ required: true }]}>
             <Input.TextArea rows={4} placeholder={t("placeholder.expenseText")} />
           </Form.Item>
-          <Button type="primary" htmlType="submit" block icon={<Sparkles size={16} />}>
+          <Button
+            type="primary"
+            htmlType="submit"
+            block
+            icon={<Sparkles size={16} />}
+            loading={textParsing}
+          >
             {t("actions.parseSmart")}
           </Button>
         </Form>
@@ -97,18 +124,19 @@ export function TransactionForm({
         <Card>
           <Space direction="vertical" size={12}>
             <ReceiptText size={28} />
-            <Text>{t("receipt.mockReserved")}</Text>
+            <Text>{t("receipt.description")}</Text>
             <Upload
               accept="image/*,.pdf"
               beforeUpload={(file) => {
-                setReceiptFileName(file.name);
-                onParseReceipt({ fileName: file.name });
+                void parseReceipt(file.name);
                 return false;
               }}
               maxCount={1}
               showUploadList={false}
             >
-              <Button icon={<UploadIcon size={16} />}>{t("receipt.selectFile")}</Button>
+              <Button icon={<UploadIcon size={16} />} loading={receiptParsing}>
+                {t("receipt.selectFile")}
+              </Button>
             </Upload>
             {receiptFileName ? (
               <Text className="muted">

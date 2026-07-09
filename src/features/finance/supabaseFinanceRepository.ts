@@ -50,6 +50,7 @@ export async function getSupabaseFinanceSnapshot(): Promise<FinanceSnapshot> {
     activePortfolioId,
     timeframe: "month",
     transactionFilter: "all",
+    currencyDisplay: "native",
     portfolios,
     accounts: accountRows.map(mapAccountRow),
     categories: categoryRows.map(mapCategoryRow),

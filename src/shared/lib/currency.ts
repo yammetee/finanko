@@ -12,7 +12,7 @@ export function setLiveExchangeRates(row: RateRow | null) {
 }
 
 function getRateRow(date?: string) {
-  if (!date && liveRateRow) return liveRateRow;
+  if (liveRateRow) return liveRateRow;
   const target = date ? dayjs(date) : dayjs();
   return (
     [...rates]

@@ -42,7 +42,7 @@ Do not use Next.js for the MVP.
 - Build responsive layouts from the beginning.
 - Treat portfolios as the root business entity.
 - Treat transactions as the source of financial history.
-- Use mock AI services in MVP, but keep the interface compatible with real AI calls later.
+- Use real AI services when configured, with mock fallbacks that keep the MVP usable without keys.
 - Avoid sending raw long-term transaction history to AI. Build local summaries first.
 - Destructive actions require confirmation.
 - Prefer soft deletion for financial records.
@@ -382,7 +382,7 @@ Make the MVP coherent, safe, and comfortable to use.
 - Real AI API calls.
 - Real OCR.
 - Bank integrations.
-- Currency exchange rates.
+- Bank-grade currency exchange and historical FX reconciliation.
 - Investment recommendations.
 - Tauri wrapper.
 - Advanced budgets.

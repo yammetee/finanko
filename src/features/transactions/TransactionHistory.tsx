@@ -7,17 +7,20 @@ import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { getTransactionDescription } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
+import { convertMoney } from "../../shared/lib/currency";
 import { formatMoney, shortDate } from "../../shared/lib/format";
-import type { Transaction } from "../../shared/types/finance";
+import type { Currency, Transaction } from "../../shared/types/finance";
 
 interface TransactionHistoryProps {
   transactions: Transaction[];
+  displayCurrency: Currency | "native";
   onEdit: (transaction: Transaction) => void;
   onDelete: (transaction: Transaction) => void;
 }
 
 export function TransactionHistory({
   transactions,
+  displayCurrency,
   onEdit,
   onDelete,
 }: TransactionHistoryProps) {
@@ -93,12 +96,19 @@ export function TransactionHistory({
             title: t("table.amount"),
             className: "history-amount-cell",
             width: 116,
-            render: (_, row) => (
-              <span className={row.type === "expense" ? "amount-negative" : "amount-positive"}>
-                {row.type === "expense" ? "-" : "+"}
-                {formatMoney(row.amount, row.currency)}
-              </span>
-            ),
+            render: (_, row) => {
+              const currency = displayCurrency === "native" ? row.currency : displayCurrency;
+              const amount =
+                displayCurrency === "native"
+                  ? row.amount
+                  : convertMoney(row.amount, row.currency, displayCurrency, row.occurredAt);
+              return (
+                <span className={row.type === "expense" ? "amount-negative" : "amount-positive"}>
+                  {row.type === "expense" ? "-" : "+"}
+                  {formatMoney(amount, currency)}
+                </span>
+              );
+            },
           },
           {
             title: "",

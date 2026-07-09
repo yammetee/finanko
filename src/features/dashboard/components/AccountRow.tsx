@@ -7,7 +7,7 @@ import { useI18n } from "../../../shared/i18n/i18nContext";
 import { getAccountName } from "../../../shared/i18n/displayText";
 import { formatMoney } from "../../../shared/lib/format";
 import { isLiabilityAccount } from "../../../shared/lib/accounts";
-import type { Account } from "../../../shared/types/finance";
+import type { Account, Currency } from "../../../shared/types/finance";
 
 const { Text } = Typography;
 
@@ -15,6 +15,8 @@ interface AccountRowProps {
   account: Account;
   accounts: Account[];
   balance: number;
+  allocationBalance: number;
+  displayCurrency: Currency;
   total: number;
   onEdit?: (account: Account) => void;
   onArchive?: (account: Account) => void;
@@ -24,12 +26,14 @@ export function AccountRow({
   account,
   accounts,
   balance,
+  allocationBalance,
+  displayCurrency,
   total,
   onEdit,
   onArchive,
 }: AccountRowProps) {
   const { t } = useI18n();
-  const percent = total > 0 ? (Math.abs(balance) / total) * 100 : 0;
+  const percent = total > 0 ? (Math.abs(allocationBalance) / total) * 100 : 0;
   const allocationAccount = accounts.find(
     (candidate) => candidate.id === account.interestAllocationAccountId,
   );
@@ -70,7 +74,7 @@ export function AccountRow({
           </span>
         </Space>
         <Text className="account-row-balance" strong>
-          {formatMoney(balance, account.currency)}
+          {formatMoney(balance, displayCurrency)}
         </Text>
         {onEdit ? (
           <Button

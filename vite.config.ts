@@ -50,6 +50,44 @@ function sendJson(response: DevResponse, status: number, payload: unknown) {
   response.end(JSON.stringify(payload));
 }
 
+interface AiUsageCounter {
+  dateKey: string;
+  count: number;
+}
+
+const aiUsage: AiUsageCounter = {
+  dateKey: new Date().toISOString().slice(0, 10),
+  count: 0,
+};
+
+function getAiDailyLimit(env: Record<string, string>) {
+  const value = Number(env.AI_DAILY_LIMIT ?? env.VITE_AI_DAILY_LIMIT ?? 20);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 20;
+}
+
+function checkAiDailyLimit(limit: number) {
+  const dateKey = new Date().toISOString().slice(0, 10);
+  if (aiUsage.dateKey !== dateKey) {
+    aiUsage.dateKey = dateKey;
+    aiUsage.count = 0;
+  }
+
+  if (aiUsage.count >= limit) {
+    return {
+      allowed: false,
+      remaining: 0,
+      resetDate: dateKey,
+    };
+  }
+
+  aiUsage.count += 1;
+  return {
+    allowed: true,
+    remaining: Math.max(0, limit - aiUsage.count),
+    resetDate: dateKey,
+  };
+}
+
 function aiParserPlugin(): Plugin {
   return {
     name: "finanko-ai-parser",
@@ -103,10 +141,22 @@ function aiParserPlugin(): Plugin {
         const env = loadEnv(server.config.mode, server.config.root, "");
         const apiKey = env.OPENAI_API_KEY;
         const baseUrl = env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-        const model = env.OPENAI_MODEL ?? env.VITE_OPENAI_MODEL ?? "gpt-5-4-nano";
+        const model = env.OPENAI_MODEL ?? env.VITE_OPENAI_MODEL ?? "gpt-5.4-nano";
+        const limit = getAiDailyLimit(env);
 
         if (!apiKey || !model) {
           sendJson(response, 404, { error: "AI parser is not configured" });
+          return;
+        }
+
+        const usage = checkAiDailyLimit(limit);
+        if (!usage.allowed) {
+          sendJson(response, 429, {
+            error: "AI daily limit reached",
+            limit,
+            remaining: usage.remaining,
+            resetDate: usage.resetDate,
+          });
           return;
         }
 
@@ -138,48 +188,59 @@ function aiParserPlugin(): Plugin {
                   schema: {
                     type: "object",
                     additionalProperties: false,
-                    oneOf: [
-                      {
-                        type: "object",
-                        additionalProperties: false,
-                        required: ["kind", "description", "currency", "items", "total"],
-                        properties: {
-                          kind: { const: "transaction" },
-                          description: { type: "string" },
-                          currency: { enum: ["USD", "GEL", "RUB", "THB"] },
-                          total: { type: "number" },
-                          items: {
-                            type: "array",
-                            items: {
-                              type: "object",
-                              additionalProperties: false,
-                              required: ["name", "amount", "categoryId", "confidence"],
-                              properties: {
-                                name: { type: "string" },
-                                amount: { type: "number" },
-                                categoryId: { type: "string" },
-                                confidence: { type: "number" },
-                              },
-                            },
+                    required: [
+                      "kind",
+                      "description",
+                      "currency",
+                      "items",
+                      "total",
+                      "name",
+                      "type",
+                      "initialBalance",
+                      "annualInterestRate",
+                      "interestFrequency",
+                      "loanTermMonths",
+                    ],
+                    properties: {
+                      kind: { type: "string", enum: ["transaction", "account"] },
+                      description: { type: ["string", "null"] },
+                      currency: { type: "string", enum: ["USD", "GEL", "RUB", "THB"] },
+                      total: { type: ["number", "null"] },
+                      items: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          additionalProperties: false,
+                          required: ["name", "amount", "categoryId", "confidence"],
+                          properties: {
+                            name: { type: "string" },
+                            amount: { type: "number" },
+                            categoryId: { type: "string" },
+                            confidence: { type: "number" },
                           },
                         },
                       },
-                      {
-                        type: "object",
-                        additionalProperties: false,
-                        required: ["kind", "name", "type", "currency", "initialBalance"],
-                        properties: {
-                          kind: { const: "account" },
-                          name: { type: "string" },
-                          type: { enum: ["bank", "card", "cash", "savings", "investment", "crypto", "debt", "credit", "mortgage", "custom"] },
-                          currency: { enum: ["USD", "GEL", "RUB", "THB"] },
-                          initialBalance: { type: "number" },
-                          annualInterestRate: { type: "number" },
-                          interestFrequency: { enum: ["daily", "monthly"] },
-                          loanTermMonths: { type: "number" },
-                        },
+                      name: { type: ["string", "null"] },
+                      type: {
+                        enum: [
+                          "bank",
+                          "card",
+                          "cash",
+                          "savings",
+                          "investment",
+                          "crypto",
+                          "debt",
+                          "credit",
+                          "mortgage",
+                          "custom",
+                          null,
+                        ],
                       },
-                    ],
+                      initialBalance: { type: ["number", "null"] },
+                      annualInterestRate: { type: ["number", "null"] },
+                      interestFrequency: { enum: ["daily", "monthly", null] },
+                      loanTermMonths: { type: ["number", "null"] },
+                    },
                   },
                 },
               },
@@ -187,7 +248,10 @@ function aiParserPlugin(): Plugin {
           });
 
           if (!aiResponse.ok) {
-            sendJson(response, aiResponse.status, { error: "OpenAI request failed" });
+            sendJson(response, aiResponse.status, {
+              error: "OpenAI request failed",
+              detail: await aiResponse.json().catch(() => null),
+            });
             return;
           }
 
@@ -219,10 +283,22 @@ function aiParserPlugin(): Plugin {
         const env = loadEnv(server.config.mode, server.config.root, "");
         const apiKey = env.OPENAI_API_KEY;
         const baseUrl = env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
-        const model = env.OPENAI_MODEL ?? env.VITE_OPENAI_MODEL ?? "gpt-5-4-nano";
+        const model = env.OPENAI_MODEL ?? env.VITE_OPENAI_MODEL ?? "gpt-5.4-nano";
+        const limit = getAiDailyLimit(env);
 
         if (!apiKey || !model) {
           sendJson(response, 404, { error: "AI assistant is not configured" });
+          return;
+        }
+
+        const usage = checkAiDailyLimit(limit);
+        if (!usage.allowed) {
+          sendJson(response, 429, {
+            error: "AI daily limit reached",
+            limit,
+            remaining: usage.remaining,
+            resetDate: usage.resetDate,
+          });
           return;
         }
 
@@ -251,7 +327,10 @@ function aiParserPlugin(): Plugin {
           });
 
           if (!aiResponse.ok) {
-            sendJson(response, aiResponse.status, { error: "OpenAI request failed" });
+            sendJson(response, aiResponse.status, {
+              error: "OpenAI request failed",
+              detail: await aiResponse.json().catch(() => null),
+            });
             return;
           }
 

@@ -45,6 +45,21 @@ export interface ParseReceiptInput {
   categories: Category[];
 }
 
+export function detectCurrencyInText(text: string): Currency | null {
+  if (/(?:₽|rub|ruble|rubles|руб|рубл|р\b)/i.test(text)) return "RUB";
+  if (/(?:₾|gel|lari|лари)/i.test(text)) return "GEL";
+  if (/(?:฿|thb|baht|бат)/i.test(text)) return "THB";
+  if (/(?:\$|usd|dollar|dollars|доллар)/i.test(text)) return "USD";
+  return null;
+}
+
+export function detectAmountInText(text: string) {
+  const match = text.match(/(\d[\d\s.,]*)/);
+  if (!match) return null;
+  const amount = Number(match[1].replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(amount) ? amount : null;
+}
+
 function findCategoryId(categories: Category[], fallbackName: string) {
   return (
     categories.find((category) =>
@@ -95,19 +110,15 @@ export function parseTextInputMock(input: ParseTextExpenseInput): ParsedTextInpu
   const creditMatch = text.match(/(?:кредит|ипотек|loan|credit|mortgage)/i);
   if (!creditMatch) return parseExpenseText(input);
 
-  const amountMatch = text.match(/(\d[\d\s.,]*)\s*(?:руб|rub|₽|тысяч|тыс|k)?/i);
   const rateMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:%|процент|percent)/i);
   const yearsMatch = text.match(/(\d+)\s*(?:год|года|лет|year|years)/i);
-  const normalizedAmount = amountMatch
-    ? Number(amountMatch[1].replace(/\s/g, "").replace(",", "."))
-    : 0;
 
   return {
     kind: "account",
     name: /сбер|sber/i.test(text) ? "Кредит Сбербанк" : "Кредит",
     type: /ипотек|mortgage/i.test(text) ? "mortgage" : "credit",
-    currency: /rub|руб|₽/i.test(text) ? "RUB" : currency,
-    initialBalance: normalizedAmount,
+    currency: detectCurrencyInText(text) ?? currency,
+    initialBalance: detectAmountInText(text) ?? 0,
     annualInterestRate: rateMatch ? Number(rateMatch[1].replace(",", ".")) : undefined,
     interestFrequency: "daily",
     loanTermMonths: yearsMatch ? Number(yearsMatch[1]) * 12 : undefined,

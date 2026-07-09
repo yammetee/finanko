@@ -20,8 +20,7 @@ export function hasGeneratedRecurringTransaction(
   return transactions.some(
     (transaction) =>
       transaction.recurringRuleId === rule.id &&
-      getRecurringMonthKey(transaction.occurredAt) === monthKey &&
-      !transaction.deletedAt,
+      getRecurringMonthKey(transaction.occurredAt) === monthKey,
   );
 }
 

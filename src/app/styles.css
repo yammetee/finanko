@@ -479,18 +479,6 @@ select {
   min-width: 140px;
 }
 
-.history-controls .ant-segmented {
-  background: rgba(7, 13, 18, 0.55);
-  border: 1px solid var(--color-border);
-}
-
-.timeframe-filter,
-.transaction-type-filter {
-  background: rgba(7, 13, 18, 0.55);
-  border: 1px solid var(--color-border);
-  flex: 0 0 auto;
-}
-
 .history-search .ant-input-affix-wrapper,
 .history-search.ant-input-affix-wrapper {
   background: rgba(7, 13, 18, 0.55);
@@ -965,20 +953,8 @@ select {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     justify-content: flex-start;
-  }
-
-  .toolbar-actions .ant-segmented {
-    flex: 0 1 auto;
-  }
-
-  .timeframe-filter {
-    order: 1;
-  }
-
-  .transaction-type-filter {
-    order: 2;
   }
 
   .toolbar-actions > .ant-btn-primary {
@@ -999,15 +975,8 @@ select {
   }
 
   .mobile-menu-button {
-    border-radius: 8px;
-    box-shadow: none !important;
     display: inline-flex;
-    flex: 0 0 46px;
-    height: 42px;
-    justify-content: center;
     margin-left: auto;
-    order: 3;
-    width: 46px;
   }
 
   .toolbar .ant-space {
@@ -1018,39 +987,8 @@ select {
   }
 
   .toolbar .ant-select {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0 !important;
-  }
-
-  .toolbar .ant-select-selector,
-  .toolbar .ant-btn {
-    min-height: 42px;
-  }
-
-  .toolbar .ant-segmented {
-    background: rgba(7, 13, 18, 0.72);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    max-width: calc(100vw - 86px);
-    overflow: hidden;
-    padding: 2px;
-    width: auto;
-  }
-
-  .toolbar .ant-segmented-group {
-    display: flex;
-    width: auto;
-  }
-
-  .toolbar .ant-segmented-item-label {
-    min-height: 36px;
-    padding: 0 10px;
-    text-align: center;
-  }
-
-  .toolbar .ant-segmented-thumb,
-  .toolbar .ant-segmented-item-selected {
-    border-radius: 6px;
   }
 
   .language-switcher {

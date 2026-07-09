@@ -32,7 +32,7 @@ import {
   buildAnalytics,
   filterVisibleTransactions,
 } from "../finance/selectors";
-import { TIMEFRAME_OPTIONS } from "../../shared/constants/finance";
+import { CURRENCIES, TIMEFRAME_OPTIONS } from "../../shared/constants/finance";
 import { MetricCard } from "./components/MetricCard";
 import { AccountsPanel } from "./components/AccountsPanel";
 import { useAuthStore } from "../auth/authStore";
@@ -50,7 +50,7 @@ import type {
   Transaction,
 } from "../../shared/types/finance";
 import type { TransactionFilter } from "../finance/financeTypes";
-import type { FinanceSnapshot } from "../finance/financeTypes";
+import type { CurrencyDisplayMode, FinanceSnapshot } from "../finance/financeTypes";
 import { confirmDanger } from "../../shared/ui/confirmations";
 import {
   getAccountName,
@@ -61,6 +61,8 @@ import { useI18n } from "../../shared/i18n/i18nContext";
 import { useMediaQuery } from "../../shared/lib/useMediaQuery";
 import { isLiabilityAccount } from "../../shared/lib/accounts";
 import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
+import { isAiDailyLimitError } from "../../shared/api/aiErrors";
+import { parseReceiptMock, parseTextInputMock } from "../receipts/expenseParser";
 
 const { Content, Sider } = Layout;
 const { Text } = Typography;
@@ -120,10 +122,12 @@ export function FinanceDashboard() {
   const currentUser = user();
   const isMobile = useMediaQuery("(max-width: 1180px)");
   const generateDueRecurring = useFinanceStore((store) => store.generateDueRecurring);
+  const repairAccountCurrencies = useFinanceStore((store) => store.repairAccountCurrencies);
 
   useEffect(() => {
+    repairAccountCurrencies();
     generateDueRecurring();
-  }, [generateDueRecurring]);
+  }, [generateDueRecurring, repairAccountCurrencies]);
 
   useEffect(() => {
     let active = true;
@@ -154,6 +158,11 @@ export function FinanceDashboard() {
     if (state.transactionFilter === "all") return true;
     return transaction.type === state.transactionFilter;
   });
+  const displayCurrency = state.currencyDisplay ?? "native";
+  const analyticsCurrency =
+    displayCurrency === "native"
+      ? activePortfolio?.baseCurrency ?? "USD"
+      : displayCurrency;
 
   const analytics = useMemo(
     () => {
@@ -163,10 +172,10 @@ export function FinanceDashboard() {
         categories,
         dashboardTransactions,
         state.timeframe,
-        activePortfolio?.baseCurrency ?? "USD",
+        analyticsCurrency,
       );
     },
-    [accounts, categories, dashboardTransactions, state.timeframe, activePortfolio?.baseCurrency, ratesVersion],
+    [accounts, analyticsCurrency, categories, dashboardTransactions, state.timeframe, ratesVersion],
   );
   const assistantSummary = useMemo(
     () => {
@@ -251,6 +260,8 @@ export function FinanceDashboard() {
       initialBalance: isLiabilityAccount(account)
         ? Math.abs(account.initialBalance)
         : account.initialBalance,
+      interestAllocationAccountId:
+        account.interestAllocationAccountId ?? "__same_account__",
     });
     setAccountDrawer(true);
   }
@@ -362,6 +373,7 @@ export function FinanceDashboard() {
         transactionItems: parsed.transactionItems ?? [],
         recurringRules: parsed.recurringRules ?? [],
         transactionFilter: parsed.transactionFilter ?? "all",
+        currencyDisplay: parsed.currencyDisplay ?? "native",
         timeframe: parsed.timeframe ?? "month",
       });
       setMobileMenuOpen(false);
@@ -381,7 +393,10 @@ export function FinanceDashboard() {
           t("confirm.deleteTransaction.fallback"),
       }),
       okText: t("actions.delete"),
-      onConfirm: () => state.deleteTransaction(transaction.id),
+      onConfirm: () => {
+        state.deleteTransaction(transaction.id);
+        message.success(t("feedback.transactionDeleted"));
+      },
     });
   }
 
@@ -405,10 +420,17 @@ export function FinanceDashboard() {
   }
 
   async function mockTextParser(values: { text: string }) {
-    const parsed = await parseTextInput({
+    const parserInput = {
       text: values.text,
       currency: activePortfolio?.baseCurrency ?? "USD",
       categories,
+    };
+    const parsed = await parseTextInput(parserInput).catch((error) => {
+      if (isAiDailyLimitError(error)) {
+        message.warning(t("feedback.aiDailyLimitFallback"));
+        return parseTextInputMock(parserInput);
+      }
+      throw error;
     });
 
     if (parsed.kind === "account") {
@@ -458,10 +480,17 @@ export function FinanceDashboard() {
       message.warning(t("feedback.createAccountFirst"));
       return;
     }
-    const parsed = await parseReceiptInput({
+    const parserInput = {
       fileName: values.fileName,
       currency: activePortfolio?.baseCurrency ?? "USD",
       categories,
+    };
+    const parsed = await parseReceiptInput(parserInput).catch((error) => {
+      if (isAiDailyLimitError(error)) {
+        message.warning(t("feedback.aiDailyLimitFallback"));
+        return parseReceiptMock(parserInput);
+      }
+      throw error;
     });
     transactionForm.setFieldsValue({
       accountId,
@@ -485,31 +514,31 @@ export function FinanceDashboard() {
           <MetricCard
             title={t("metric.netWorth")}
             value={analytics.netWorth}
-            currency={activePortfolio.baseCurrency}
+            currency={analyticsCurrency}
             positive={analytics.netWorth >= 0}
             negative={analytics.netWorth < 0}
           />
           <MetricCard
             title={t("metric.savings")}
             value={analytics.savingsTotal}
-            currency={activePortfolio.baseCurrency}
+            currency={analyticsCurrency}
           />
           <MetricCard
             title={t("metric.income")}
             value={analytics.income}
-            currency={activePortfolio.baseCurrency}
+            currency={analyticsCurrency}
             positive
           />
           <MetricCard
             title={t("metric.expenses")}
             value={analytics.expenses}
-            currency={activePortfolio.baseCurrency}
+            currency={analyticsCurrency}
             negative
           />
           <MetricCard
             title={t("metric.netFlow")}
             value={analytics.net}
-            currency={activePortfolio.baseCurrency}
+            currency={analyticsCurrency}
             positive={analytics.net >= 0}
             negative={analytics.net < 0}
           />
@@ -522,7 +551,7 @@ export function FinanceDashboard() {
           netWorthTrend={analytics.netWorthTrend}
           byCategory={analytics.byCategory}
           timeframe={state.timeframe}
-          currency={activePortfolio.baseCurrency}
+          currency={analyticsCurrency}
         />
       </Suspense>
 
@@ -531,6 +560,7 @@ export function FinanceDashboard() {
           <Suspense fallback={<div className="panel-loading" />}>
             <TransactionHistory
               transactions={dashboardTransactions}
+              displayCurrency={displayCurrency}
               onEdit={openEditTransactionDrawer}
               onDelete={confirmDeleteTransaction}
             />
@@ -590,6 +620,8 @@ export function FinanceDashboard() {
                 accounts={accounts}
                 transactions={visibleTransactions}
                 totalBalance={analytics.totalBalance}
+                baseCurrency={activePortfolio?.baseCurrency ?? "USD"}
+                displayCurrency={displayCurrency}
                 className="sidebar-accounts"
                 onEditAccount={openEditAccountDrawer}
                 onArchiveAccount={confirmArchiveAccount}
@@ -674,6 +706,16 @@ export function FinanceDashboard() {
                   { label: t("filter.expense"), value: "expense" },
                 ]}
                 onChange={(value) => state.setTransactionFilter(value as TransactionFilter)}
+              />
+              <Select
+                className="currency-display-filter"
+                value={displayCurrency}
+                style={{ width: 132 }}
+                options={[
+                  { value: "native", label: t("currency.native") },
+                  ...CURRENCIES.map((currency) => ({ value: currency, label: currency })),
+                ]}
+                onChange={(value) => state.setCurrencyDisplay(value as CurrencyDisplayMode)}
               />
               <Button className="desktop-action" icon={<Wallet size={16} />} onClick={openNewAccountDrawer}>
                 {t("actions.account")}

@@ -108,6 +108,7 @@ export function createSeedSnapshot(): FinanceSnapshot {
     activePortfolioId: seedPortfolioId,
     timeframe: "month",
     transactionFilter: "all",
+    currencyDisplay: "native",
     portfolios: seedPortfolios,
     accounts: seedAccounts,
     categories: defaultCategories,
