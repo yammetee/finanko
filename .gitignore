@@ -6,6 +6,8 @@
 node_modules/
 dist/
 coverage/
+data/finanko.local.json
+data/finanko.local.json.tmp
 
 *.local
 npm-debug.log*

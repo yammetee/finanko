@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Account, Category, Transaction, TransactionItem } from "../../shared/types/finance";
 import { buildLedgerAnalytics } from "./analytics";
 import { getLedgerAccountBalance } from "./balances";
-import { legacyFinanceToLedgerSnapshot } from "./legacyAdapter";
+import { financeStateToLedgerSnapshot } from "./financeLedgerAdapter";
 
 const portfolioId = "portfolio-test";
 const accounts: Account[] = [
@@ -50,7 +50,7 @@ const categories: Category[] = [
   { id: "cat-home", portfolioId, name: "Home", type: "expense", color: "#fff" },
 ];
 
-describe("legacy finance adapter", () => {
+describe("finance ledger adapter", () => {
   it("maps explicit asset interest accrual as income", () => {
     const transactions: Transaction[] = [
       {
@@ -67,7 +67,7 @@ describe("legacy finance adapter", () => {
         source: "system",
       },
     ];
-    const snapshot = legacyFinanceToLedgerSnapshot({ accounts, categories, transactions });
+    const snapshot = financeStateToLedgerSnapshot({ accounts, categories, transactions });
     const savings = snapshot.accounts.find((account) => account.id === "acc-savings")!;
     const analytics = buildLedgerAnalytics(snapshot.accounts, categories, snapshot.entries, "all", "USD");
 
@@ -90,7 +90,7 @@ describe("legacy finance adapter", () => {
         source: "text_ai",
       },
     ];
-    const snapshot = legacyFinanceToLedgerSnapshot({
+    const snapshot = financeStateToLedgerSnapshot({
       accounts: [{ ...accounts[0], initialBalance: 100, currency: "USD" }],
       categories,
       transactions,
@@ -118,7 +118,7 @@ describe("legacy finance adapter", () => {
         source: "manual",
       },
     ];
-    const snapshot = legacyFinanceToLedgerSnapshot({ accounts, categories, transactions });
+    const snapshot = financeStateToLedgerSnapshot({ accounts, categories, transactions });
     const analytics = buildLedgerAnalytics(snapshot.accounts, categories, snapshot.entries, "all", "USD");
 
     expect(analytics.expenses).toBe(20);
@@ -158,7 +158,7 @@ describe("legacy finance adapter", () => {
         source: "manual",
       },
     ];
-    const snapshot = legacyFinanceToLedgerSnapshot({ accounts, categories, transactions });
+    const snapshot = financeStateToLedgerSnapshot({ accounts, categories, transactions });
     const credit = snapshot.accounts.find((account) => account.id === "acc-credit")!;
     const analytics = buildLedgerAnalytics(snapshot.accounts, categories, snapshot.entries, "all", "USD");
 
@@ -200,7 +200,7 @@ describe("legacy finance adapter", () => {
         confidence: 1,
       },
     ];
-    const snapshot = legacyFinanceToLedgerSnapshot({
+    const snapshot = financeStateToLedgerSnapshot({
       accounts,
       categories,
       transactions,
@@ -248,7 +248,7 @@ describe("legacy finance adapter", () => {
         confidence: 0.7,
       },
     ];
-    const snapshot = legacyFinanceToLedgerSnapshot({
+    const snapshot = financeStateToLedgerSnapshot({
       accounts,
       categories,
       transactions,

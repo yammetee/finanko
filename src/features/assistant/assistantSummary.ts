@@ -136,11 +136,7 @@ export function buildAssistantSummary(
   };
 }
 
-export function getAssistantObservationMock(summary: AssistantSummary) {
-  return getAssistantResponseMock("expense_optimization", summary, undefined, (key) => key);
-}
-
-export function getAssistantResponseMock(
+export function getAssistantResponseFallback(
   actionId: AssistantActionId,
   summary: AssistantSummary,
   selectedCategoryId?: string,

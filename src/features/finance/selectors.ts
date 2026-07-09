@@ -16,7 +16,7 @@ import {
   getLedgerAccountBalance,
   getLedgerAccountBalanceInCurrency,
 } from "../ledger/balances";
-import { legacyFinanceToLedgerSnapshot } from "../ledger/legacyAdapter";
+import { financeStateToLedgerSnapshot } from "../ledger/financeLedgerAdapter";
 
 dayjs.extend(isoWeek);
 
@@ -35,7 +35,7 @@ export function filterPeriodTransactions(
   transactions: Transaction[],
   timeframe: Timeframe,
 ) {
-  const entries = legacyFinanceToLedgerSnapshot({
+  const entries = financeStateToLedgerSnapshot({
     accounts: [],
     categories: [],
     transactions,
@@ -52,7 +52,7 @@ export function getAccountBalance(
   transactions: Transaction[],
   accounts: Account[] = [account],
 ) {
-  const snapshot = legacyFinanceToLedgerSnapshot({
+  const snapshot = financeStateToLedgerSnapshot({
     accounts,
     categories: [],
     transactions,
@@ -69,7 +69,7 @@ export function getAccountBalanceInCurrency(
   date?: string,
   accounts: Account[] = [account],
 ) {
-  const snapshot = legacyFinanceToLedgerSnapshot({
+  const snapshot = financeStateToLedgerSnapshot({
     accounts,
     categories: [],
     transactions,
@@ -91,7 +91,7 @@ export function buildAnalytics(
   timeframe: Timeframe,
   baseCurrency: Currency,
 ) {
-  const snapshot = legacyFinanceToLedgerSnapshot({
+  const snapshot = financeStateToLedgerSnapshot({
     accounts,
     categories,
     transactions,

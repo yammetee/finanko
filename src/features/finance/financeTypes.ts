@@ -49,6 +49,8 @@ export interface NewTransactionInput {
   items?: Array<{
     name: string;
     amount: number;
+    quantity?: number;
+    unitPrice?: number;
     categoryId: string;
     confidence: number;
   }>;
@@ -82,7 +84,7 @@ export interface FinanceState {
   updateTransaction: (id: string, input: NewTransactionInput) => void;
   deleteTransaction: (id: string) => void;
   generateDueRecurring: () => void;
-  resetDemoData: () => void;
+  resetLocalData: () => void;
 }
 
 export interface FinanceSnapshot {

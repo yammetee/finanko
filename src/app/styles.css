@@ -68,22 +68,12 @@ select {
   top: 0;
 }
 
-.app-sider.ant-layout-sider-collapsed {
-  padding-left: 10px;
-  padding-right: 10px;
-}
-
 .brand {
   align-items: center;
   display: flex;
   gap: 10px;
   margin-bottom: 22px;
   padding: 0 8px;
-}
-
-.app-sider.ant-layout-sider-collapsed .brand {
-  justify-content: center;
-  padding: 0;
 }
 
 .brand-mark {
@@ -103,18 +93,6 @@ select {
   color: var(--color-text);
   font-size: 17px;
   font-weight: 700;
-}
-
-.sider-collapse-button {
-  color: var(--color-muted) !important;
-  margin-left: auto;
-}
-
-.app-sider.ant-layout-sider-collapsed .sider-collapse-button {
-  margin-left: 0;
-  position: absolute;
-  right: 8px;
-  top: 54px;
 }
 
 .shell-content {
@@ -344,6 +322,10 @@ select {
   padding-top: 10px;
 }
 
+.sidebar-language-switcher {
+  width: 100%;
+}
+
 .sider-user .ant-btn {
   justify-content: flex-start;
 }
@@ -540,15 +522,24 @@ select {
 }
 
 .parsed-items-card {
+  container-type: inline-size;
   margin-bottom: 14px;
+}
+
+.parsed-items-card .ant-card-head {
+  min-height: 44px;
+}
+
+.parsed-items-card .ant-card-body {
+  padding: 12px;
 }
 
 .parsed-item-header,
 .parsed-item-row {
   align-items: center;
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(160px, 1fr) 70px 90px 90px minmax(120px, 150px);
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 54px 86px 28px;
 }
 
 .parsed-item-header {
@@ -562,17 +553,55 @@ select {
   min-width: 0;
 }
 
+.parsed-item-cell .ant-input,
+.parsed-item-cell .ant-input-number,
+.parsed-item-cell .ant-select {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.parsed-item-cell .ant-input,
+.parsed-item-cell .ant-input-number-input,
+.parsed-item-cell .ant-select-selector {
+  font-size: 14px !important;
+}
+
+.parsed-item-cell .ant-input,
+.parsed-item-cell .ant-input-number .ant-input-number-input {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
 .parsed-item-mobile-label {
   color: var(--color-muted);
   display: none;
   font-size: 12px;
 }
 
-.parsed-item-amount,
 .parsed-item-quantity,
-.parsed-item-unit-price,
-.parsed-item-category {
+.parsed-item-unit-price {
   width: 100%;
+}
+
+.parsed-item-delete {
+  align-self: center;
+  color: var(--color-muted) !important;
+  justify-self: center;
+  min-width: 28px;
+  width: 28px;
+}
+
+@container (max-width: 720px) {
+  .parsed-item-header,
+  .parsed-item-row {
+    gap: 6px;
+    grid-template-columns: minmax(0, 1fr) 44px 70px 26px;
+  }
+
+  .parsed-item-delete {
+    min-width: 26px;
+    width: 26px;
+  }
 }
 
 .category-color-picker .ant-segmented-item-label {
@@ -891,13 +920,6 @@ select {
   padding: 24px;
 }
 
-.language-switcher {
-  position: fixed;
-  right: 16px;
-  top: 12px;
-  z-index: 900;
-}
-
 @media (max-width: 1180px) {
   .app-sider {
     display: none;
@@ -948,7 +970,30 @@ select {
   }
 
   .toolbar-metrics {
-    display: none;
+    display: flex;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .toolbar-metrics .metric-item {
+    flex: 1 1 0;
+    gap: 5px;
+    min-width: 0;
+    padding: 4px 8px;
+  }
+
+  .toolbar-metrics .metric-label {
+    font-size: 12px;
+  }
+
+  .toolbar-metrics .metric-value {
+    font-size: 16px;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .toolbar-metrics .metric-item:first-child {
+    padding-left: 0;
   }
 
   .mobile-transaction-button {
@@ -972,10 +1017,6 @@ select {
   .toolbar .ant-select {
     flex: 0 1 auto;
     min-width: 0 !important;
-  }
-
-  .language-switcher {
-    display: none !important;
   }
 
   .assistant-panel {
@@ -1066,14 +1107,9 @@ select {
     margin-left: 0;
   }
 
-  .parsed-item-header {
-    display: none;
-  }
-
   .parsed-item-row {
     border-top: 1px solid var(--color-border);
-    grid-template-columns: 1fr;
-    padding-top: 10px;
+    padding-top: 8px;
   }
 
   .parsed-item-row:first-of-type {
@@ -1081,14 +1117,8 @@ select {
     padding-top: 0;
   }
 
-  .parsed-item-mobile-label {
-    display: block;
-  }
-
-  .parsed-item-amount,
   .parsed-item-quantity,
-  .parsed-item-unit-price,
-  .parsed-item-category {
+  .parsed-item-unit-price {
     width: 100%;
   }
 }

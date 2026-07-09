@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getSupabaseClient, isSupabaseConfigured } from "../../shared/api/supabase";
 
-interface DemoUser {
+interface LocalUser {
   id: string;
   email: string;
   name: string;
@@ -17,14 +17,17 @@ interface LocalAccountInput {
 interface AuthState {
   loading: boolean;
   session: Session | null;
-  demoUser: DemoUser | null;
-  localAccounts: DemoUser[];
+  localUser: LocalUser | null;
+  localAccounts: LocalUser[];
   initialize: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   createLocalAccount: (input: LocalAccountInput) => void;
-  signInDemo: () => void;
   signOut: () => Promise<void>;
-  user: () => User | DemoUser | null;
+  user: () => User | LocalUser | null;
+}
+
+function localUserIdForEmail(email: string) {
+  return `local:${email.trim().toLowerCase()}`;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -32,7 +35,7 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       loading: true,
       session: null,
-      demoUser: null,
+      localUser: null,
       localAccounts: [],
       initialize: async () => {
         if (!isSupabaseConfigured) {
@@ -50,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
         set({ session: data.session, loading: false });
 
         supabase.auth.onAuthStateChange((_event, session) => {
-          set({ session, loading: false, demoUser: null });
+          set({ session, loading: false, localUser: null });
         });
       },
       signInWithGoogle: async () => {
@@ -66,38 +69,47 @@ export const useAuthStore = create<AuthState>()(
       },
       createLocalAccount: (input) => {
         const user = {
-          id: `local-${crypto.randomUUID()}`,
+          id: localUserIdForEmail(input.email),
           email: input.email,
           name: input.name,
         };
         set((state) => ({
           loading: false,
-          demoUser: user,
+          localUser: user,
           localAccounts: [...state.localAccounts, user],
         }));
       },
-      signInDemo: () =>
-        set({
-          loading: false,
-          demoUser: {
-            id: "demo-user",
-            email: "demo@finanko.app",
-            name: "Demo User",
-          },
-        }),
       signOut: async () => {
         const supabase = await getSupabaseClient();
         if (supabase) {
           await supabase.auth.signOut();
         }
-        set({ session: null, demoUser: null, loading: false });
+        set({ session: null, localUser: null, loading: false });
       },
-      user: () => get().session?.user ?? get().demoUser,
+      user: () => get().session?.user ?? get().localUser,
     }),
     {
       name: "finanko-auth-v1",
+      version: 3,
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== "object") return persistedState;
+        const state = persistedState as Partial<AuthState>;
+        const localUser = state.localUser?.email
+          ? { ...state.localUser, id: localUserIdForEmail(state.localUser.email) }
+          : state.localUser;
+        const localAccounts = state.localAccounts?.map((account) => ({
+          ...account,
+          id: localUserIdForEmail(account.email),
+        }));
+
+        return {
+          ...state,
+          localUser,
+          localAccounts,
+        };
+      },
       partialize: (state) => ({
-        demoUser: state.demoUser,
+        localUser: state.localUser,
         localAccounts: state.localAccounts,
       }),
     },

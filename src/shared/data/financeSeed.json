@@ -14,31 +14,6 @@
     { "id": "cat-subscriptions", "name": "Subscriptions", "type": "expense", "color": "#c078d8" },
     { "id": "cat-other", "name": "Other", "type": "expense", "color": "#7f93a6" }
   ],
-  "accounts": [
-    {
-      "id": "acc-bank",
-      "name": "Main bank",
-      "type": "bank",
-      "currency": "USD",
-      "initialBalance": 0,
-      "color": "#4fb6e8"
-    },
-    {
-      "id": "acc-card",
-      "name": "Daily card",
-      "type": "card",
-      "currency": "USD",
-      "initialBalance": 0,
-      "color": "#9b82e6"
-    },
-    {
-      "id": "acc-savings",
-      "name": "Emergency fund",
-      "type": "savings",
-      "currency": "USD",
-      "initialBalance": 0,
-      "color": "#5fd38a"
-    }
-  ],
+  "accounts": [],
   "recurringRules": []
 }

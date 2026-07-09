@@ -11,8 +11,6 @@ import Select from "antd/es/select";
 import Space from "antd/es/space";
 import Typography from "antd/es/typography";
 import {
-  PanelLeftClose,
-  PanelLeftOpen,
   LogOut,
   Menu as MenuIcon,
   Plus,
@@ -53,10 +51,9 @@ import {
   getTransactionDescription,
 } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
-import { useMediaQuery } from "../../shared/lib/useMediaQuery";
 import { isLiabilityAccount } from "../../shared/lib/accounts";
 import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
-import { parseTextInputMock } from "../receipts/expenseParser";
+import { parseTextInputLocally } from "../receipts/expenseParser";
 import { validateItemsMatchTotal } from "../ledger/validation";
 import { isValidMoneyDecimal } from "../ledger/money";
 
@@ -92,6 +89,36 @@ const TransactionHistory = lazy(() =>
   })),
 );
 
+function roundTransactionItemAmount(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function normalizeTransactionItems(
+  items: TransactionFormValues["items"],
+  fallbackCategoryId: string,
+) {
+  return items?.map((item) => {
+    const quantity =
+      typeof item.quantity === "number" && Number.isFinite(item.quantity)
+        ? item.quantity
+        : undefined;
+    const unitPrice =
+      typeof item.unitPrice === "number" && Number.isFinite(item.unitPrice)
+        ? item.unitPrice
+        : undefined;
+    const amount =
+      quantity !== undefined && unitPrice !== undefined
+        ? roundTransactionItemAmount(quantity * unitPrice)
+        : item.amount;
+
+    return {
+      ...item,
+      amount,
+      categoryId: item.categoryId || fallbackCategoryId,
+    };
+  });
+}
+
 export function FinanceDashboard() {
   const { modal, message } = AntApp.useApp();
   const { locale, setLocale, t } = useI18n();
@@ -102,7 +129,6 @@ export function FinanceDashboard() {
   const [deletePortfolioModal, setDeletePortfolioModal] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [inputMode, setInputMode] = useState("manual");
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -115,7 +141,6 @@ export function FinanceDashboard() {
 
   const state = useFinanceStore();
   const { signOut } = useAuthStore();
-  const isMobile = useMediaQuery("(max-width: 1180px)");
   const generateDueRecurring = useFinanceStore((store) => store.generateDueRecurring);
   const repairAccountCurrencies = useFinanceStore((store) => store.repairAccountCurrencies);
 
@@ -241,9 +266,11 @@ export function FinanceDashboard() {
       return;
     }
 
+    const normalizedItems = normalizeTransactionItems(values.items, values.categoryId ?? "");
+
     try {
       validateItemsMatchTotal({
-        items: values.items ?? [],
+        items: normalizedItems ?? [],
         total: values.amount,
         currency: values.currency,
       });
@@ -279,7 +306,7 @@ export function FinanceDashboard() {
       description: values.description ?? "",
       occurredAt: values.occurredAt.toISOString(),
       source: values.source,
-      items: values.items,
+      items: normalizedItems,
       recurring:
         values.type === "income" || values.type === "expense"
           ? values.recurring
@@ -381,15 +408,15 @@ export function FinanceDashboard() {
     textParserForm.resetFields();
   }
 
-  function confirmResetDemo() {
+  function confirmResetLocalData() {
     confirmDanger({
       modal,
-      title: t("confirm.resetDemo.title"),
-      content: t("confirm.resetDemo.content"),
-      okText: t("actions.resetDemo"),
+      title: t("confirm.resetLocalData.title"),
+      content: t("confirm.resetLocalData.content"),
+      okText: t("actions.resetLocalData"),
       onConfirm: () => {
-        state.resetDemoData();
-        message.success(t("feedback.demoReset"));
+        state.resetLocalData();
+        message.success(t("feedback.localDataReset"));
       },
     });
   }
@@ -436,13 +463,13 @@ export function FinanceDashboard() {
     setInputMode("manual");
   }
 
-  async function mockTextParser(values: { text: string }) {
+  async function parseTextTransaction(values: { text: string; accountId: string }) {
     const parserInput = {
       text: values.text,
       currency: activePortfolio?.baseCurrency ?? "USD",
       categories,
     };
-    const parsed = await parseTextInput(parserInput).catch(() => parseTextInputMock(parserInput));
+    const parsed = await parseTextInput(parserInput).catch(() => parseTextInputLocally(parserInput));
 
     if (parsed.kind === "account") {
       transactionForm.resetFields();
@@ -464,7 +491,7 @@ export function FinanceDashboard() {
       return;
     }
 
-    const accountId = accounts[0]?.id;
+    const accountId = values.accountId;
     if (!accountId) {
       message.warning(t("feedback.createAccountFirst"));
       return;
@@ -484,12 +511,13 @@ export function FinanceDashboard() {
     message.success(t("feedback.parserPrepared"));
   }
 
-  async function mockReceiptParser(values: {
+  async function parseReceiptTransaction(values: {
+    accountId: string;
     fileName: string;
     fileType?: string;
     fileDataUrl?: string;
   }) {
-    const accountId = accounts[0]?.id;
+    const accountId = values.accountId;
     if (!accountId) {
       message.warning(t("feedback.createAccountFirst"));
       return;
@@ -532,18 +560,16 @@ export function FinanceDashboard() {
         />
       </Suspense>
 
-      {!isMobile ? (
-        <Card className="span-6" title={t("section.history")} id="history-section">
-          <Suspense fallback={<div className="panel-loading" />}>
-            <TransactionHistory
-              transactions={dashboardTransactions}
-              displayCurrency={displayCurrency}
-              onEdit={openEditTransactionDrawer}
-              onDelete={confirmDeleteTransaction}
-            />
-          </Suspense>
-        </Card>
-      ) : null}
+      <Card className="span-6" title={t("section.history")} id="history-section">
+        <Suspense fallback={<div className="panel-loading" />}>
+          <TransactionHistory
+            transactions={dashboardTransactions}
+            displayCurrency={displayCurrency}
+            onEdit={openEditTransactionDrawer}
+            onDelete={confirmDeleteTransaction}
+          />
+        </Suspense>
+      </Card>
     </main>
   ) : (
     <section className="empty-portfolio-state">
@@ -552,7 +578,7 @@ export function FinanceDashboard() {
           <Button type="primary" icon={<Plus size={16} />} onClick={() => setPortfolioModal(true)}>
             {t("actions.createPortfolio")}
           </Button>
-          <Button onClick={confirmResetDemo}>{t("actions.resetDemo")}</Button>
+          <Button onClick={confirmResetLocalData}>{t("actions.resetLocalData")}</Button>
         </Space>
       </Empty>
     </section>
@@ -561,94 +587,88 @@ export function FinanceDashboard() {
   return (
     <>
       <Layout className="app-shell">
-        <Sider
-          width={336}
-          collapsedWidth={72}
-          collapsed={siderCollapsed}
-          className="app-sider"
-        >
+        <Sider width={336} className="app-sider">
           <div className="brand">
             <span className="brand-mark">F</span>
-            {!siderCollapsed ? <span className="brand-name">Finanko</span> : null}
-            <Button
-              aria-label={t(siderCollapsed ? "actions.showSidebar" : "actions.hideSidebar")}
-              className="sider-collapse-button"
-              icon={siderCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-              size="small"
-              type="text"
-              onClick={() => setSiderCollapsed((value) => !value)}
-            />
+            <span className="brand-name">Finanko</span>
           </div>
-          {!siderCollapsed ? (
-            <>
-              <Space className="sidebar-actions" direction="vertical" size={8}>
-                <Select
-                  value={activePortfolio?.id}
-                  placeholder={t("empty.noPortfolios")}
-                  style={{ width: "100%" }}
-                  options={portfolios.map((portfolio) => ({
-                    value: portfolio.id,
-                    label: getPortfolioName(portfolio, t),
-                  }))}
-                  onChange={state.setActivePortfolio}
-                />
-                <Button
-                  type="primary"
-                  block
-                  icon={<Plus size={16} />}
-                  disabled={!activePortfolio}
-                  onClick={openNewTransactionDrawer}
-                >
-                  {t("actions.transaction")}
-                </Button>
-                <Button type="text" block icon={<Plus size={16} />} onClick={() => setPortfolioModal(true)}>
-                  {t("actions.createPortfolio")}
-                </Button>
-                <Button type="text" block icon={<Wallet size={16} />} onClick={openNewAccountDrawer}>
-                  {t("actions.account")}
-                </Button>
-                <Button
-                  type="text"
-                  block
-                  icon={<Tags size={16} />}
-                  disabled={!activePortfolio}
-                  onClick={() => setCategoryDrawer(true)}
-                >
-                  {t("actions.category")}
-                </Button>
-                <Button type="text" block icon={<Sparkles size={16} />} onClick={() => setAssistantOpen(true)}>
-                  {t("actions.assistant")}
-                </Button>
-              </Space>
-              <AccountsPanel
-                accounts={accounts}
-                transactions={visibleTransactions}
-                displayCurrency={displayCurrency}
-                className="sidebar-accounts"
-                onEditAccount={openEditAccountDrawer}
-                onArchiveAccount={confirmArchiveAccount}
-              />
-              <div className="sider-user">
-                <div className="sider-tools">
-                  <Button block type="text" onClick={confirmResetDemo}>
-                    {t("actions.resetDemo")}
-                  </Button>
-                  <Button
-                    block
-                    danger
-                    type="text"
-                    disabled={!activePortfolio}
-                    onClick={() => setDeletePortfolioModal(true)}
-                  >
-                    {t("actions.deletePortfolio")}
-                  </Button>
-                </div>
-                <Button block type="text" icon={<LogOut size={16} />} onClick={signOut}>
-                  {t("actions.signOut")}
-                </Button>
-              </div>
-            </>
-          ) : null}
+          <Space className="sidebar-actions" direction="vertical" size={8}>
+            <Select
+              value={activePortfolio?.id}
+              placeholder={t("empty.noPortfolios")}
+              style={{ width: "100%" }}
+              options={portfolios.map((portfolio) => ({
+                value: portfolio.id,
+                label: getPortfolioName(portfolio, t),
+              }))}
+              onChange={state.setActivePortfolio}
+            />
+            <Button
+              type="primary"
+              block
+              icon={<Plus size={16} />}
+              disabled={!activePortfolio}
+              onClick={openNewTransactionDrawer}
+            >
+              {t("actions.transaction")}
+            </Button>
+            <Button type="text" block icon={<Plus size={16} />} onClick={() => setPortfolioModal(true)}>
+              {t("actions.createPortfolio")}
+            </Button>
+            <Button type="text" block icon={<Wallet size={16} />} onClick={openNewAccountDrawer}>
+              {t("actions.account")}
+            </Button>
+            <Button
+              type="text"
+              block
+              icon={<Tags size={16} />}
+              disabled={!activePortfolio}
+              onClick={() => setCategoryDrawer(true)}
+            >
+              {t("actions.category")}
+            </Button>
+            <Button type="text" block icon={<Sparkles size={16} />} onClick={() => setAssistantOpen(true)}>
+              {t("actions.assistant")}
+            </Button>
+          </Space>
+          <AccountsPanel
+            accounts={accounts}
+            transactions={visibleTransactions}
+            displayCurrency={displayCurrency}
+            className="sidebar-accounts"
+            onEditAccount={openEditAccountDrawer}
+            onArchiveAccount={confirmArchiveAccount}
+          />
+          <div className="sider-user">
+            <Segmented
+              className="sidebar-language-switcher"
+              block
+              size="small"
+              value={locale}
+              options={[
+                { label: "EN", value: "en" },
+                { label: "RU", value: "ru" },
+              ]}
+              onChange={(value) => setLocale(value as "en" | "ru")}
+            />
+            <div className="sider-tools">
+              <Button block type="text" onClick={confirmResetLocalData}>
+                {t("actions.resetLocalData")}
+              </Button>
+              <Button
+                block
+                danger
+                type="text"
+                disabled={!activePortfolio}
+                onClick={() => setDeletePortfolioModal(true)}
+              >
+                {t("actions.deletePortfolio")}
+              </Button>
+            </div>
+            <Button block type="text" icon={<LogOut size={16} />} onClick={signOut}>
+              {t("actions.signOut")}
+            </Button>
+          </div>
         </Sider>
         <Content className="shell-content">
           <header className="toolbar">
@@ -682,16 +702,6 @@ export function FinanceDashboard() {
                 ]}
                 onChange={(value) => state.setCurrencyDisplay(value as CurrencyDisplayMode)}
               />
-              <Segmented
-                className="language-switcher"
-                size="small"
-                value={locale}
-                options={[
-                  { label: "EN", value: "en" },
-                  { label: "RU", value: "ru" },
-                ]}
-                onChange={(value) => setLocale(value as "en" | "ru")}
-              />
               <Button
                 className="mobile-transaction-button"
                 type="primary"
@@ -707,29 +717,27 @@ export function FinanceDashboard() {
                 onClick={() => setMobileMenuOpen(true)}
               />
             </div>
-            {!isMobile ? (
-              <div className="toolbar-metrics">
-                <MetricCard
-                  title={t("metric.netWorth")}
-                  value={analytics.netWorth}
-                  currency={analyticsCurrency}
-                  positive={analytics.netWorth >= 0}
-                  negative={analytics.netWorth < 0}
-                />
-                <MetricCard
-                  title={t("metric.income")}
-                  value={analytics.income}
-                  currency={analyticsCurrency}
-                  positive
-                />
-                <MetricCard
-                  title={t("metric.expenses")}
-                  value={analytics.expenses}
-                  currency={analyticsCurrency}
-                  negative
-                />
-              </div>
-            ) : null}
+            <div className="toolbar-metrics">
+              <MetricCard
+                title={t("metric.netWorth")}
+                value={analytics.netWorth}
+                currency={analyticsCurrency}
+                positive={analytics.netWorth >= 0}
+                negative={analytics.netWorth < 0}
+              />
+              <MetricCard
+                title={t("metric.income")}
+                value={analytics.income}
+                currency={analyticsCurrency}
+                positive
+              />
+              <MetricCard
+                title={t("metric.expenses")}
+                value={analytics.expenses}
+                currency={analyticsCurrency}
+                negative
+              />
+            </div>
           </header>
 
           {dashboardBody}
@@ -855,8 +863,8 @@ export function FinanceDashboard() {
           >
             {t("actions.assistant")}
           </Button>
-          <Button block onClick={confirmResetDemo}>
-            {t("actions.resetDemo")}
+          <Button block onClick={confirmResetLocalData}>
+            {t("actions.resetLocalData")}
           </Button>
           <Button block icon={<LogOut size={16} />} onClick={signOut}>
             {t("actions.signOut")}
@@ -881,8 +889,8 @@ export function FinanceDashboard() {
               categories={categories}
               onModeChange={setInputMode}
               onFinish={addTransaction}
-              onParseText={mockTextParser}
-              onParseReceipt={mockReceiptParser}
+              onParseText={parseTextTransaction}
+              onParseReceipt={parseReceiptTransaction}
             />
           </Suspense>
         ) : null}
@@ -914,18 +922,6 @@ export function FinanceDashboard() {
           />
         </Suspense>
       ) : null}
-
-      <div className="language-switcher">
-        <Segmented
-          size="small"
-          value={locale}
-          options={[
-            { label: "EN", value: "en" },
-            { label: "RU", value: "ru" },
-          ]}
-          onChange={(value) => setLocale(value as "en" | "ru")}
-        />
-      </div>
 
       {assistantOpen ? (
         <Suspense fallback={null}>

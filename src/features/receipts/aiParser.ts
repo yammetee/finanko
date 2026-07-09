@@ -3,8 +3,7 @@ import {
   detectAmountInText,
   detectCurrencyInText,
   normalizeParsedExpense,
-  parseReceiptMock,
-  parseTextInputMock,
+  parseTextInputLocally,
   type ParsedExpense,
   type ParsedTextInput,
 } from "./expenseParser";
@@ -48,7 +47,7 @@ export async function parseTextInput(input: ParseTextInput): Promise<ParsedTextI
     categories: input.categories.map((category) => category.name),
   });
 
-  const parsed = aiResult ?? parseTextInputMock(input);
+  const parsed = aiResult ?? parseTextInputLocally(input);
   const explicitCurrency = detectCurrencyInText(input.text);
   const explicitAmount = detectAmountInText(input.text);
 
@@ -68,7 +67,7 @@ export async function parseTextInput(input: ParseTextInput): Promise<ParsedTextI
     ? explicitCurrency
       ? { ...normalized, currency: explicitCurrency }
       : normalized
-    : parseTextInputMock(input);
+    : parseTextInputLocally(input);
 }
 
 export async function parseReceiptInput(input: ParseReceiptInput): Promise<ParsedExpense> {
@@ -84,5 +83,5 @@ export async function parseReceiptInput(input: ParseReceiptInput): Promise<Parse
 
   const normalized = normalizeParsedExpense(input, aiResult);
   if (normalized) return normalized;
-  return parseReceiptMock(input);
+  throw new Error("Receipt could not be parsed");
 }

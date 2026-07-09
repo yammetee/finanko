@@ -2,27 +2,59 @@ import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
+import { switchFinanceStorageScope } from "../finance/financeStore";
 import { useAuthStore } from "./authStore";
 
 interface AuthGateProps {
   children: React.ReactNode;
 }
 
+type AuthUser = ReturnType<ReturnType<typeof useAuthStore.getState>["user"]>;
+
+function getUserFinanceName(user: AuthUser) {
+  if (!user) return "Personal";
+  if ("name" in user && user.name) return user.name;
+  return user.email ?? "Personal";
+}
+
 export function AuthGate({ children }: AuthGateProps) {
-  const { createLocalAccount, initialize, signInDemo, signInWithGoogle, loading, user } =
+  const { createLocalAccount, initialize, signInWithGoogle, loading, user } =
     useAuthStore();
   const { t } = useI18n();
   const currentUser = user();
+  const currentUserId = currentUser?.id;
+  const currentUserFinanceName = getUserFinanceName(currentUser);
+  const [financeReady, setFinanceReady] = useState(false);
   const [localAccount, setLocalAccount] = useState({
-    email: "demo@finanko.app",
-    name: "Demo User",
+    email: "",
+    name: "",
   });
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  if (loading) {
+  useEffect(() => {
+    let active = true;
+
+    if (!currentUserId) {
+      setFinanceReady(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setFinanceReady(false);
+    void switchFinanceStorageScope(currentUserId, currentUserFinanceName).then(() => {
+      if (active) setFinanceReady(true);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUserFinanceName, currentUserId]);
+
+  if (loading || (currentUser && !financeReady)) {
     return (
       <div className="auth-screen">
         <div className="auth-loader" />
@@ -83,11 +115,6 @@ export function AuthGate({ children }: AuthGateProps) {
                 {t("actions.createLocalAccount")}
               </button>
             </form>
-          ) : null}
-          {!isSupabaseConfigured ? (
-            <button className="auth-action" type="button" onClick={signInDemo}>
-              {t("actions.continueDemo")}
-            </button>
           ) : null}
           {!isSupabaseConfigured ? (
             <p className="muted auth-description">{t("auth.envHint")}</p>

@@ -203,7 +203,7 @@ function mapItem(item: TransactionItem, transaction: Transaction | undefined): E
   };
 }
 
-export function legacyFinanceToLedgerSnapshot(input: {
+export function financeStateToLedgerSnapshot(input: {
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];

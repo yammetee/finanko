@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Category } from "../../shared/types/finance";
-import { normalizeParsedExpense, parseTextInputMock } from "./expenseParser";
+import { normalizeParsedExpense, parseTextInputLocally } from "./expenseParser";
 
 const categories: Category[] = [
   {
@@ -220,11 +220,77 @@ describe("normalizeParsedExpense", () => {
       unitPrice: -9,
       categoryId: "cat-food",
     });
-    expect(parsed?.items.some((item) => /[\u0E00-\u0E7F]/.test(item.name))).toBe(false);
+  });
+
+  it("treats multiple Thai receipt discounts as negative items and keeps net total", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        fileName: "receipt.jpg",
+        currency: "USD",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Покупки: вода, овсянка, напиток, мороженое",
+        currency: "THB",
+        total: 436,
+        items: [
+          { name: "Вода", amount: 58, quantity: 1, unitPrice: 58, categoryId: "Food", confidence: 0.8 },
+          { name: "Овсянка", amount: 79, quantity: 1, unitPrice: 79, categoryId: "Food", confidence: 0.8 },
+          { name: "Напиток", amount: 66, quantity: 1, unitPrice: 66, categoryId: "Food", confidence: 0.8 },
+          { name: "Мороженое", amount: 19, quantity: 1, unitPrice: 19, categoryId: "Food", confidence: 0.8 },
+          { name: "Сэндвич", amount: 39, quantity: 1, unitPrice: 39, categoryId: "Food", confidence: 0.8 },
+          { name: "Соус", amount: 10, quantity: 1, unitPrice: 10, categoryId: "Food", confidence: 0.8 },
+          { name: "Бургер", amount: 55, quantity: 1, unitPrice: 55, categoryId: "Food", confidence: 0.8 },
+          { name: "Хлеб", amount: 20, quantity: 1, unitPrice: 20, categoryId: "Food", confidence: 0.8 },
+          { name: "Шампунь", amount: 40, quantity: 1, unitPrice: 40, categoryId: "Food", confidence: 0.8 },
+          { name: "Печенье", amount: 30, quantity: 1, unitPrice: 30, categoryId: "Food", confidence: 0.8 },
+          { name: "Крем", amount: 20, quantity: 1, unitPrice: 20, categoryId: "Food", confidence: 0.8 },
+          { name: "ส่วนลด пицца", amount: 5, quantity: 1, unitPrice: 5, categoryId: "Food", confidence: 0.7 },
+          { name: "Скидка на воду", amount: 7, quantity: 1, unitPrice: 7, categoryId: "Food", confidence: 0.7 },
+          { name: "coupon cola", amount: 4, quantity: 1, unitPrice: 4, categoryId: "Food", confidence: 0.7 },
+        ],
+      },
+    );
+
+    expect(parsed?.total).toBe(420);
+    expect(parsed?.items.slice(-3)).toMatchObject([
+      { amount: -5, unitPrice: -5 },
+      { amount: -7, unitPrice: -7 },
+      { amount: -4, unitPrice: -4 },
+    ]);
+  });
+
+  it("removes uncertainty words from recognized receipt item names", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        fileName: "receipt.jpg",
+        currency: "THB",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Покупки: вафли",
+        currency: "THB",
+        total: 58,
+        items: [
+          {
+            name: "Около вафли (похоже на товар)",
+            amount: 58,
+            quantity: 1,
+            unitPrice: 58,
+            categoryId: "Food",
+            confidence: 0.6,
+          },
+        ],
+      },
+    );
+
+    expect(parsed?.items[0]?.name).toBe("вафли");
   });
 
   it("parses salary text as income with explicit currency", () => {
-    const parsed = parseTextInputMock({
+    const parsed = parseTextInputLocally({
       text: "зарплата 4000$",
       currency: "RUB",
       categories,
@@ -240,7 +306,7 @@ describe("normalizeParsedExpense", () => {
   });
 
   it("parses Russian baht aliases as THB without asking for currency", () => {
-    const parsed = parseTextInputMock({
+    const parsed = parseTextInputLocally({
       text: "завтрак и обед 500 бат",
       currency: "USD",
       categories,
@@ -280,7 +346,7 @@ describe("normalizeParsedExpense", () => {
   });
 
   it("parses Russian lari aliases as GEL without keeping default USD", () => {
-    const parsed = parseTextInputMock({
+    const parsed = parseTextInputLocally({
       text: "обед 25 лари",
       currency: "USD",
       categories,
@@ -319,7 +385,7 @@ describe("normalizeParsedExpense", () => {
   });
 
   it("parses Georgian lari account text as GEL", () => {
-    const parsed = parseTextInputMock({
+    const parsed = parseTextInputLocally({
       text: "кредит 1200 лари 12%",
       currency: "USD",
       categories,

@@ -15,7 +15,7 @@ const categoryNameKeys: Record<string, MessageKey> = {
 };
 
 export function getPortfolioName(portfolio: Portfolio, t: Translator) {
-  if (portfolio.id === "portfolio-personal") return t("demo.portfolio.personal");
+  void t;
   return portfolio.name;
 }
 

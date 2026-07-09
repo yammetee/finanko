@@ -1,7 +1,7 @@
 import dayjs, { type Dayjs } from "dayjs";
 import type { Account, Category, Transaction } from "../../shared/types/finance";
 import { isLiabilityAccount } from "../../shared/lib/accounts";
-import { legacyFinanceToLedgerSnapshot } from "../ledger/legacyAdapter";
+import { financeStateToLedgerSnapshot } from "../ledger/financeLedgerAdapter";
 import { getLedgerAccountBalance } from "../ledger/balances";
 
 export const INTEREST_INCOME_CATEGORY_NAME = "Interest income";
@@ -74,7 +74,7 @@ function getBalanceBeforeDate(
   transactions: Transaction[],
   date: Dayjs,
 ) {
-  const snapshot = legacyFinanceToLedgerSnapshot({
+  const snapshot = financeStateToLedgerSnapshot({
     accounts,
     categories,
     transactions: transactions.filter((transaction) => dayjs(transaction.occurredAt).isBefore(date)),

@@ -1,6 +1,6 @@
 import {
   ASSISTANT_ACTIONS,
-  getAssistantResponseMock,
+  getAssistantResponseFallback as buildAssistantFallbackResponse,
   type AssistantActionId,
   type AssistantSummary,
 } from "./assistantSummary";
@@ -44,7 +44,7 @@ export function getAssistantFallbackResponse(
   actionId: AssistantActionId,
   summary: AssistantSummary,
   selectedCategoryId: string | undefined,
-  t: Parameters<typeof getAssistantResponseMock>[3],
+  t: Parameters<typeof buildAssistantFallbackResponse>[3],
 ) {
-  return getAssistantResponseMock(actionId, summary, selectedCategoryId, t);
+  return buildAssistantFallbackResponse(actionId, summary, selectedCategoryId, t);
 }

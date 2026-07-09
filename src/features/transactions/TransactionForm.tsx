@@ -10,12 +10,13 @@ import Space from "antd/es/space";
 import Switch from "antd/es/switch";
 import Typography from "antd/es/typography";
 import Upload from "antd/es/upload";
-import { ReceiptText, Sparkles, UploadIcon } from "lucide-react";
+import { ReceiptText, Sparkles, Trash2, UploadIcon } from "lucide-react";
 import dayjs from "dayjs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getAccountName, getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { CurrencySelect } from "../../shared/ui/FormSelects";
+import { isLiabilityAccount } from "../../shared/lib/accounts";
 import type {
   Account,
   Category,
@@ -53,8 +54,9 @@ interface TransactionFormProps {
   categories: Category[];
   onModeChange: (mode: string) => void;
   onFinish: (values: TransactionFormValues) => void;
-  onParseText: (values: { text: string }) => void | Promise<void>;
+  onParseText: (values: { text: string; accountId: string }) => void | Promise<void>;
   onParseReceipt: (values: {
+    accountId: string;
     fileName: string;
     fileType?: string;
     fileDataUrl?: string;
@@ -122,6 +124,7 @@ export function TransactionForm({
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const [receiptParsing, setReceiptParsing] = useState(false);
   const [textParsing, setTextParsing] = useState(false);
+  const [parserAccountId, setParserAccountId] = useState(accounts[0]?.id ?? "");
   const parsedItems = Form.useWatch("items", { form, preserve: true }) ?? [];
   const recurring = Form.useWatch("recurring", form);
   const transactionType = Form.useWatch("type", form);
@@ -133,21 +136,40 @@ export function TransactionForm({
       value: category.id,
       label: getCategoryName(category, t),
     }));
+  const accountOptions = accounts.map((account) => ({
+    value: account.id,
+    label: getAccountName(account, t),
+  }));
+  const debtAccountOptions = accounts
+    .filter((account) => isLiabilityAccount(account))
+    .map((account) => ({
+      value: account.id,
+      label: getAccountName(account, t),
+    }));
+
+  useEffect(() => {
+    if (!accounts.some((account) => account.id === parserAccountId)) {
+      setParserAccountId(accounts[0]?.id ?? "");
+    }
+  }, [accounts, parserAccountId]);
 
   async function parseText(values: { text: string }) {
+    if (!parserAccountId) return;
     setTextParsing(true);
     try {
-      await onParseText(values);
+      await onParseText({ ...values, accountId: parserAccountId });
     } finally {
       setTextParsing(false);
     }
   }
 
   async function parseReceipt(file: File) {
+    if (!parserAccountId) return;
     setReceiptFileName(file.name);
     setReceiptParsing(true);
     try {
       await onParseReceipt({
+        accountId: parserAccountId,
         fileName: file.name,
         fileType: file.type,
         fileDataUrl: await prepareReceiptFileDataUrl(file),
@@ -170,6 +192,16 @@ export function TransactionForm({
         onChange={(value) => onModeChange(String(value))}
         style={{ marginBottom: 18 }}
       />
+      {mode !== "manual" ? (
+        <Form.Item label={t("form.account")} required>
+          <Select
+            value={parserAccountId || undefined}
+            options={accountOptions}
+            disabled={accounts.length === 0}
+            onChange={setParserAccountId}
+          />
+        </Form.Item>
+      ) : null}
       {mode === "text" ? (
         <Form form={textParserForm} layout="vertical" onFinish={parseText}>
           <Form.Item name="text" label={t("form.expenseText")} rules={[{ required: true }]}>
@@ -226,10 +258,7 @@ export function TransactionForm({
       >
           <Form.Item name="accountId" label={t("form.account")} rules={[{ required: true }]}>
             <Select
-              options={accounts.map((account) => ({
-                value: account.id,
-                label: getAccountName(account, t),
-              }))}
+              options={accountOptions}
             />
           </Form.Item>
           <Form.Item name="type" label={t("form.type")} rules={[{ required: true }]}>
@@ -256,10 +285,7 @@ export function TransactionForm({
               rules={[{ required: true }]}
             >
               <Select
-                options={accounts.map((account) => ({
-                  value: account.id,
-                  label: getAccountName(account, t),
-                }))}
+                options={debtAccountOptions}
               />
             </Form.Item>
           ) : null}
@@ -295,21 +321,20 @@ export function TransactionForm({
           {parsedItems.length > 0 ? (
             <Card className="parsed-items-card" size="small" title={t("section.parsedItems")}>
               <Form.List name="items">
-                {(fields) => (
+                {(fields, { remove }) => (
                   <Space direction="vertical" size={8} style={{ width: "100%" }}>
                     <div className="parsed-item-header" aria-hidden="true">
                       <span>{t("form.name")}</span>
                       <span>{t("form.quantity")}</span>
                       <span>{t("form.unitPrice")}</span>
-                      <span>{t("form.lineTotal")}</span>
-                      <span>{t("assistant.category")}</span>
+                      <span />
                     </div>
                     {fields.map((field) => (
                       <div className="parsed-item-row" key={field.key}>
                         <label className="parsed-item-cell">
                           <span className="parsed-item-mobile-label">{t("form.name")}</span>
                           <Form.Item name={[field.name, "name"]} noStyle>
-                            <Input aria-label={t("form.name")} />
+                            <Input aria-label={t("form.name")} size="small" />
                           </Form.Item>
                         </label>
                         <label className="parsed-item-cell">
@@ -319,6 +344,7 @@ export function TransactionForm({
                               aria-label={t("form.quantity")}
                               min={0}
                               className="parsed-item-quantity"
+                              size="small"
                             />
                           </Form.Item>
                         </label>
@@ -328,31 +354,28 @@ export function TransactionForm({
                             <InputNumber
                               aria-label={t("form.unitPrice")}
                               className="parsed-item-unit-price"
+                              size="small"
                             />
                           </Form.Item>
                         </label>
-                        <label className="parsed-item-cell">
-                          <span className="parsed-item-mobile-label">{t("form.lineTotal")}</span>
-                          <Form.Item name={[field.name, "amount"]} noStyle>
-                            <InputNumber
-                              aria-label={t("form.lineTotal")}
-                              className="parsed-item-amount"
-                            />
-                          </Form.Item>
-                        </label>
-                        <label className="parsed-item-cell">
-                          <span className="parsed-item-mobile-label">{t("assistant.category")}</span>
-                          <Form.Item name={[field.name, "categoryId"]} noStyle>
-                            <Select
-                              aria-label={t("assistant.category")}
-                              className="parsed-item-category"
-                              options={categoryOptions}
-                            />
-                          </Form.Item>
-                        </label>
-                        <Form.Item name={[field.name, "confidence"]} noStyle hidden>
+                        <Form.Item name={[field.name, "amount"]} hidden>
                           <InputNumber />
                         </Form.Item>
+                        <Form.Item name={[field.name, "categoryId"]} hidden>
+                          <Input />
+                        </Form.Item>
+                        <Form.Item name={[field.name, "confidence"]} hidden>
+                          <InputNumber />
+                        </Form.Item>
+                        <Button
+                          aria-label={t("actions.delete")}
+                          className="parsed-item-delete"
+                          danger
+                          icon={<Trash2 size={14} />}
+                          size="small"
+                          type="text"
+                          onClick={() => remove(field.name)}
+                        />
                       </div>
                     ))}
                   </Space>
