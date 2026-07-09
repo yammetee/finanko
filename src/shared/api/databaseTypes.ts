@@ -46,6 +46,9 @@ export interface TransactionRow {
   amount: number | string;
   currency: Currency;
   category_id: string | null;
+  linked_account_id?: string | null;
+  principal_amount?: number | string | null;
+  interest_amount?: number | string | null;
   description: string;
   occurred_at: string;
   source: TransactionSource;

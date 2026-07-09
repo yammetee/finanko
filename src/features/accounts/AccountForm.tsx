@@ -9,7 +9,10 @@ import { useI18n } from "../../shared/i18n/i18nContext";
 import { getAccountName } from "../../shared/i18n/displayText";
 import { AccountTypeSelect, CurrencySelect } from "../../shared/ui/FormSelects";
 import type { Account, AccountType, Currency, InterestFrequency } from "../../shared/types/finance";
-import { isLiabilityAccountType } from "../../shared/lib/accounts";
+import {
+  isLiabilityAccountType,
+  supportsInterestAccountType,
+} from "../../shared/lib/accounts";
 
 const SAME_ACCOUNT_VALUE = "__same_account__";
 
@@ -29,6 +32,7 @@ interface AccountFormProps {
   form: ReturnType<typeof Form.useForm<AccountFormValues>>[0];
   accounts?: Account[];
   editingAccountId?: string;
+  defaultCurrency?: Currency;
   onFinish: (values: AccountFormValues) => void;
 }
 
@@ -36,16 +40,23 @@ export function AccountForm({
   form,
   accounts = [],
   editingAccountId,
+  defaultCurrency = "USD",
   onFinish,
 }: AccountFormProps) {
   const { t } = useI18n();
   function submit(values: AccountFormValues) {
+    const supportsInterest = supportsInterestAccountType(values.type);
     onFinish({
       ...values,
-      interestAllocationAccountId:
-        values.interestAllocationAccountId === SAME_ACCOUNT_VALUE
+      annualInterestRate: supportsInterest ? values.annualInterestRate : undefined,
+      interestFrequency: supportsInterest ? values.interestFrequency : undefined,
+      interestStartedAt: supportsInterest ? values.interestStartedAt : undefined,
+      interestAllocationAccountId: supportsInterest
+        ? values.interestAllocationAccountId === SAME_ACCOUNT_VALUE
           ? undefined
-          : values.interestAllocationAccountId,
+          : values.interestAllocationAccountId
+        : undefined,
+      loanTermMonths: isLiabilityAccountType(values.type) ? values.loanTermMonths : undefined,
     });
   }
 
@@ -55,7 +66,7 @@ export function AccountForm({
       layout="vertical"
       initialValues={{
         type: "custom",
-        currency: "USD",
+        currency: defaultCurrency,
         initialBalance: 0,
         interestAllocationAccountId: SAME_ACCOUNT_VALUE,
       }}
@@ -67,12 +78,25 @@ export function AccountForm({
       <Form.Item name="type" label={t("form.type")} rules={[{ required: true }]}>
         <AccountTypeSelect
           onChange={(type) => {
-            if (!isLiabilityAccountType(type)) return;
+            if (!supportsInterestAccountType(type)) {
+              form.setFieldsValue({
+                annualInterestRate: undefined,
+                interestFrequency: undefined,
+                interestStartedAt: undefined,
+                interestAllocationAccountId: undefined,
+                loanTermMonths: undefined,
+              });
+              return;
+            }
+
             form.setFieldsValue({
-              interestFrequency: form.getFieldValue("interestFrequency") ?? "daily",
+              interestFrequency: form.getFieldValue("interestFrequency") ?? "monthly",
               interestStartedAt:
                 form.getFieldValue("interestStartedAt") ??
                 dayjs().startOf("day").toISOString(),
+              interestAllocationAccountId: isLiabilityAccountType(type)
+                ? undefined
+                : form.getFieldValue("interestAllocationAccountId") ?? SAME_ACCOUNT_VALUE,
             });
           }}
         />
@@ -84,6 +108,7 @@ export function AccountForm({
         {({ getFieldValue }) => {
           const accountType = (getFieldValue("type") ?? "custom") as AccountType;
           const isLiability = isLiabilityAccountType(accountType);
+          const supportsInterest = supportsInterestAccountType(accountType);
 
           return (
             <>
@@ -94,44 +119,50 @@ export function AccountForm({
               >
                 <InputNumber style={{ width: "100%" }} />
               </Form.Item>
-              <Form.Item name="annualInterestRate" label={t("form.annualInterestRate")}>
-                <InputNumber min={0} max={1000} addonAfter="%" style={{ width: "100%" }} />
-              </Form.Item>
-              <Form.Item name="interestFrequency" label={t("form.interestFrequency")}>
-                <Select
-                  allowClear
-                  options={[
-                    { value: "daily", label: t("interest.daily") },
-                    { value: "monthly", label: t("interest.monthly") },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item
-                name="interestStartedAt"
-                label={t("form.interestStartedAt")}
-                getValueProps={(value?: string) => ({ value: value ? dayjs(value) : undefined })}
-                normalize={(value?: dayjs.Dayjs) => value?.startOf("day").toISOString()}
-              >
-                <DatePicker style={{ width: "100%" }} />
-              </Form.Item>
-              {!isLiability ? (
-                <Form.Item name="interestAllocationAccountId" label={t("form.interestAllocationAccount")}>
-                  <Select
-                    allowClear
-                    options={[
-                      {
-                        value: SAME_ACCOUNT_VALUE,
-                        label: t("account.sameAccount"),
-                      },
-                      ...accounts
-                        .filter((account) => account.id !== editingAccountId)
-                        .map((account) => ({
-                          value: account.id,
-                          label: getAccountName(account, t),
-                        })),
-                    ]}
-                  />
-                </Form.Item>
+              {supportsInterest ? (
+                <>
+                  <Form.Item name="annualInterestRate" label={t("form.annualInterestRate")}>
+                    <InputNumber min={0} max={1000} addonAfter="%" style={{ width: "100%" }} />
+                  </Form.Item>
+                  <Form.Item name="interestFrequency" label={t("form.interestFrequency")}>
+                    <Select
+                      allowClear
+                      options={[
+                        { value: "daily", label: t("interest.daily") },
+                        { value: "monthly", label: t("interest.monthly") },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="interestStartedAt"
+                    label={t("form.interestStartedAt")}
+                    getValueProps={(value?: string) => ({
+                      value: value ? dayjs(value) : undefined,
+                    })}
+                    normalize={(value?: dayjs.Dayjs) => value?.startOf("day").toISOString()}
+                  >
+                    <DatePicker style={{ width: "100%" }} />
+                  </Form.Item>
+                  {!isLiability ? (
+                    <Form.Item name="interestAllocationAccountId" label={t("form.interestAllocationAccount")}>
+                      <Select
+                        allowClear
+                        options={[
+                          {
+                            value: SAME_ACCOUNT_VALUE,
+                            label: t("account.sameAccount"),
+                          },
+                          ...accounts
+                            .filter((account) => account.id !== editingAccountId)
+                            .map((account) => ({
+                              value: account.id,
+                              label: getAccountName(account, t),
+                            })),
+                        ]}
+                      />
+                    </Form.Item>
+                  ) : null}
+                </>
               ) : null}
               {isLiability ? (
                 <Form.Item name="loanTermMonths" label={t("form.loanTermMonths")}>

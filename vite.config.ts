@@ -27,6 +27,8 @@ declare const fetch: (
   json: () => Promise<unknown>;
 }>;
 
+const maxAiParserTextChars = 20_000;
+
 function readJsonBody(request: DevRequest) {
   return new Promise<unknown>((resolve, reject) => {
     let body = "";
@@ -50,42 +52,30 @@ function sendJson(response: DevResponse, status: number, payload: unknown) {
   response.end(JSON.stringify(payload));
 }
 
-interface AiUsageCounter {
-  dateKey: string;
-  count: number;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-const aiUsage: AiUsageCounter = {
-  dateKey: new Date().toISOString().slice(0, 10),
-  count: 0,
-};
+function buildParserUserContent(payload: unknown) {
+  if (!isRecord(payload)) return JSON.stringify(payload);
 
-function getAiDailyLimit(env: Record<string, string>) {
-  const value = Number(env.AI_DAILY_LIMIT ?? env.VITE_AI_DAILY_LIMIT ?? 20);
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 20;
-}
+  const { fileDataUrl, ...metadata } = payload;
+  const text = JSON.stringify(metadata);
+  if (text.length > maxAiParserTextChars) return null;
 
-function checkAiDailyLimit(limit: number) {
-  const dateKey = new Date().toISOString().slice(0, 10);
-  if (aiUsage.dateKey !== dateKey) {
-    aiUsage.dateKey = dateKey;
-    aiUsage.count = 0;
-  }
+  if (typeof fileDataUrl !== "string" || fileDataUrl.length === 0) return text;
 
-  if (aiUsage.count >= limit) {
-    return {
-      allowed: false,
-      remaining: 0,
-      resetDate: dateKey,
-    };
-  }
-
-  aiUsage.count += 1;
-  return {
-    allowed: true,
-    remaining: Math.max(0, limit - aiUsage.count),
-    resetDate: dateKey,
-  };
+  return [
+    {
+      type: "input_text",
+      text,
+    },
+    {
+      type: "input_image",
+      image_url: fileDataUrl,
+      detail: "high",
+    },
+  ];
 }
 
 function aiParserPlugin(): Plugin {
@@ -142,26 +132,20 @@ function aiParserPlugin(): Plugin {
         const apiKey = env.OPENAI_API_KEY;
         const baseUrl = env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
         const model = env.OPENAI_MODEL ?? env.VITE_OPENAI_MODEL ?? "gpt-5.4-nano";
-        const limit = getAiDailyLimit(env);
 
         if (!apiKey || !model) {
           sendJson(response, 404, { error: "AI parser is not configured" });
           return;
         }
 
-        const usage = checkAiDailyLimit(limit);
-        if (!usage.allowed) {
-          sendJson(response, 429, {
-            error: "AI daily limit reached",
-            limit,
-            remaining: usage.remaining,
-            resetDate: usage.resetDate,
-          });
-          return;
-        }
-
         try {
           const payload = await readJsonBody(request);
+          const userContent = buildParserUserContent(payload);
+          if (!userContent) {
+            sendJson(response, 413, { error: "AI parser payload is too large" });
+            return;
+          }
+
           const aiResponse = await fetch(`${baseUrl}/responses`, {
             method: "POST",
             headers: {
@@ -174,11 +158,30 @@ function aiParserPlugin(): Plugin {
                 {
                   role: "system",
                   content:
-                    "You parse personal finance input for Finanko. Return only strict JSON. If text describes a loan, credit, mortgage, deposit, or bank account, return an account object. If it describes spending or receipt items, return a transaction object. Do not give financial advice.",
+                    [
+                      "You parse personal finance input for Finanko. Return only strict JSON.",
+                      "The user payload contains categories as a compact array of names. For categoryId, return the best matching category name from that array or an empty string. Do not invent database ids.",
+                      "If text describes a loan, credit, mortgage, deposit, or bank account, return an account object.",
+                      "If it describes spending or receipt items, return a transaction object.",
+                      "For short text expenses, parse the user's words as one or more transaction items. Example: 'завтрак и обед 500 бат' means one expense item named 'Завтрак и обед' with amount 500 and currency THB.",
+                      "Currency aliases are strict: бат, баты, baht, Thai baht, THB, ฿, บาท mean THB; руб, рубли, RUB, ₽ mean RUB; лари, GEL, ₾, ქართული ლარი, ლარი mean GEL; доллар, dollars, USD, $ mean USD.",
+                      "When the user text contains a currency alias, that explicit alias must override the provided default currency.",
+                      "For receipt images, extract purchased product/service line items, not payment metadata.",
+                      "For receipts, return the best-effort list of visible purchased line items. Do not fail the whole receipt because one line is unclear.",
+                      "For each receipt line item, return quantity, unitPrice, and amount. Amount is the line total: quantity multiplied by unitPrice when both are visible.",
+                      "If the receipt has discounts, coupons, or promotions that change the payable total, include each visible discount as a separate item with a negative amount and negative unitPrice when you can identify it.",
+                      "Translate every returned item name to Russian, even when the receipt is Thai, English, Georgian, or Russian. Never return raw Thai, Georgian, or OCR-garbled item names. If exact translation is uncertain, return a useful Russian generic product name for that line.",
+                      "Detect currency from the receipt itself: ฿/THB/Thai receipts usually mean THB, ₽/RUB means RUB, ₾/GEL means GEL, $/USD means USD. Do not blindly copy the provided default currency if the receipt shows another currency.",
+                      "Do not use the largest visible number as total. Ignore card numbers, receipt numbers, tax IDs, dates, times, phone numbers, change, cash received, subtotal duplicates, and authorization codes as items.",
+                      "For Thai receipts,ยอดสุทธิ means net/final payable total. เงินสด/เงินทอน are cash received/change and must not be total. บิลนี้ประหยัด or saved amount is not total.",
+                      "For receipts, prefer the final paid/net total. Do not use cash received, change, VAT, loyalty points, barcode numbers, or saved amount as total.",
+                      "Set description to a short Russian comma-separated summary of bought items.",
+                      "Do not give financial advice.",
+                    ].join(" "),
                 },
                 {
                   role: "user",
-                  content: JSON.stringify(payload),
+                  content: userContent,
                 },
               ],
               text: {
@@ -211,10 +214,19 @@ function aiParserPlugin(): Plugin {
                         items: {
                           type: "object",
                           additionalProperties: false,
-                          required: ["name", "amount", "categoryId", "confidence"],
+                          required: [
+                            "name",
+                            "amount",
+                            "quantity",
+                            "unitPrice",
+                            "categoryId",
+                            "confidence",
+                          ],
                           properties: {
                             name: { type: "string" },
                             amount: { type: "number" },
+                            quantity: { type: ["number", "null"] },
+                            unitPrice: { type: ["number", "null"] },
                             categoryId: { type: "string" },
                             confidence: { type: "number" },
                           },
@@ -233,6 +245,8 @@ function aiParserPlugin(): Plugin {
                           "credit",
                           "mortgage",
                           "custom",
+                          "income",
+                          "expense",
                           null,
                         ],
                       },
@@ -284,21 +298,9 @@ function aiParserPlugin(): Plugin {
         const apiKey = env.OPENAI_API_KEY;
         const baseUrl = env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
         const model = env.OPENAI_MODEL ?? env.VITE_OPENAI_MODEL ?? "gpt-5.4-nano";
-        const limit = getAiDailyLimit(env);
 
         if (!apiKey || !model) {
           sendJson(response, 404, { error: "AI assistant is not configured" });
-          return;
-        }
-
-        const usage = checkAiDailyLimit(limit);
-        if (!usage.allowed) {
-          sendJson(response, 429, {
-            error: "AI daily limit reached",
-            limit,
-            remaining: usage.remaining,
-            resetDate: usage.resetDate,
-          });
           return;
         }
 

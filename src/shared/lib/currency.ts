@@ -12,13 +12,12 @@ export function setLiveExchangeRates(row: RateRow | null) {
 }
 
 function getRateRow(date?: string) {
-  if (liveRateRow) return liveRateRow;
   const target = date ? dayjs(date) : dayjs();
-  return (
-    [...rates]
-      .sort((a, b) => +new Date(b.date) - +new Date(a.date))
-      .find((row) => !dayjs(row.date).isAfter(target, "day")) ?? rates[rates.length - 1]
-  );
+  if (liveRateRow && (!date || dayjs(liveRateRow.date).isSame(target, "day"))) {
+    return liveRateRow;
+  }
+  const sortedRates = [...rates].sort((a, b) => +new Date(b.date) - +new Date(a.date));
+  return sortedRates.find((row) => !dayjs(row.date).isAfter(target, "day")) ?? sortedRates[sortedRates.length - 1];
 }
 
 export function convertMoney(

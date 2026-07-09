@@ -4,7 +4,6 @@ import {
   type AssistantActionId,
   type AssistantSummary,
 } from "./assistantSummary";
-import { AiDailyLimitError } from "../../shared/api/aiErrors";
 
 interface AssistantAiInput {
   actionId: AssistantActionId;
@@ -32,18 +31,11 @@ export async function getAssistantResponse(input: AssistantAiInput) {
       }),
     });
     if (!response.ok) {
-      const errorPayload = (await response.json().catch(() => null)) as {
-        limit?: number;
-        remaining?: number;
-        resetDate?: string;
-      } | null;
-      if (response.status === 429) throw new AiDailyLimitError(errorPayload ?? undefined);
       return null;
     }
     const payload = (await response.json()) as { text?: string };
     return payload.text?.trim() || null;
-  } catch (error) {
-    if (error instanceof AiDailyLimitError) throw error;
+  } catch {
     return null;
   }
 }

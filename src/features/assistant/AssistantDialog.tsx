@@ -5,7 +5,6 @@ import { getCategoryNameById } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { useMediaQuery } from "../../shared/lib/useMediaQuery";
 import { DraggablePanel } from "../../shared/ui/DraggablePanel";
-import { isAiDailyLimitError } from "../../shared/api/aiErrors";
 import {
   ASSISTANT_ACTIONS,
   type AssistantActionId,
@@ -31,7 +30,6 @@ export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps
     useState<AssistantActionId>("portfolio_overview");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>();
   const [response, setResponse] = useState("");
-  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -59,7 +57,6 @@ export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps
     let active = true;
     const fallback = getAssistantFallbackResponse(activeAction, summary, selectedCategoryId, t);
     setResponse(fallback);
-    setNotice("");
     setLoading(true);
     void getAssistantResponse({
       actionId: activeAction,
@@ -71,11 +68,8 @@ export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps
         if (!active) return;
         if (aiResponse) setResponse(aiResponse);
       })
-      .catch((error) => {
+      .catch(() => {
         if (!active) return;
-        if (isAiDailyLimitError(error)) {
-          setNotice(t("assistant.aiDailyLimitFallback"));
-        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -132,7 +126,6 @@ export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps
             )}
           </Title>
           {loading ? <Text className="muted">{t("assistant.loading")}</Text> : null}
-          {notice ? <Text className="muted">{notice}</Text> : null}
           <Text>{response}</Text>
         </div>
       </div>

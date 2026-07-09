@@ -40,6 +40,9 @@ export interface NewTransactionInput {
   amount: number;
   currency: Currency;
   categoryId: string;
+  linkedAccountId?: string;
+  principalAmount?: number;
+  interestAmount?: number;
   description: string;
   occurredAt: string;
   source?: TransactionSource;
@@ -79,8 +82,6 @@ export interface FinanceState {
   updateTransaction: (id: string, input: NewTransactionInput) => void;
   deleteTransaction: (id: string) => void;
   generateDueRecurring: () => void;
-  exportSnapshot: () => FinanceSnapshot;
-  importSnapshot: (snapshot: FinanceSnapshot) => void;
   resetDemoData: () => void;
 }
 

@@ -73,6 +73,15 @@ export function mapTransactionRow(row: TransactionRow): Transaction {
     amount: numberFromDb(row.amount),
     currency: row.currency,
     categoryId: row.category_id ?? "",
+    linkedAccountId: optionalString(row.linked_account_id ?? null),
+    principalAmount:
+      row.principal_amount === null || row.principal_amount === undefined
+        ? undefined
+        : numberFromDb(row.principal_amount),
+    interestAmount:
+      row.interest_amount === null || row.interest_amount === undefined
+        ? undefined
+        : numberFromDb(row.interest_amount),
     description: row.description,
     occurredAt: row.occurred_at,
     source: row.source,

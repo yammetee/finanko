@@ -1,21 +1,26 @@
 import dayjs from "dayjs";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { FinanceState } from "./financeTypes";
-import { createSeedSnapshot, defaultCategories } from "./seedData";
+import type { FinanceState, NewAccountInput } from "./financeTypes";
+import { createSeedSnapshot, defaultCategories, seedAccounts, seedPortfolioId } from "./seedData";
 import type { Account, Currency, Transaction } from "../../shared/types/finance";
 import { getDueRecurringTransactions } from "../recurring/recurring";
 import {
+  getDueInterestAccrualTransactions,
+  INTEREST_EXPENSE_CATEGORY_NAME,
+  INTEREST_INCOME_CATEGORY_NAME,
+} from "../interest/interestAccrual";
+import {
   isLiabilityAccountType,
   normalizeAccountInitialBalance,
+  supportsInterestAccountType,
 } from "../../shared/lib/accounts";
 
-const now = dayjs();
 const seedSnapshot = createSeedSnapshot();
 
 function inferAccountCurrency(account: Pick<Account, "name" | "type" | "currency" | "initialBalance">): Currency {
   if (/(?:₽|rub|ruble|rubles|руб|рубл)/i.test(account.name)) return "RUB";
-  if (/(?:₾|gel|lari|лари)/i.test(account.name)) return "GEL";
+  if (/(?:₾|gel|lari|lar|лар(?:и|а|ов)?|грузинск(?:ий|их|ие|ими)?\s+лар|ლარ(?:ი)?)/i.test(account.name)) return "GEL";
   if (/(?:฿|thb|baht|бат)/i.test(account.name)) return "THB";
   if (/(?:\$|usd|dollar|dollars|доллар)/i.test(account.name)) return "USD";
 
@@ -37,6 +42,37 @@ function normalizeAccountCurrency<T extends Pick<Account, "name" | "type" | "cur
   };
 }
 
+function normalizeAccountInput<T extends NewAccountInput>(input: T) {
+  const supportsInterest = supportsInterestAccountType(input.type);
+  return {
+    ...normalizeAccountCurrency(input),
+    initialBalance: normalizeAccountInitialBalance(input.type, input.initialBalance),
+    annualInterestRate: supportsInterest ? input.annualInterestRate : undefined,
+    interestFrequency: supportsInterest ? input.interestFrequency : undefined,
+    interestStartedAt: supportsInterest ? input.interestStartedAt : undefined,
+    interestAllocationAccountId:
+      supportsInterest && !isLiabilityAccountType(input.type)
+        ? input.interestAllocationAccountId
+        : undefined,
+    loanTermMonths: isLiabilityAccountType(input.type) ? input.loanTermMonths : undefined,
+  };
+}
+
+function normalizeStoredAccount(account: Account) {
+  const supportsInterest = supportsInterestAccountType(account.type);
+  return {
+    ...normalizeAccountCurrency(account),
+    annualInterestRate: supportsInterest ? account.annualInterestRate : undefined,
+    interestFrequency: supportsInterest ? account.interestFrequency : undefined,
+    interestStartedAt: supportsInterest ? account.interestStartedAt : undefined,
+    interestAllocationAccountId:
+      supportsInterest && !isLiabilityAccountType(account.type)
+        ? account.interestAllocationAccountId
+        : undefined,
+    loanTermMonths: isLiabilityAccountType(account.type) ? account.loanTermMonths : undefined,
+  };
+}
+
 function uid(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
@@ -48,6 +84,83 @@ function currentPortfolioId(get: () => FinanceState) {
 function getRecurringEndsAt(startsAt: string, months?: number) {
   if (!months || months < 1) return undefined;
   return dayjs(startsAt).add(months - 1, "month").endOf("month").toISOString();
+}
+
+function canCreateRecurring(type: Transaction["type"]) {
+  return type === "income" || type === "expense";
+}
+
+function ensureInterestCategories(state: FinanceState, portfolioId: string) {
+  const required = [
+    { name: INTEREST_INCOME_CATEGORY_NAME, type: "income" as const, color: "#5fd38a" },
+    { name: INTEREST_EXPENSE_CATEGORY_NAME, type: "expense" as const, color: "#f07f86" },
+  ];
+  const additions = required
+    .filter(
+      (category) =>
+        !state.categories.some(
+          (candidate) =>
+            candidate.portfolioId === portfolioId &&
+            candidate.name === category.name &&
+            candidate.type === category.type,
+        ),
+    )
+    .map((category) => ({
+      id: uid("cat"),
+      portfolioId,
+      ...category,
+    }));
+
+  return additions;
+}
+
+const demoRecurringRuleIds = new Set(["rec-rent"]);
+
+function isDemoTransaction(transaction: Transaction) {
+  return (
+    transaction.id.startsWith("seed-salary-") ||
+    transaction.id.startsWith("seed-expense-") ||
+    transaction.recurringRuleId === "rec-rent"
+  );
+}
+
+function restoreMissingSeedAccounts(accounts: Account[]) {
+  const existingIds = new Set(accounts.map((account) => account.id));
+  return [
+    ...accounts,
+    ...seedAccounts.filter(
+      (account) =>
+        account.portfolioId === seedPortfolioId &&
+        !existingIds.has(account.id),
+    ),
+  ];
+}
+
+function sanitizeFinanceState(state: FinanceState) {
+  const transactions = Array.isArray(state.transactions)
+    ? state.transactions.filter((transaction) => !isDemoTransaction(transaction))
+    : state.transactions;
+
+  return {
+    ...state,
+    currencyDisplay: state.currencyDisplay ?? "native",
+    accounts: Array.isArray(state.accounts)
+      ? restoreMissingSeedAccounts(
+          state.accounts.map((account) => normalizeStoredAccount(account)),
+        )
+      : state.accounts,
+    transactions,
+    transactionItems: Array.isArray(state.transactionItems)
+      ? state.transactionItems.filter((item) =>
+          Array.isArray(transactions)
+            ? transactions.some((transaction) => transaction.id === item.transactionId)
+            : true,
+        )
+      : state.transactionItems,
+    recurringRules: Array.isArray(state.recurringRules)
+      ? state.recurringRules.filter((rule) => !demoRecurringRuleIds.has(rule.id))
+      : state.recurringRules,
+  };
 }
 
 export const useFinanceStore = create<FinanceState>()(
@@ -92,15 +205,7 @@ export const useFinanceStore = create<FinanceState>()(
               color: ["#4fb6e8", "#5fd38a", "#e8b94c", "#9b82e6"][
                 state.accounts.length % 4
               ],
-              ...normalizeAccountCurrency(input),
-              initialBalance: normalizeAccountInitialBalance(
-                input.type,
-                input.initialBalance,
-              ),
-              interestAllocationAccountId:
-                isLiabilityAccountType(input.type)
-                  ? undefined
-                  : input.interestAllocationAccountId,
+              ...normalizeAccountInput(input),
             },
           ],
         })),
@@ -110,15 +215,7 @@ export const useFinanceStore = create<FinanceState>()(
             account.id === id
               ? {
                   ...account,
-                  ...normalizeAccountCurrency(input),
-                  initialBalance: normalizeAccountInitialBalance(
-                    input.type,
-                    input.initialBalance,
-                  ),
-                  interestAllocationAccountId:
-                    isLiabilityAccountType(input.type)
-                      ? undefined
-                      : input.interestAllocationAccountId,
+                  ...normalizeAccountInput(input),
                 }
               : account,
           ),
@@ -133,7 +230,7 @@ export const useFinanceStore = create<FinanceState>()(
         })),
       repairAccountCurrencies: () =>
         set((state) => ({
-          accounts: state.accounts.map((account) => normalizeAccountCurrency(account)),
+          accounts: state.accounts.map((account) => normalizeStoredAccount(account)),
         })),
       addCategory: (input) =>
         set((state) => {
@@ -152,7 +249,8 @@ export const useFinanceStore = create<FinanceState>()(
       addTransaction: (input) => {
         const id = uid("tx");
         const activePortfolioId = currentPortfolioId(get);
-        const recurringRuleId = input.recurring ? uid("rec") : undefined;
+        const isRecurring = Boolean(input.recurring && canCreateRecurring(input.type));
+        const recurringRuleId = isRecurring ? uid("rec") : undefined;
         const transaction: Transaction = {
           id,
           portfolioId: activePortfolioId,
@@ -161,9 +259,12 @@ export const useFinanceStore = create<FinanceState>()(
           amount: input.amount,
           currency: input.currency,
           categoryId: input.categoryId,
+          linkedAccountId: input.linkedAccountId,
+          principalAmount: input.principalAmount,
+          interestAmount: input.interestAmount,
           description: input.description,
           occurredAt: input.occurredAt,
-          source: input.recurring ? "recurring" : input.source ?? "manual",
+          source: isRecurring ? "recurring" : input.source ?? "manual",
           recurringRuleId,
         };
         const transactionItems =
@@ -175,7 +276,7 @@ export const useFinanceStore = create<FinanceState>()(
         set((state) => ({
           transactions: [...state.transactions, transaction],
           transactionItems: [...(state.transactionItems ?? []), ...transactionItems],
-          recurringRules: input.recurring
+          recurringRules: isRecurring
             ? [
                 ...state.recurringRules,
                 {
@@ -205,7 +306,8 @@ export const useFinanceStore = create<FinanceState>()(
           })) ?? [];
         set((state) => {
           const existing = state.transactions.find((transaction) => transaction.id === id);
-          const recurringRuleId = input.recurring
+          const isRecurring = Boolean(input.recurring && canCreateRecurring(input.type));
+          const recurringRuleId = isRecurring
             ? existing?.recurringRuleId ?? uid("rec")
             : existing?.recurringRuleId;
           const hasRecurringRule = state.recurringRules.some((rule) => rule.id === recurringRuleId);
@@ -220,9 +322,12 @@ export const useFinanceStore = create<FinanceState>()(
                     amount: input.amount,
                     currency: input.currency,
                     categoryId: input.categoryId,
+                    linkedAccountId: input.linkedAccountId,
+                    principalAmount: input.principalAmount,
+                    interestAmount: input.interestAmount,
                     description: input.description,
                     occurredAt: input.occurredAt,
-                    source: input.recurring ? "recurring" : input.source ?? transaction.source,
+                    source: isRecurring ? "recurring" : input.source ?? transaction.source,
                     recurringRuleId,
                   }
                 : transaction,
@@ -232,7 +337,7 @@ export const useFinanceStore = create<FinanceState>()(
               ...transactionItems,
             ],
             recurringRules:
-              input.recurring && recurringRuleId && !hasRecurringRule
+              isRecurring && recurringRuleId && !hasRecurringRule
                 ? [
                     ...state.recurringRules,
                     {
@@ -263,7 +368,7 @@ export const useFinanceStore = create<FinanceState>()(
                           dayOfMonth: dayjs(input.occurredAt).date(),
                           startsAt: input.occurredAt,
                           endsAt: getRecurringEndsAt(input.occurredAt, input.recurringMonths),
-                          isActive: Boolean(input.recurring),
+                          isActive: isRecurring,
                         }
                       : rule,
                   ),
@@ -280,49 +385,46 @@ export const useFinanceStore = create<FinanceState>()(
         })),
       generateDueRecurring: () => {
         const state = get();
+        const interestCategories = ensureInterestCategories(state, state.activePortfolioId);
+        const categories = [...state.categories, ...interestCategories];
         const additions = getDueRecurringTransactions({
           rules: state.recurringRules,
           transactions: state.transactions,
           portfolioId: state.activePortfolioId,
-          date: now,
+          date: dayjs(),
+          createId: () => uid("tx"),
+        });
+        const interestAdditions = getDueInterestAccrualTransactions({
+          accounts: state.accounts,
+          categories,
+          transactions: [...state.transactions, ...additions],
+          portfolioId: state.activePortfolioId,
+          date: dayjs(),
           createId: () => uid("tx"),
         });
 
-        if (additions.length > 0) {
-          set({ transactions: [...state.transactions, ...additions] });
+        if (additions.length > 0 || interestAdditions.length > 0 || interestCategories.length > 0) {
+          set({
+            categories,
+            transactions: [...state.transactions, ...additions, ...interestAdditions],
+          });
         }
       },
-      exportSnapshot: () => {
-        const state = get();
-        return {
-          activePortfolioId: state.activePortfolioId,
-          timeframe: state.timeframe,
-          transactionFilter: state.transactionFilter,
-          currencyDisplay: state.currencyDisplay,
-          portfolios: state.portfolios,
-          accounts: state.accounts,
-          categories: state.categories,
-          transactions: state.transactions,
-        transactionItems: state.transactionItems ?? [],
-        recurringRules: state.recurringRules,
-      };
-      },
-      importSnapshot: (snapshot) => set(snapshot),
       resetDemoData: () => set(createSeedSnapshot()),
     }),
     {
       name: "finanko-local-state-v3",
-      version: 4,
+      version: 6,
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState;
-        const state = persistedState as FinanceState;
-        return {
-          ...state,
-          currencyDisplay: state.currencyDisplay ?? "native",
-          accounts: Array.isArray(state.accounts)
-            ? state.accounts.map((account) => normalizeAccountCurrency(account))
-            : state.accounts,
-        };
+        return sanitizeFinanceState(persistedState as FinanceState);
+      },
+      merge: (persistedState, currentState) => {
+        if (!persistedState || typeof persistedState !== "object") return currentState;
+        return sanitizeFinanceState({
+          ...currentState,
+          ...(persistedState as Partial<FinanceState>),
+        } as FinanceState);
       },
     },
   ),

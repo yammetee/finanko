@@ -26,6 +26,16 @@ async function selectTable<Row>(table: string) {
   return (data ?? []) as Row[];
 }
 
+async function softDeleteRow(table: string, id: string) {
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error("Supabase is not configured");
+  const { error } = await supabase
+    .from(table)
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function getSupabaseFinanceSnapshot(): Promise<FinanceSnapshot> {
   const [
     portfolioRows,
@@ -71,6 +81,6 @@ export const supabaseFinanceRepository: FinanceRepository = {
   createAccount: async () => notImplemented("createAccount"),
   archiveAccount: async () => notImplemented("archiveAccount"),
   createTransaction: async () => notImplemented("createTransaction"),
-  deleteTransaction: async () => notImplemented("deleteTransaction"),
+  deleteTransaction: async (id) => softDeleteRow("transactions", id),
   generateDueRecurring: async () => notImplemented("generateDueRecurring"),
 };

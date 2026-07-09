@@ -12,8 +12,13 @@ export type AccountType =
   | "mortgage"
   | "custom";
 
-export type TransactionType = "income" | "expense" | "adjustment";
-export type TransactionSource = "manual" | "text_ai" | "receipt_ai" | "recurring";
+export type TransactionType =
+  | "income"
+  | "expense"
+  | "debt_payment"
+  | "interest_accrual"
+  | "adjustment";
+export type TransactionSource = "manual" | "text_ai" | "receipt_ai" | "recurring" | "system";
 export type Timeframe = "week" | "month" | "year" | "all";
 export type InterestFrequency = "daily" | "monthly";
 
@@ -57,6 +62,9 @@ export interface Transaction {
   amount: number;
   currency: Currency;
   categoryId: string;
+  linkedAccountId?: string;
+  principalAmount?: number;
+  interestAmount?: number;
   description: string;
   occurredAt: string;
   source: TransactionSource;
@@ -69,6 +77,8 @@ export interface TransactionItem {
   transactionId: string;
   name: string;
   amount: number;
+  quantity?: number;
+  unitPrice?: number;
   categoryId: string;
   confidence: number;
 }

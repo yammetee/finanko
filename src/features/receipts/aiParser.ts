@@ -1,8 +1,8 @@
 import type { Category, Currency } from "../../shared/types/finance";
-import { AiDailyLimitError } from "../../shared/api/aiErrors";
 import {
   detectAmountInText,
   detectCurrencyInText,
+  normalizeParsedExpense,
   parseReceiptMock,
   parseTextInputMock,
   type ParsedExpense,
@@ -17,6 +17,9 @@ interface ParseTextInput {
 
 interface ParseReceiptInput {
   fileName: string;
+  fileType?: string;
+  fileDataUrl?: string;
+  text?: string;
   currency: Currency;
   categories: Category[];
 }
@@ -29,17 +32,10 @@ async function requestAiParser<T>(payload: unknown): Promise<T | null> {
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      const errorPayload = (await response.json().catch(() => null)) as {
-        limit?: number;
-        remaining?: number;
-        resetDate?: string;
-      } | null;
-      if (response.status === 429) throw new AiDailyLimitError(errorPayload ?? undefined);
       return null;
     }
     return (await response.json()) as T;
-  } catch (error) {
-    if (error instanceof AiDailyLimitError) throw error;
+  } catch {
     return null;
   }
 }
@@ -49,11 +45,7 @@ export async function parseTextInput(input: ParseTextInput): Promise<ParsedTextI
     mode: "text",
     text: input.text,
     currency: input.currency,
-    categories: input.categories.map((category) => ({
-      id: category.id,
-      name: category.name,
-      type: category.type,
-    })),
+    categories: input.categories.map((category) => category.name),
   });
 
   const parsed = aiResult ?? parseTextInputMock(input);
@@ -71,20 +63,26 @@ export async function parseTextInput(input: ParseTextInput): Promise<ParsedTextI
     };
   }
 
-  return explicitCurrency ? { ...parsed, currency: explicitCurrency } : parsed;
+  const normalized = normalizeParsedExpense(input, parsed);
+  return normalized
+    ? explicitCurrency
+      ? { ...normalized, currency: explicitCurrency }
+      : normalized
+    : parseTextInputMock(input);
 }
 
 export async function parseReceiptInput(input: ParseReceiptInput): Promise<ParsedExpense> {
   const aiResult = await requestAiParser<ParsedExpense>({
     mode: "receipt",
     fileName: input.fileName,
+    fileType: input.fileType,
+    fileDataUrl: input.fileDataUrl,
+    text: input.text,
     currency: input.currency,
-    categories: input.categories.map((category) => ({
-      id: category.id,
-      name: category.name,
-      type: category.type,
-    })),
+    categories: input.categories.map((category) => category.name),
   });
 
-  return aiResult ?? parseReceiptMock(input);
+  const normalized = normalizeParsedExpense(input, aiResult);
+  if (normalized) return normalized;
+  return parseReceiptMock(input);
 }

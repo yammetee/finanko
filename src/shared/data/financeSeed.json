@@ -20,7 +20,7 @@
       "name": "Main bank",
       "type": "bank",
       "currency": "USD",
-      "initialBalance": -23950,
+      "initialBalance": 0,
       "color": "#4fb6e8"
     },
     {
@@ -37,36 +37,8 @@
       "type": "savings",
       "currency": "USD",
       "initialBalance": 0,
-      "color": "#5fd38a",
-      "annualInterestRate": 5,
-      "interestFrequency": "monthly",
-      "interestStartedAt": "2026-01-01",
-      "interestAllocationAccountId": "acc-bank"
-    },
-    {
-      "id": "acc-credit-rub",
-      "name": "Credit balance",
-      "type": "credit",
-      "currency": "RUB",
-      "initialBalance": -900000,
-      "color": "#f07f86",
-      "annualInterestRate": 21,
-      "interestFrequency": "daily",
-      "interestStartedAt": "2026-01-01",
-      "loanTermMonths": 60
+      "color": "#5fd38a"
     }
   ],
-  "recurringRules": [
-    {
-      "id": "rec-rent",
-      "accountId": "acc-bank",
-      "type": "expense",
-      "amount": 1200,
-      "currency": "USD",
-      "categoryId": "cat-home",
-      "description": "Rent",
-      "dayOfMonth": 4,
-      "isActive": true
-    }
-  ]
+  "recurringRules": []
 }

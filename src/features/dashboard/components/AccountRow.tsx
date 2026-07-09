@@ -1,5 +1,4 @@
 import Button from "antd/es/button";
-import Progress from "antd/es/progress";
 import Space from "antd/es/space";
 import Typography from "antd/es/typography";
 import { Archive, Pencil } from "lucide-react";
@@ -15,9 +14,7 @@ interface AccountRowProps {
   account: Account;
   accounts: Account[];
   balance: number;
-  allocationBalance: number;
   displayCurrency: Currency;
-  total: number;
   onEdit?: (account: Account) => void;
   onArchive?: (account: Account) => void;
 }
@@ -26,14 +23,11 @@ export function AccountRow({
   account,
   accounts,
   balance,
-  allocationBalance,
   displayCurrency,
-  total,
   onEdit,
   onArchive,
 }: AccountRowProps) {
   const { t } = useI18n();
-  const percent = total > 0 ? (Math.abs(allocationBalance) / total) * 100 : 0;
   const allocationAccount = accounts.find(
     (candidate) => candidate.id === account.interestAllocationAccountId,
   );
@@ -97,13 +91,6 @@ export function AccountRow({
           />
         ) : null}
       </div>
-      <Progress
-        percent={Math.max(4, Math.min(100, percent))}
-        showInfo={false}
-        strokeColor={balance < 0 ? "#fca5a5" : account.color}
-        trailColor="#20252d"
-        size="small"
-      />
     </div>
   );
 }

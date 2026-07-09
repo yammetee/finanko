@@ -8,7 +8,12 @@ interface BuildRecurringTransactionInput {
 }
 
 export function getRecurringMonthKey(date: string | Dayjs) {
+  if (typeof date === "string") return date.slice(0, 7);
   return dayjs(date).format("YYYY-MM");
+}
+
+function parseCalendarDate(value: string) {
+  return dayjs(value.slice(0, 10));
 }
 
 export function hasGeneratedRecurringTransaction(
@@ -26,8 +31,8 @@ export function hasGeneratedRecurringTransaction(
 
 export function isRecurringRuleDue(rule: RecurringRule, date: Dayjs) {
   const monthStart = date.startOf("month");
-  const startsAt = dayjs(rule.startsAt).startOf("month");
-  const endsAt = rule.endsAt ? dayjs(rule.endsAt).endOf("month") : null;
+  const startsAt = parseCalendarDate(rule.startsAt).startOf("month");
+  const endsAt = rule.endsAt ? parseCalendarDate(rule.endsAt).endOf("month") : null;
 
   if (monthStart.isBefore(startsAt)) return false;
   if (endsAt && monthStart.isAfter(endsAt)) return false;
@@ -67,9 +72,20 @@ export function getDueRecurringTransactions({
   date: Dayjs;
   createId: () => string;
 }) {
-  return rules
+  const activeRules = rules
     .filter((rule) => rule.isActive && rule.portfolioId === portfolioId)
-    .filter((rule) => isRecurringRuleDue(rule, date))
-    .filter((rule) => !hasGeneratedRecurringTransaction(rule, transactions, date))
-    .map((rule) => buildRecurringTransaction({ rule, date, id: createId() }));
+    .filter((rule) => !dayjs(rule.startsAt).isAfter(date, "month"));
+
+  return activeRules.flatMap((rule) => {
+    const startsAt = parseCalendarDate(rule.startsAt).startOf("month");
+    const requestedEnd = date.endOf("month");
+    const ruleEnd = rule.endsAt ? parseCalendarDate(rule.endsAt).endOf("month") : requestedEnd;
+    const endsAt = ruleEnd.isBefore(requestedEnd) ? ruleEnd : requestedEnd;
+    const monthCount = Math.max(0, endsAt.startOf("month").diff(startsAt, "month") + 1);
+
+    return Array.from({ length: monthCount }, (_, index) => startsAt.add(index, "month"))
+      .filter((month) => isRecurringRuleDue(rule, month))
+      .filter((month) => !hasGeneratedRecurringTransaction(rule, transactions, month))
+      .map((month) => buildRecurringTransaction({ rule, date: month, id: createId() }));
+  });
 }

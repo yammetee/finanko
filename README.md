@@ -36,4 +36,5 @@ AI parser and assistant features are wired through `/api/ai/parse` and `/api/ai/
 ## Documentation
 
 - [Technical specification](./TZ.md)
+- [Accounting remediation plan](./ACCOUNTING_REMEDIATION_PLAN.md)
 - [Agent instructions](./AGENTS.md)

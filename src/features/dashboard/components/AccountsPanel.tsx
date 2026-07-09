@@ -13,8 +13,6 @@ const { Text } = Typography;
 interface AccountsPanelProps {
   accounts: Account[];
   transactions: Transaction[];
-  totalBalance: number;
-  baseCurrency: Currency;
   displayCurrency: Currency | "native";
   id?: string;
   className?: string;
@@ -25,8 +23,6 @@ interface AccountsPanelProps {
 export function AccountsPanel({
   accounts,
   transactions,
-  totalBalance,
-  baseCurrency,
   displayCurrency,
   id,
   className = "span-4",
@@ -60,15 +56,7 @@ export function AccountsPanel({
                         accounts,
                       )
                 }
-                allocationBalance={getAccountBalanceInCurrency(
-                  account,
-                  transactions,
-                  baseCurrency,
-                  undefined,
-                  accounts,
-                )}
                 displayCurrency={rowCurrency}
-                total={Math.max(totalBalance, 1)}
                 onEdit={onEditAccount}
                 onArchive={onArchiveAccount}
               />

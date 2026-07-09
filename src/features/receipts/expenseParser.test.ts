@@ -1,0 +1,334 @@
+import { describe, expect, it } from "vitest";
+import type { Category } from "../../shared/types/finance";
+import { normalizeParsedExpense, parseTextInputMock } from "./expenseParser";
+
+const categories: Category[] = [
+  {
+    id: "cat-food",
+    portfolioId: "portfolio-1",
+    name: "Food",
+    type: "expense",
+    color: "#70c1b3",
+  },
+];
+
+describe("normalizeParsedExpense", () => {
+  it("rejects empty AI transaction payloads", () => {
+    expect(
+      normalizeParsedExpense(
+        {
+          fileName: "thai-receipt.jpg",
+          currency: "USD",
+          categories,
+        },
+        {
+          kind: "transaction",
+          description: null,
+          currency: "USD",
+          total: null,
+          items: [],
+        },
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects receipt totals without line items", () => {
+    expect(
+      normalizeParsedExpense(
+        {
+          fileName: "thai-receipt.jpg",
+          currency: "THB",
+          categories,
+        },
+        {
+          kind: "transaction",
+          description: "ร้านค้า",
+          currency: "THB",
+          total: 245.5,
+          items: [],
+        },
+      ),
+    ).toBeNull();
+  });
+
+  it("uses receipt items rather than the largest AI number for total and description", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        fileName: "thai-receipt.jpg",
+        currency: "THB",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Total 9999",
+        currency: "THB",
+        total: 9999,
+        items: [
+          { name: "milk", amount: 40, categoryId: "cat-food", confidence: 0.9 },
+          { name: "bread", amount: 25.5, categoryId: "cat-food", confidence: 0.88 },
+        ],
+      },
+    );
+
+    expect(parsed).toMatchObject({
+      description: "Молоко, Хлеб",
+      total: 65.5,
+      items: [
+        { name: "Молоко", amount: 40 },
+        { name: "Хлеб", amount: 25.5 },
+      ],
+    });
+  });
+
+  it("keeps receipt payable total by adding a negative discount item", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        fileName: "thai-7-eleven.jpg",
+        currency: "USD",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "7-Eleven receipt",
+        currency: "THB",
+        total: 357,
+        items: [
+          {
+            name: "sandwich",
+            quantity: 1,
+            unitPrice: 52,
+            amount: 52,
+            categoryId: "cat-food",
+            confidence: 0.9,
+          },
+          {
+            name: "coffee",
+            quantity: 1,
+            unitPrice: 314,
+            amount: 314,
+            categoryId: "cat-food",
+            confidence: 0.9,
+          },
+        ],
+      },
+    );
+
+    expect(parsed).toMatchObject({
+      currency: "THB",
+      total: 357,
+      items: [
+        { name: "sandwich", quantity: 1, unitPrice: 52, amount: 52 },
+        { name: "Напитки", quantity: 1, unitPrice: 314, amount: 314 },
+        { name: "Скидка/корректировка", quantity: 1, unitPrice: -9, amount: -9 },
+      ],
+    });
+  });
+
+  it("replaces Thai item names with Russian names from AI description", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        fileName: "thai-7-eleven.jpg",
+        currency: "THB",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Хлеб, курица, напиток",
+        currency: "THB",
+        total: 120,
+        items: [
+          { name: "ขนมโรลบอลทานมีนา", amount: 52, quantity: 1, unitPrice: 52, categoryId: "cat-food", confidence: 0.25 },
+          { name: "เปี๊ยะ ทรัช มะกอก", amount: 19, quantity: 1, unitPrice: 19, categoryId: "cat-food", confidence: 0.25 },
+          { name: "มานสนูเทล่า เอสแอนด์", amount: 49, quantity: 1, unitPrice: 49, categoryId: "cat-food", confidence: 0.25 },
+        ],
+      },
+    );
+
+    expect(parsed).toMatchObject({
+      description: "Хлеб, курица, напиток",
+      items: [
+        { name: "Хлеб", amount: 52 },
+        { name: "курица", amount: 19 },
+        { name: "напиток", amount: 49 },
+      ],
+    });
+  });
+
+  it("does not use Thai receipt savings amount as total and infers THB from All Cafe", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        fileName: "receipt.jpg",
+        currency: "USD",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Салат, All Cafe",
+        currency: "USD",
+        total: 9,
+        items: [
+          { name: "Салат", amount: 52, quantity: 1, unitPrice: 52, categoryId: "Food", confidence: 0.3 },
+          { name: "Лапша", amount: 111, quantity: 2, unitPrice: 22, categoryId: "Food", confidence: 0.2 },
+          { name: "All Cafe", amount: 9, quantity: 1, unitPrice: 9, categoryId: "Food", confidence: 0.6 },
+        ],
+      },
+    );
+
+    expect(parsed).toMatchObject({
+      currency: "THB",
+      total: 65,
+      items: [
+        { name: "Салат", amount: 52, categoryId: "cat-food" },
+        { name: "Лапша", amount: 22, unitPrice: 11, categoryId: "cat-food" },
+        { name: "All Cafe", amount: -9, unitPrice: -9, categoryId: "cat-food" },
+      ],
+    });
+  });
+
+  it("treats 7-Eleven subtotal plus All Cafe discount as final net total", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        fileName: "receipt.jpg",
+        currency: "USD",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Покупки: рисовую лапшу, напиток, кофе, комплект и товары кафе",
+        currency: "THB",
+        total: 366,
+        items: [
+          { name: "ผัดโรสปัลลาเมน่า", amount: 52, quantity: 1, unitPrice: 52, categoryId: "Food", confidence: 0.35 },
+          { name: "เปปซี่ ทารัก รสโค้ก", amount: 19, quantity: 1, unitPrice: 19, categoryId: "Food", confidence: 0.3 },
+          { name: "มวนสเตร้ด เอส้นเน", amount: 49, quantity: 1, unitPrice: 49, categoryId: "Food", confidence: 0.3 },
+          { name: "ไทชิพลูยากาเล่อซ์ชีส", amount: 22, quantity: 1, unitPrice: 22, categoryId: "Food", confidence: 0.2 },
+          { name: "HyixDHC เบสตริว", amount: 15, quantity: 1, unitPrice: 15, categoryId: "Food", confidence: 0.2 },
+          { name: "คาสครัฟพรีเมยส์เบรส", amount: 35, quantity: 1, unitPrice: 35, categoryId: "Food", confidence: 0.2 },
+          { name: "เกาหลีชุดคู่ปุ่น", amount: 32, quantity: 1, unitPrice: 32, categoryId: "Food", confidence: 0.25 },
+          { name: "เลออนมรกจั๊งค์เบิร์ส", amount: 32, quantity: 1, unitPrice: 32, categoryId: "Food", confidence: 0.2 },
+          { name: "ไร้กิ้กสีป่นชีวิน", amount: 55, quantity: 1, unitPrice: 55, categoryId: "Food", confidence: 0.15 },
+          { name: "มะพร้าวนมพุดดิ้ง", amount: 55, quantity: 1, unitPrice: 55, categoryId: "Food", confidence: 0.4 },
+          { name: "ค่าน้ำALLCafe", amount: 9, quantity: 1, unitPrice: 9, categoryId: "Food", confidence: 0.25 },
+        ],
+      },
+    );
+
+    expect(parsed?.total).toBe(357);
+    expect(parsed?.items[parsed.items.length - 1]).toMatchObject({
+      name: "All Cafe",
+      amount: -9,
+      unitPrice: -9,
+      categoryId: "cat-food",
+    });
+    expect(parsed?.items.some((item) => /[\u0E00-\u0E7F]/.test(item.name))).toBe(false);
+  });
+
+  it("parses salary text as income with explicit currency", () => {
+    const parsed = parseTextInputMock({
+      text: "зарплата 4000$",
+      currency: "RUB",
+      categories,
+    });
+
+    expect(parsed).toMatchObject({
+      kind: "transaction",
+      type: "income",
+      currency: "USD",
+      total: 4000,
+      items: [{ amount: 4000 }],
+    });
+  });
+
+  it("parses Russian baht aliases as THB without asking for currency", () => {
+    const parsed = parseTextInputMock({
+      text: "завтрак и обед 500 бат",
+      currency: "USD",
+      categories,
+    });
+
+    expect(parsed).toMatchObject({
+      kind: "transaction",
+      type: "expense",
+      currency: "THB",
+      total: 500,
+      description: "завтрак и обед",
+      items: [{ name: "завтрак и обед", amount: 500 }],
+    });
+  });
+
+  it("lets explicit baht in text override wrong AI currency", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        text: "завтрак и обед 500 бат",
+        currency: "USD",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Завтрак и обед",
+        currency: "USD",
+        total: 500,
+        items: [{ name: "Завтрак и обед", amount: 500, categoryId: "cat-food", confidence: 0.9 }],
+      },
+    );
+
+    expect(parsed).toMatchObject({
+      currency: "THB",
+      total: 500,
+      items: [{ name: "Завтрак и обед", amount: 500 }],
+    });
+  });
+
+  it("parses Russian lari aliases as GEL without keeping default USD", () => {
+    const parsed = parseTextInputMock({
+      text: "обед 25 лари",
+      currency: "USD",
+      categories,
+    });
+
+    expect(parsed).toMatchObject({
+      kind: "transaction",
+      type: "expense",
+      currency: "GEL",
+      total: 25,
+      items: [{ name: "обед", amount: 25 }],
+    });
+  });
+
+  it("lets explicit lari in text override wrong AI currency", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        text: "обед 25 лари",
+        currency: "USD",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "Обед",
+        currency: "USD",
+        total: 25,
+        items: [{ name: "Обед", amount: 25, categoryId: "Food", confidence: 0.9 }],
+      },
+    );
+
+    expect(parsed).toMatchObject({
+      currency: "GEL",
+      total: 25,
+      items: [{ name: "Обед", amount: 25, categoryId: "cat-food" }],
+    });
+  });
+
+  it("parses Georgian lari account text as GEL", () => {
+    const parsed = parseTextInputMock({
+      text: "кредит 1200 лари 12%",
+      currency: "USD",
+      categories,
+    });
+
+    expect(parsed).toMatchObject({
+      kind: "account",
+      currency: "GEL",
+      initialBalance: 1200,
+    });
+  });
+});

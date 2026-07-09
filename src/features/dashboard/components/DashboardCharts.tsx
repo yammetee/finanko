@@ -80,55 +80,6 @@ function linePath(values: number[], min: number, max: number) {
     .join(" ");
 }
 
-function SingleBarChart({ data }: { data: NetWorthPoint[] }) {
-  const values = data.map((point) => point.netWorth);
-  const { min, max } = getRange(values);
-  const zeroY = yFor(0, min, max);
-  const labels = labelIndexes(data.length);
-  const step = INNER_WIDTH / Math.max(data.length, 1);
-  const barWidth = Math.max(6, Math.min(28, step * 0.58));
-
-  return (
-    <svg className="chart-svg" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} role="img">
-      {gridLines(min, max).map((value) => {
-        const y = yFor(value, min, max);
-        return (
-          <g key={value}>
-            <line className="chart-grid-line" x1={PADDING.left} x2={SVG_WIDTH - PADDING.right} y1={y} y2={y} />
-            <text className="chart-axis-label" x={PADDING.left - 12} y={y + 4} textAnchor="end">
-              {formatAxis(value)}
-            </text>
-          </g>
-        );
-      })}
-      <line className="chart-axis-line" x1={PADDING.left} x2={SVG_WIDTH - PADDING.right} y1={zeroY} y2={zeroY} />
-      {data.map((point, index) => {
-        const x = PADDING.left + step * index + step / 2 - barWidth / 2;
-        const y = yFor(point.netWorth, min, max);
-        const height = Math.max(2, Math.abs(zeroY - y));
-        return (
-          <rect
-            key={`${point.label}-${index}`}
-            className="chart-bar chart-bar-primary"
-            x={x}
-            y={Math.min(y, zeroY)}
-            width={barWidth}
-            height={height}
-            rx={5}
-          />
-        );
-      })}
-      {data.map((point, index) =>
-        labels.has(index) ? (
-          <text key={point.label} className="chart-axis-label" x={xFor(index, data.length)} y={SVG_HEIGHT - 13} textAnchor="middle">
-            {point.label}
-          </text>
-        ) : null,
-      )}
-    </svg>
-  );
-}
-
 function SingleLineChart({ data }: { data: NetWorthPoint[] }) {
   const values = data.map((point) => point.netWorth);
   const { min, max } = getRange(values);
@@ -283,11 +234,7 @@ export const DashboardCharts = memo(function DashboardCharts({
     <>
       <Card className="span-6" title={t("section.portfolioNetWorth")}>
         <div className="chart chart-tall" aria-label={`${currency} ${t("section.portfolioNetWorth")}`}>
-          {timeframe === "all" ? (
-            <SingleLineChart data={netWorthTrend} />
-          ) : (
-            <SingleBarChart data={netWorthTrend} />
-          )}
+          <SingleLineChart data={netWorthTrend} />
         </div>
       </Card>
 

@@ -8,12 +8,15 @@ import type {
 export interface ParsedExpenseItem {
   name: string;
   amount: number;
+  quantity?: number;
+  unitPrice?: number;
   categoryId: string;
   confidence: number;
 }
 
 export interface ParsedExpense {
   kind: "transaction";
+  type?: "income" | "expense";
   description: string;
   currency: Currency;
   items: ParsedExpenseItem[];
@@ -41,14 +44,18 @@ export interface ParseTextExpenseInput {
 
 export interface ParseReceiptInput {
   fileName: string;
+  fileType?: string;
+  fileDataUrl?: string;
+  text?: string;
   currency: Currency;
   categories: Category[];
 }
 
 export function detectCurrencyInText(text: string): Currency | null {
   if (/(?:₽|rub|ruble|rubles|руб|рубл|р\b)/i.test(text)) return "RUB";
-  if (/(?:₾|gel|lari|лари)/i.test(text)) return "GEL";
-  if (/(?:฿|thb|baht|бат)/i.test(text)) return "THB";
+  if (/(?:₾|gel|lari|lar|лар(?:и|а|ов)?|грузинск(?:ий|их|ие|ими)?\s+лар|ლარ(?:ი)?)/i.test(text)) return "GEL";
+  if (/(?:฿|thb|baht|бат(?:ы|ов|а)?|тайск(?:ий|их|ие|ими)?\s+бат|บาท|ไทย)/i.test(text)) return "THB";
+  if (/(?:cp\s*all|7-eleven|all\s*cafe)/i.test(text)) return "THB";
   if (/(?:\$|usd|dollar|dollars|доллар)/i.test(text)) return "USD";
   return null;
 }
@@ -68,36 +75,317 @@ function findCategoryId(categories: Category[], fallbackName: string) {
   );
 }
 
-function parseExpenseText({
-  text,
-  currency,
-  categories,
-}: ParseTextExpenseInput): ParsedExpense {
-  const categoryId = findCategoryId(categories, "food");
-  const matches = Array.from(text.matchAll(/([\p{L}\s]+?)\s+(\d+(?:[.,]\d+)?)/gu));
-  const items =
-    matches.length > 0
-      ? matches.map((match) => ({
-          name: match[1].trim(),
-          amount: Number(match[2].replace(",", ".")),
-          categoryId,
-          confidence: 0.72,
-        }))
+function resolveCategoryId(categories: Category[], value: unknown, fallbackName: string) {
+  const rawValue = cleanText(value).toLowerCase();
+  if (!rawValue) return findCategoryId(categories, fallbackName);
+
+  return (
+    categories.find((category) => category.id.toLowerCase() === rawValue)?.id ??
+    categories.find((category) => category.name.toLowerCase() === rawValue)?.id ??
+    categories.find((category) => category.name.toLowerCase().includes(rawValue))?.id ??
+    categories.find((category) => rawValue.includes(category.name.toLowerCase()))?.id ??
+    findCategoryId(categories, fallbackName)
+  );
+}
+
+function findCategoryIdByType(categories: Category[], type: Category["type"], fallbackName: string) {
+  return (
+    categories.find(
+      (category) =>
+        category.type === type &&
+        category.name.toLowerCase().includes(fallbackName.toLowerCase()),
+    )?.id ??
+    categories.find((category) => category.type === type)?.id ??
+    categories[0]?.id ??
+    ""
+  );
+}
+
+function isCurrency(value: unknown): value is Currency {
+  return value === "USD" || value === "RUB" || value === "GEL" || value === "THB";
+}
+
+function isPositiveFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isNonZeroFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value !== 0;
+}
+
+function cleanText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isReceiptInput(input: ParseReceiptInput | ParseTextExpenseInput): input is ParseReceiptInput {
+  return "fileName" in input;
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function nearlyEqual(left: number, right: number) {
+  return Math.abs(left - right) <= 0.01;
+}
+
+const thaiTextPattern = /[\u0E00-\u0E7F]/;
+const cyrillicTextPattern = /[А-Яа-яЁё]/;
+
+function containsThaiText(value: string) {
+  return thaiTextPattern.test(value);
+}
+
+function isDiscountLikeItem(item: ParsedExpenseItem) {
+  return /(?:all\s*cafe|discount|coupon|promo|скид|купон|ส่วนลด|ลด)/i.test(item.name);
+}
+
+function getRussianDescriptionNames(description: unknown) {
+  const text = cleanText(description).replace(/^покупки\s*:\s*/i, "");
+  if (!cyrillicTextPattern.test(text) || containsThaiText(text)) return [];
+  return text
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+const russianItemNameFallbacks: Array<[RegExp, string]> = [
+  [/\b(grocer|food|snack|meal)\b/i, "Продукты"],
+  [/\b(drink|water|coffee|tea|juice|cola|beer)\b/i, "Напитки"],
+  [/\b(household|clean|soap|paper|tissue)\b/i, "Товары для дома"],
+  [/\b(milk)\b/i, "Молоко"],
+  [/\b(bread)\b/i, "Хлеб"],
+  [/\b(egg)\b/i, "Яйца"],
+  [/\b(rice)\b/i, "Рис"],
+  [/\b(chicken)\b/i, "Курица"],
+];
+
+function normalizeItemName(name: string) {
+  const cleaned = name.replace(/\s+/g, " ").trim();
+  const fallback = russianItemNameFallbacks.find(([pattern]) => pattern.test(cleaned));
+  return fallback?.[1] ?? cleaned;
+}
+
+function buildReceiptDescription(input: ParseReceiptInput | ParseTextExpenseInput, items: ParsedExpenseItem[]) {
+  const itemNames = Array.from(new Set(items.map((item) => item.name).filter(Boolean))).slice(0, 6);
+  if (itemNames.length > 0) return itemNames.join(", ");
+
+  if ("fileName" in input) return `Чек: ${input.fileName}`;
+  return input.text || "Расход";
+}
+
+export function normalizeParsedExpense(
+  input: ParseReceiptInput | ParseTextExpenseInput,
+  parsed: unknown,
+): ParsedExpense | null {
+  if (!parsed || typeof parsed !== "object") return null;
+
+  const payload = parsed as {
+    kind?: unknown;
+    description?: unknown;
+    currency?: unknown;
+    type?: unknown;
+    items?: unknown;
+    total?: unknown;
+  };
+  if (payload.kind !== "transaction") return null;
+
+  const categoryId = findCategoryId(input.categories, "food");
+  const russianDescriptionNames = getRussianDescriptionNames(payload.description);
+  const items = Array.isArray(payload.items)
+    ? payload.items
+        .map((item, index): ParsedExpenseItem | null => {
+          if (!item || typeof item !== "object") return null;
+          const rawItem = item as {
+            name?: unknown;
+            amount?: unknown;
+            quantity?: unknown;
+            unitPrice?: unknown;
+            categoryId?: unknown;
+            confidence?: unknown;
+          };
+          if (!isNonZeroFiniteNumber(rawItem.amount)) return null;
+          const quantity = isPositiveFiniteNumber(rawItem.quantity)
+            ? roundMoney(rawItem.quantity)
+            : undefined;
+          let unitPrice = isNonZeroFiniteNumber(rawItem.unitPrice)
+            ? roundMoney(rawItem.unitPrice)
+            : quantity
+              ? roundMoney(rawItem.amount / quantity)
+              : undefined;
+          const rawAmount = roundMoney(rawItem.amount);
+          let amount = rawAmount;
+          const computedAmount = quantity && unitPrice ? roundMoney(quantity * unitPrice) : undefined;
+          if (
+            quantity &&
+            quantity > 1 &&
+            unitPrice &&
+            Math.abs(rawAmount) > Math.abs(unitPrice) * 1.5 &&
+            (!computedAmount || !nearlyEqual(rawAmount, computedAmount))
+          ) {
+            amount = unitPrice;
+            unitPrice = roundMoney(unitPrice / quantity);
+          } else if (
+            computedAmount !== undefined &&
+            !nearlyEqual(rawAmount, computedAmount) &&
+            Math.abs(rawAmount) > Math.abs(computedAmount) * 1.5
+          ) {
+            amount = computedAmount;
+          }
+          const rawName = cleanText(rawItem.name);
+          const normalizedName = normalizeItemName(rawName || "Позиция чека");
+          const translatedName =
+            /all\s*cafe/i.test(normalizedName)
+              ? "All Cafe"
+              : containsThaiText(normalizedName)
+              ? russianDescriptionNames[index] ?? `Позиция чека ${index + 1}`
+              : normalizedName;
+          return {
+            name: translatedName,
+            amount,
+            quantity,
+            unitPrice,
+            categoryId: resolveCategoryId(input.categories, rawItem.categoryId, "food"),
+            confidence:
+              typeof rawItem.confidence === "number" && Number.isFinite(rawItem.confidence)
+                ? Math.max(0, Math.min(1, rawItem.confidence))
+                : 0.55,
+          };
+        })
+        .filter((item): item is ParsedExpenseItem => Boolean(item))
+    : [];
+
+  const explicitText =
+    "text" in input && typeof input.text === "string" ? input.text : "";
+  const searchableText = [
+    explicitText,
+    cleanText(payload.description),
+    ...items.map((item) => item.name),
+  ].join(" ");
+  const detectedTotal = explicitText ? detectAmountInText(explicitText) : null;
+  const payloadTotal = isPositiveFiniteNumber(payload.total) ? roundMoney(payload.total) : null;
+  let payloadTotalIsSubtotal = false;
+  if (isReceiptInput(input) && items.length >= 3 && payloadTotal !== null) {
+    let discountIndex = -1;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (item.amount > 0 && isDiscountLikeItem(item)) {
+        discountIndex = index;
+        break;
+      }
+    }
+    const positiveItemsTotal = roundMoney(items.reduce((sum, item) => sum + Math.max(0, item.amount), 0));
+    const discount = discountIndex >= 0 ? items[discountIndex] : null;
+    const subtotalWithoutDiscount =
+      discountIndex >= 0
+        ? roundMoney(positiveItemsTotal - Math.max(0, items[discountIndex].amount))
+        : 0;
+    const payloadLooksLikeDiscount = Boolean(
+      discount && nearlyEqual(discount.amount, payloadTotal) && payloadTotal < positiveItemsTotal * 0.2,
+    );
+    const payloadLooksLikeSubtotal = Boolean(
+      discount && nearlyEqual(payloadTotal, subtotalWithoutDiscount),
+    );
+    if (discount && (payloadLooksLikeDiscount || payloadLooksLikeSubtotal)) {
+      payloadTotalIsSubtotal = payloadLooksLikeSubtotal;
+      items[discountIndex] = {
+        ...discount,
+        amount: -Math.abs(discount.amount),
+        unitPrice: discount.unitPrice === undefined ? undefined : -Math.abs(discount.unitPrice),
+      };
+    }
+  }
+  const rawItemsTotal = roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
+  if (isReceiptInput(input) && items.length > 0 && payloadTotal !== null && !payloadTotalIsSubtotal) {
+    const adjustment = roundMoney(payloadTotal - rawItemsTotal);
+    const plausibleAdjustmentLimit = Math.max(20, Math.abs(rawItemsTotal) * 0.5);
+    if (adjustment !== 0 && Math.abs(adjustment) <= plausibleAdjustmentLimit) {
+      items.push({
+        name: adjustment < 0 ? "Скидка/корректировка" : "Корректировка итога",
+        amount: adjustment,
+        quantity: 1,
+        unitPrice: adjustment,
+        categoryId,
+        confidence: 0.5,
+      });
+    }
+  }
+  const itemsTotal = roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
+  const total = itemsTotal !== 0 ? itemsTotal : payloadTotal ?? detectedTotal;
+
+  if (!isPositiveFiniteNumber(total)) return null;
+  if (isReceiptInput(input) && items.length === 0) return null;
+
+  const normalizedItems =
+    items.length > 0
+      ? items
       : [
           {
-            name: text.trim() || "Parsed expense",
-            amount: 42,
+            name: "Итого по чеку",
+            amount: total,
+            quantity: 1,
+            unitPrice: total,
             categoryId,
-            confidence: 0.4,
+            confidence: 0.45,
           },
         ];
 
   return {
     kind: "transaction",
-    description: text,
-    currency,
+    type: payload.type === "income" ? "income" : "expense",
+    description: buildReceiptDescription(input, normalizedItems),
+    currency: detectCurrencyInText(searchableText) ?? (isCurrency(payload.currency) ? payload.currency : input.currency),
+    items: normalizedItems,
+    total,
+  };
+}
+
+function parseExpenseText({
+  text,
+  currency,
+  categories,
+}: ParseTextExpenseInput): ParsedExpense {
+  const isIncome = /(?:зарплат|salary|income|получил|доход)/i.test(text);
+  const categoryId = isIncome
+    ? findCategoryIdByType(categories, "income", "salary")
+    : findCategoryIdByType(categories, "expense", "food");
+  const matches = Array.from(
+    text.matchAll(/([^\d\n,;:]+?)\s+([-+]?\d+(?:[\s.,]\d{3})*(?:[.,]\d+)?)/gu),
+  );
+  const items = matches
+        .map((match): ParsedExpenseItem | null => {
+      const amount = Number(match[2].replace(/\s/g, "").replace(",", "."));
+      if (!Number.isFinite(amount) || amount <= 0) return null;
+      return {
+        name: normalizeItemName(match[1].trim() || (isIncome ? "Доход" : "Расход")),
+        amount: roundMoney(amount),
+        quantity: 1,
+        unitPrice: roundMoney(amount),
+        categoryId,
+        confidence: 0.72,
+      };
+    })
+    .filter((item): item is ParsedExpenseItem => Boolean(item));
+
+  if (items.length === 0) {
+    const amount = detectAmountInText(text) ?? 0;
+    items.push({
+      name: isIncome ? "Доход" : text.trim() || "Расход",
+      amount: roundMoney(amount),
+      quantity: 1,
+      unitPrice: roundMoney(amount),
+      categoryId,
+      confidence: amount > 0 ? 0.45 : 0.2,
+    });
+  }
+
+  return {
+    kind: "transaction",
+    type: isIncome ? "income" : "expense",
+    description: buildReceiptDescription({ text, currency, categories }, items),
+    currency: detectCurrencyInText(text) ?? currency,
     items,
-    total: items.reduce((sum, item) => sum + item.amount, 0),
+    total: roundMoney(items.reduce((sum, item) => sum + item.amount, 0)),
   };
 }
 
@@ -133,14 +421,36 @@ export function parseReceiptMock({
   const foodCategory = findCategoryId(categories, "food");
   const homeCategory = findCategoryId(categories, "home");
   const items = [
-    { name: "Groceries", amount: 32, categoryId: foodCategory, confidence: 0.78 },
-    { name: "Drinks", amount: 9, categoryId: foodCategory, confidence: 0.7 },
-    { name: "Household", amount: 14, categoryId: homeCategory, confidence: 0.64 },
+    {
+      name: "Продукты",
+      amount: 32,
+      quantity: 1,
+      unitPrice: 32,
+      categoryId: foodCategory,
+      confidence: 0.78,
+    },
+    {
+      name: "Напитки",
+      amount: 9,
+      quantity: 1,
+      unitPrice: 9,
+      categoryId: foodCategory,
+      confidence: 0.7,
+    },
+    {
+      name: "Товары для дома",
+      amount: 14,
+      quantity: 1,
+      unitPrice: 14,
+      categoryId: homeCategory,
+      confidence: 0.64,
+    },
   ];
 
   return {
     kind: "transaction",
-    description: `Receipt: ${fileName}`,
+    type: "expense",
+    description: buildReceiptDescription({ fileName, currency, categories }, items),
     currency,
     items,
     total: items.reduce((sum, item) => sum + item.amount, 0),

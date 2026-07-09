@@ -5,24 +5,19 @@ import Drawer from "antd/es/drawer";
 import Empty from "antd/es/empty";
 import Form from "antd/es/form";
 import Layout from "antd/es/layout";
-import Menu from "antd/es/menu";
 import Modal from "antd/es/modal";
 import Segmented from "antd/es/segmented";
 import Select from "antd/es/select";
 import Space from "antd/es/space";
 import Typography from "antd/es/typography";
-import Upload from "antd/es/upload";
 import {
-  Download,
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
-  LayoutDashboard,
   Menu as MenuIcon,
   Plus,
   Sparkles,
   Tags,
-  UploadCloud,
   Wallet,
 } from "lucide-react";
 import dayjs from "dayjs";
@@ -50,7 +45,7 @@ import type {
   Transaction,
 } from "../../shared/types/finance";
 import type { TransactionFilter } from "../finance/financeTypes";
-import type { CurrencyDisplayMode, FinanceSnapshot } from "../finance/financeTypes";
+import type { CurrencyDisplayMode } from "../finance/financeTypes";
 import { confirmDanger } from "../../shared/ui/confirmations";
 import {
   getAccountName,
@@ -61,8 +56,9 @@ import { useI18n } from "../../shared/i18n/i18nContext";
 import { useMediaQuery } from "../../shared/lib/useMediaQuery";
 import { isLiabilityAccount } from "../../shared/lib/accounts";
 import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
-import { isAiDailyLimitError } from "../../shared/api/aiErrors";
-import { parseReceiptMock, parseTextInputMock } from "../receipts/expenseParser";
+import { parseTextInputMock } from "../receipts/expenseParser";
+import { validateItemsMatchTotal } from "../ledger/validation";
+import { isValidMoneyDecimal } from "../ledger/money";
 
 const { Content, Sider } = Layout;
 const { Text } = Typography;
@@ -118,8 +114,7 @@ export function FinanceDashboard() {
   const [textParserForm] = Form.useForm();
 
   const state = useFinanceStore();
-  const { signOut, user } = useAuthStore();
-  const currentUser = user();
+  const { signOut } = useAuthStore();
   const isMobile = useMediaQuery("(max-width: 1180px)");
   const generateDueRecurring = useFinanceStore((store) => store.generateDueRecurring);
   const repairAccountCurrencies = useFinanceStore((store) => store.repairAccountCurrencies);
@@ -202,6 +197,11 @@ export function FinanceDashboard() {
   );
 
   function addAccount(values: AccountFormValues) {
+    if (!isValidMoneyDecimal(values.initialBalance, values.currency)) {
+      message.error(t("feedback.invalidMoneyAmount"));
+      return;
+    }
+
     if (editingAccount) {
       state.updateAccount(editingAccount.id, values);
       message.success(t("feedback.accountUpdated"));
@@ -222,17 +222,68 @@ export function FinanceDashboard() {
   }
 
   function addTransaction(values: TransactionFormValues) {
+    if (!isValidMoneyDecimal(values.amount, values.currency)) {
+      message.error(t("feedback.invalidMoneyAmount"));
+      return;
+    }
+    if (
+      values.principalAmount !== undefined &&
+      !isValidMoneyDecimal(values.principalAmount, values.currency)
+    ) {
+      message.error(t("feedback.invalidMoneyAmount"));
+      return;
+    }
+    if (
+      values.interestAmount !== undefined &&
+      !isValidMoneyDecimal(values.interestAmount, values.currency)
+    ) {
+      message.error(t("feedback.invalidMoneyAmount"));
+      return;
+    }
+
+    try {
+      validateItemsMatchTotal({
+        items: values.items ?? [],
+        total: values.amount,
+        currency: values.currency,
+      });
+    } catch {
+      message.error(t("feedback.transactionItemsMismatch"));
+      return;
+    }
+    if (
+      values.type === "debt_payment" &&
+      Math.round(values.amount * 100) !==
+        Math.round(((values.principalAmount ?? 0) + (values.interestAmount ?? 0)) * 100)
+    ) {
+      message.error(t("feedback.debtPaymentMismatch"));
+      return;
+    }
+    if (values.type === "debt_payment") {
+      const debtAccount = accounts.find((account) => account.id === values.linkedAccountId);
+      if (!debtAccount || !isLiabilityAccount(debtAccount)) {
+        message.error(t("feedback.debtPaymentRequiresDebtAccount"));
+        return;
+      }
+    }
+
     const input = {
       accountId: values.accountId,
       type: values.type,
       amount: values.amount,
       currency: values.currency,
-      categoryId: values.categoryId,
+      categoryId: values.categoryId ?? "",
+      linkedAccountId: values.linkedAccountId,
+      principalAmount: values.principalAmount,
+      interestAmount: values.interestAmount,
       description: values.description ?? "",
       occurredAt: values.occurredAt.toISOString(),
       source: values.source,
       items: values.items,
-      recurring: values.recurring,
+      recurring:
+        values.type === "income" || values.type === "expense"
+          ? values.recurring
+          : false,
       recurringMonths: values.recurringMonths,
     };
     if (editingTransaction) {
@@ -250,6 +301,9 @@ export function FinanceDashboard() {
   function openNewAccountDrawer() {
     setEditingAccount(null);
     accountForm.resetFields();
+    accountForm.setFieldsValue({
+      currency: activePortfolio?.baseCurrency ?? "USD",
+    });
     setAccountDrawer(true);
   }
 
@@ -282,9 +336,11 @@ export function FinanceDashboard() {
   function openEditTransactionDrawer(transaction: Transaction) {
     const items = (state.transactionItems ?? [])
       .filter((item) => item.transactionId === transaction.id)
-      .map(({ name, amount, categoryId, confidence }) => ({
+      .map(({ name, amount, quantity, unitPrice, categoryId, confidence }) => ({
         name,
         amount,
+        quantity,
+        unitPrice,
         categoryId,
         confidence,
       }));
@@ -305,6 +361,9 @@ export function FinanceDashboard() {
       amount: transaction.amount,
       currency: transaction.currency,
       categoryId: transaction.categoryId,
+      linkedAccountId: transaction.linkedAccountId,
+      principalAmount: transaction.principalAmount,
+      interestAmount: transaction.interestAmount,
       description: transaction.description,
       occurredAt: dayjs(transaction.occurredAt),
       source: transaction.source,
@@ -333,54 +392,6 @@ export function FinanceDashboard() {
         message.success(t("feedback.demoReset"));
       },
     });
-  }
-
-  function exportLocalBackup() {
-    const snapshot = state.exportSnapshot();
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `finanko-backup-${dayjs().format("YYYY-MM-DD")}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    message.success(t("feedback.backupExported"));
-  }
-
-  function isFinanceSnapshot(value: unknown): value is FinanceSnapshot {
-    if (!value || typeof value !== "object") return false;
-    const snapshot = value as Partial<FinanceSnapshot>;
-    return (
-      typeof snapshot.activePortfolioId === "string" &&
-      Array.isArray(snapshot.portfolios) &&
-      Array.isArray(snapshot.accounts) &&
-      Array.isArray(snapshot.categories) &&
-      Array.isArray(snapshot.transactions)
-    );
-  }
-
-  async function importLocalBackup(file: File) {
-    try {
-      const parsed = JSON.parse(await file.text()) as unknown;
-      if (!isFinanceSnapshot(parsed)) {
-        message.error(t("feedback.backupInvalid"));
-        return;
-      }
-      state.importSnapshot({
-        ...parsed,
-        transactionItems: parsed.transactionItems ?? [],
-        recurringRules: parsed.recurringRules ?? [],
-        transactionFilter: parsed.transactionFilter ?? "all",
-        currencyDisplay: parsed.currencyDisplay ?? "native",
-        timeframe: parsed.timeframe ?? "month",
-      });
-      setMobileMenuOpen(false);
-      message.success(t("feedback.backupImported"));
-    } catch {
-      message.error(t("feedback.backupInvalid"));
-    }
   }
 
   function confirmDeleteTransaction(transaction: Transaction) {
@@ -419,19 +430,19 @@ export function FinanceDashboard() {
     message.success(t("feedback.portfolioCreated"));
   }
 
+  function fillParsedTransaction(values: TransactionFormValues) {
+    transactionForm.resetFields();
+    transactionForm.setFieldsValue(values);
+    setInputMode("manual");
+  }
+
   async function mockTextParser(values: { text: string }) {
     const parserInput = {
       text: values.text,
       currency: activePortfolio?.baseCurrency ?? "USD",
       categories,
     };
-    const parsed = await parseTextInput(parserInput).catch((error) => {
-      if (isAiDailyLimitError(error)) {
-        message.warning(t("feedback.aiDailyLimitFallback"));
-        return parseTextInputMock(parserInput);
-      }
-      throw error;
-    });
+    const parsed = await parseTextInput(parserInput).catch(() => parseTextInputMock(parserInput));
 
     if (parsed.kind === "account") {
       transactionForm.resetFields();
@@ -459,9 +470,9 @@ export function FinanceDashboard() {
       return;
     }
 
-    transactionForm.setFieldsValue({
+    fillParsedTransaction({
       accountId,
-      type: "expense",
+      type: parsed.type ?? "expense",
       amount: parsed.total,
       currency: parsed.currency,
       categoryId: parsed.items[0]?.categoryId,
@@ -470,11 +481,14 @@ export function FinanceDashboard() {
       source: "text_ai",
       items: parsed.items,
     });
-    setInputMode("manual");
     message.success(t("feedback.parserPrepared"));
   }
 
-  async function mockReceiptParser(values: { fileName: string }) {
+  async function mockReceiptParser(values: {
+    fileName: string;
+    fileType?: string;
+    fileDataUrl?: string;
+  }) {
     const accountId = accounts[0]?.id;
     if (!accountId) {
       message.warning(t("feedback.createAccountFirst"));
@@ -482,19 +496,19 @@ export function FinanceDashboard() {
     }
     const parserInput = {
       fileName: values.fileName,
-      currency: activePortfolio?.baseCurrency ?? "USD",
+      fileType: values.fileType,
+      fileDataUrl: values.fileDataUrl,
+      currency: accounts.find((account) => account.id === accountId)?.currency ?? activePortfolio?.baseCurrency ?? "USD",
       categories,
     };
-    const parsed = await parseReceiptInput(parserInput).catch((error) => {
-      if (isAiDailyLimitError(error)) {
-        message.warning(t("feedback.aiDailyLimitFallback"));
-        return parseReceiptMock(parserInput);
-      }
-      throw error;
+    const parsed = await parseReceiptInput(parserInput).catch(() => {
+      message.error(t("feedback.receiptParseFailed"));
+      return null;
     });
-    transactionForm.setFieldsValue({
+    if (!parsed) return;
+    fillParsedTransaction({
       accountId,
-      type: "expense",
+      type: parsed.type ?? "expense",
       amount: parsed.total,
       currency: parsed.currency,
       categoryId: parsed.items[0]?.categoryId,
@@ -503,48 +517,11 @@ export function FinanceDashboard() {
       source: "receipt_ai",
       items: parsed.items,
     });
-    setInputMode("manual");
     message.success(t("feedback.parserPrepared"));
   }
 
   const dashboardBody = activePortfolio ? (
     <main className="dashboard-grid" id="dashboard-section">
-      {!isMobile ? (
-        <section className="metrics-row">
-          <MetricCard
-            title={t("metric.netWorth")}
-            value={analytics.netWorth}
-            currency={analyticsCurrency}
-            positive={analytics.netWorth >= 0}
-            negative={analytics.netWorth < 0}
-          />
-          <MetricCard
-            title={t("metric.savings")}
-            value={analytics.savingsTotal}
-            currency={analyticsCurrency}
-          />
-          <MetricCard
-            title={t("metric.income")}
-            value={analytics.income}
-            currency={analyticsCurrency}
-            positive
-          />
-          <MetricCard
-            title={t("metric.expenses")}
-            value={analytics.expenses}
-            currency={analyticsCurrency}
-            negative
-          />
-          <MetricCard
-            title={t("metric.netFlow")}
-            value={analytics.net}
-            currency={analyticsCurrency}
-            positive={analytics.net >= 0}
-            negative={analytics.net < 0}
-          />
-        </section>
-      ) : null}
-
       <Suspense fallback={<div className="dashboard-loading span-12" />}>
         <DashboardCharts
           trend={analytics.trend}
@@ -602,55 +579,71 @@ export function FinanceDashboard() {
               onClick={() => setSiderCollapsed((value) => !value)}
             />
           </div>
-          <Menu
-            theme="dark"
-            mode="inline"
-            selectedKeys={["dashboard"]}
-            items={[
-              { key: "dashboard", icon: <LayoutDashboard size={17} />, label: t("nav.dashboard") },
-              { key: "assistant", icon: <Sparkles size={17} />, label: t("nav.assistant") },
-            ]}
-            onClick={(item) => {
-              if (item.key === "assistant") setAssistantOpen(true);
-            }}
-          />
           {!siderCollapsed ? (
             <>
+              <Space className="sidebar-actions" direction="vertical" size={8}>
+                <Select
+                  value={activePortfolio?.id}
+                  placeholder={t("empty.noPortfolios")}
+                  style={{ width: "100%" }}
+                  options={portfolios.map((portfolio) => ({
+                    value: portfolio.id,
+                    label: getPortfolioName(portfolio, t),
+                  }))}
+                  onChange={state.setActivePortfolio}
+                />
+                <Button
+                  type="primary"
+                  block
+                  icon={<Plus size={16} />}
+                  disabled={!activePortfolio}
+                  onClick={openNewTransactionDrawer}
+                >
+                  {t("actions.transaction")}
+                </Button>
+                <Button type="text" block icon={<Plus size={16} />} onClick={() => setPortfolioModal(true)}>
+                  {t("actions.createPortfolio")}
+                </Button>
+                <Button type="text" block icon={<Wallet size={16} />} onClick={openNewAccountDrawer}>
+                  {t("actions.account")}
+                </Button>
+                <Button
+                  type="text"
+                  block
+                  icon={<Tags size={16} />}
+                  disabled={!activePortfolio}
+                  onClick={() => setCategoryDrawer(true)}
+                >
+                  {t("actions.category")}
+                </Button>
+                <Button type="text" block icon={<Sparkles size={16} />} onClick={() => setAssistantOpen(true)}>
+                  {t("actions.assistant")}
+                </Button>
+              </Space>
               <AccountsPanel
                 accounts={accounts}
                 transactions={visibleTransactions}
-                totalBalance={analytics.totalBalance}
-                baseCurrency={activePortfolio?.baseCurrency ?? "USD"}
                 displayCurrency={displayCurrency}
                 className="sidebar-accounts"
                 onEditAccount={openEditAccountDrawer}
                 onArchiveAccount={confirmArchiveAccount}
               />
               <div className="sider-user">
-                <Text className="muted">{currentUser?.email}</Text>
                 <div className="sider-tools">
-                  <Button block onClick={confirmResetDemo}>
+                  <Button block type="text" onClick={confirmResetDemo}>
                     {t("actions.resetDemo")}
                   </Button>
-                  <Button block icon={<Download size={15} />} onClick={exportLocalBackup}>
-                    {t("actions.exportBackup")}
-                  </Button>
-                  <Upload
-                    accept="application/json,.json"
-                    beforeUpload={(file) => {
-                      void importLocalBackup(file);
-                      return false;
-                    }}
-                    className="block-upload"
-                    maxCount={1}
-                    showUploadList={false}
+                  <Button
+                    block
+                    danger
+                    type="text"
+                    disabled={!activePortfolio}
+                    onClick={() => setDeletePortfolioModal(true)}
                   >
-                    <Button block icon={<UploadCloud size={15} />}>
-                      {t("actions.importBackup")}
-                    </Button>
-                  </Upload>
+                    {t("actions.deletePortfolio")}
+                  </Button>
                 </div>
-                <Button block icon={<LogOut size={16} />} onClick={signOut}>
+                <Button block type="text" icon={<LogOut size={16} />} onClick={signOut}>
                   {t("actions.signOut")}
                 </Button>
               </div>
@@ -659,35 +652,7 @@ export function FinanceDashboard() {
         </Sider>
         <Content className="shell-content">
           <header className="toolbar">
-            <div>
-              <Text className="muted">{t("section.activePortfolio")}</Text>
-              <Space size={10} style={{ display: "flex", marginTop: 6 }}>
-                <Select
-                  value={activePortfolio?.id}
-                  placeholder={t("empty.noPortfolios")}
-                  style={{ minWidth: 190 }}
-                  options={portfolios.map((portfolio) => ({
-                    value: portfolio.id,
-                    label: getPortfolioName(portfolio, t),
-                  }))}
-                  onChange={state.setActivePortfolio}
-                />
-                <Button
-                  className="desktop-action"
-                  icon={<Plus size={16} />}
-                  onClick={() => setPortfolioModal(true)}
-                />
-                <Button
-                  danger
-                  className="desktop-action"
-                  disabled={!activePortfolio}
-                  onClick={() => setDeletePortfolioModal(true)}
-                >
-                  {t("actions.delete")}
-                </Button>
-              </Space>
-            </div>
-            <div className="toolbar-actions">
+            <div className="toolbar-filters">
               <Segmented
                 className="timeframe-filter"
                 value={state.timeframe}
@@ -717,21 +682,18 @@ export function FinanceDashboard() {
                 ]}
                 onChange={(value) => state.setCurrencyDisplay(value as CurrencyDisplayMode)}
               />
-              <Button className="desktop-action" icon={<Wallet size={16} />} onClick={openNewAccountDrawer}>
-                {t("actions.account")}
-              </Button>
+              <Segmented
+                className="language-switcher"
+                size="small"
+                value={locale}
+                options={[
+                  { label: "EN", value: "en" },
+                  { label: "RU", value: "ru" },
+                ]}
+                onChange={(value) => setLocale(value as "en" | "ru")}
+              />
               <Button
-                className="desktop-action"
-                icon={<Tags size={16} />}
-                disabled={!activePortfolio}
-                onClick={() => setCategoryDrawer(true)}
-              >
-                {t("actions.category")}
-              </Button>
-              <Button className="desktop-action" icon={<Sparkles size={16} />} onClick={() => setAssistantOpen(true)}>
-                {t("actions.assistant")}
-              </Button>
-              <Button
+                className="mobile-transaction-button"
                 type="primary"
                 icon={<Plus size={16} />}
                 disabled={!activePortfolio}
@@ -745,6 +707,29 @@ export function FinanceDashboard() {
                 onClick={() => setMobileMenuOpen(true)}
               />
             </div>
+            {!isMobile ? (
+              <div className="toolbar-metrics">
+                <MetricCard
+                  title={t("metric.netWorth")}
+                  value={analytics.netWorth}
+                  currency={analyticsCurrency}
+                  positive={analytics.netWorth >= 0}
+                  negative={analytics.netWorth < 0}
+                />
+                <MetricCard
+                  title={t("metric.income")}
+                  value={analytics.income}
+                  currency={analyticsCurrency}
+                  positive
+                />
+                <MetricCard
+                  title={t("metric.expenses")}
+                  value={analytics.expenses}
+                  currency={analyticsCurrency}
+                  negative
+                />
+              </div>
+            ) : null}
           </header>
 
           {dashboardBody}
@@ -763,6 +748,7 @@ export function FinanceDashboard() {
               form={accountForm}
               accounts={accounts}
               editingAccountId={editingAccount?.id}
+              defaultCurrency={activePortfolio?.baseCurrency ?? "USD"}
               onFinish={addAccount}
             />
           </Suspense>
@@ -872,21 +858,6 @@ export function FinanceDashboard() {
           <Button block onClick={confirmResetDemo}>
             {t("actions.resetDemo")}
           </Button>
-          <Button block onClick={exportLocalBackup}>
-            {t("actions.exportBackup")}
-          </Button>
-          <Upload
-            accept="application/json,.json"
-            beforeUpload={(file) => {
-              void importLocalBackup(file);
-              return false;
-            }}
-            className="block-upload"
-            maxCount={1}
-            showUploadList={false}
-          >
-            <Button block>{t("actions.importBackup")}</Button>
-          </Upload>
           <Button block icon={<LogOut size={16} />} onClick={signOut}>
             {t("actions.signOut")}
           </Button>
