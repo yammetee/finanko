@@ -7,6 +7,12 @@ import type {
   Timeframe,
   Transaction,
 } from "../../shared/types/finance";
+import { convertMoney } from "../../shared/lib/currency";
+import { applyAccountInterest, getAccountInterestGain } from "../../shared/lib/interest";
+import {
+  isLiabilityAccount,
+  normalizeAccountInitialBalance,
+} from "../../shared/lib/accounts";
 
 dayjs.extend(isoWeek);
 
@@ -45,14 +51,57 @@ export function filterPeriodTransactions(
   });
 }
 
-export function getAccountBalance(account: Account, transactions: Transaction[]) {
+function getRawAccountBalance(account: Account, transactions: Transaction[]) {
   return transactions
     .filter((transaction) => transaction.accountId === account.id)
     .reduce((balance, transaction) => {
-      if (transaction.type === "income") return balance + transaction.amount;
-      if (transaction.type === "expense") return balance - transaction.amount;
-      return balance + transaction.amount;
-    }, account.initialBalance);
+      const amount = convertMoney(
+        transaction.amount,
+        transaction.currency,
+        account.currency,
+        transaction.occurredAt,
+      );
+      if (transaction.type === "income") return balance + amount;
+      if (transaction.type === "expense") return balance - amount;
+      return balance + amount;
+    }, normalizeAccountInitialBalance(account.type, account.initialBalance));
+}
+
+function getAllocatedInterestBalance(
+  account: Account,
+  transactions: Transaction[],
+  accounts: Account[],
+) {
+  return accounts
+    .filter((source) => source.interestAllocationAccountId === account.id)
+    .reduce((sum, source) => {
+      const rawBalance = getRawAccountBalance(source, transactions);
+      const gain = getAccountInterestGain(rawBalance, source);
+      return sum + convertMoney(gain, source.currency, account.currency);
+    }, 0);
+}
+
+export function getAccountBalance(
+  account: Account,
+  transactions: Transaction[],
+  accounts: Account[] = [account],
+) {
+  const rawBalance = getRawAccountBalance(account, transactions);
+  const ownBalance = account.interestAllocationAccountId
+    ? rawBalance
+    : applyAccountInterest(rawBalance, account);
+  return ownBalance + getAllocatedInterestBalance(account, transactions, accounts);
+}
+
+export function getAccountBalanceInCurrency(
+  account: Account,
+  transactions: Transaction[],
+  currency: Currency,
+  date?: string,
+  accounts: Account[] = [account],
+) {
+  const balance = getAccountBalance(account, transactions, accounts);
+  return convertMoney(balance, account.currency, currency, date);
 }
 
 function getTrendLabel(date: dayjs.Dayjs, timeframe: Timeframe) {
@@ -111,8 +160,22 @@ function buildTimeBuckets(transactions: Transaction[], timeframe: Timeframe) {
 
 function getInitialBaseBalance(accounts: Account[], baseCurrency: Currency) {
   return accounts
-    .filter((account) => account.currency === baseCurrency)
-    .reduce((sum, account) => sum + account.initialBalance, 0);
+    .reduce(
+      (sum, account) =>
+        sum +
+        convertMoney(
+          account.interestAllocationAccountId
+            ? normalizeAccountInitialBalance(account.type, account.initialBalance)
+            : applyAccountInterest(
+                normalizeAccountInitialBalance(account.type, account.initialBalance),
+                account,
+                dayjs(),
+              ),
+          account.currency,
+          baseCurrency,
+        ),
+      0,
+    );
 }
 
 function buildNetWorthTrend(
@@ -121,9 +184,9 @@ function buildNetWorthTrend(
   timeframe: Timeframe,
   baseCurrency: Currency,
 ) {
-  const baseTransactions = transactions
-    .filter((transaction) => transaction.currency === baseCurrency)
-    .sort((a, b) => +new Date(a.occurredAt) - +new Date(b.occurredAt));
+  const baseTransactions = [...transactions].sort(
+    (a, b) => +new Date(a.occurredAt) - +new Date(b.occurredAt),
+  );
   const buckets = buildTimeBuckets(baseTransactions, timeframe);
   const firstBucketDate = buckets[0]?.date ?? dayjs();
   const bucketDeltaMap = new Map(buckets.map((bucket) => [bucket.key, 0]));
@@ -132,7 +195,9 @@ function buildNetWorthTrend(
   for (const transaction of baseTransactions) {
     const occurredAt = dayjs(transaction.occurredAt);
     const delta =
-      transaction.type === "expense" ? -transaction.amount : transaction.amount;
+      transaction.type === "expense"
+        ? -convertMoney(transaction.amount, transaction.currency, baseCurrency, transaction.occurredAt)
+        : convertMoney(transaction.amount, transaction.currency, baseCurrency, transaction.occurredAt);
 
     if (occurredAt.isBefore(firstBucketDate)) {
       runningNetWorth += delta;
@@ -158,27 +223,42 @@ export function buildAnalytics(
   timeframe: Timeframe,
   baseCurrency: Currency,
 ) {
-  const periodTransactions = filterPeriodTransactions(transactions, timeframe).filter(
-    (transaction) => transaction.currency === baseCurrency,
-  );
+  const periodTransactions = filterPeriodTransactions(transactions, timeframe);
   const income = periodTransactions
     .filter((transaction) => transaction.type === "income")
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
+    .reduce(
+      (sum, transaction) =>
+        sum + convertMoney(transaction.amount, transaction.currency, baseCurrency, transaction.occurredAt),
+      0,
+    );
   const expenses = periodTransactions
     .filter((transaction) => transaction.type === "expense")
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
-  const totalBalance = accounts
-    .filter((account) => account.currency === baseCurrency)
     .reduce(
-    (sum, account) => sum + getAccountBalance(account, transactions),
-    0,
-  );
+      (sum, transaction) =>
+        sum + convertMoney(transaction.amount, transaction.currency, baseCurrency, transaction.occurredAt),
+      0,
+    );
+  const totalBalance = accounts
+    .reduce(
+      (sum, account) =>
+        sum + getAccountBalanceInCurrency(account, transactions, baseCurrency, undefined, accounts),
+      0,
+    );
   const savingsTotal = accounts
-    .filter((account) => account.currency === baseCurrency && account.type === "savings")
-    .reduce((sum, account) => sum + getAccountBalance(account, transactions), 0);
+    .filter((account) => account.type === "savings")
+    .reduce(
+      (sum, account) =>
+        sum + getAccountBalanceInCurrency(account, transactions, baseCurrency, undefined, accounts),
+      0,
+    );
   const debtTotal = accounts
-    .filter((account) => account.currency === baseCurrency && account.type === "debt")
-    .reduce((sum, account) => sum + Math.abs(getAccountBalance(account, transactions)), 0);
+    .filter(isLiabilityAccount)
+    .reduce(
+      (sum, account) =>
+        sum +
+        Math.abs(getAccountBalanceInCurrency(account, transactions, baseCurrency, undefined, accounts)),
+      0,
+    );
   const netWorth = totalBalance;
 
   const byCategory = categories
@@ -191,7 +271,17 @@ export function buildAnalytics(
           (transaction) =>
             transaction.type === "expense" && transaction.categoryId === category.id,
         )
-        .reduce((sum, transaction) => sum + transaction.amount, 0),
+        .reduce(
+          (sum, transaction) =>
+            sum +
+            convertMoney(
+              transaction.amount,
+              transaction.currency,
+              baseCurrency,
+              transaction.occurredAt,
+            ),
+          0,
+        ),
       fill: category.color,
     }))
     .filter((item) => item.value > 0);
@@ -212,8 +302,22 @@ export function buildAnalytics(
         income: 0,
         expenses: 0,
       };
-    if (transaction.type === "income") current.income += transaction.amount;
-    if (transaction.type === "expense") current.expenses += transaction.amount;
+    if (transaction.type === "income") {
+      current.income += convertMoney(
+        transaction.amount,
+        transaction.currency,
+        baseCurrency,
+        transaction.occurredAt,
+      );
+    }
+    if (transaction.type === "expense") {
+      current.expenses += convertMoney(
+        transaction.amount,
+        transaction.currency,
+        baseCurrency,
+        transaction.occurredAt,
+      );
+    }
     trendMap.set(key, current);
   });
 

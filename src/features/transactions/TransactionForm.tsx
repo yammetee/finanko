@@ -1,17 +1,15 @@
-import {
-  Button,
-  Card,
-  DatePicker,
-  Form,
-  Input,
-  InputNumber,
-  Segmented,
-  Select,
-  Space,
-  Switch,
-  Typography,
-  Upload,
-} from "antd";
+import Button from "antd/es/button";
+import Card from "antd/es/card";
+import DatePicker from "antd/es/date-picker";
+import Form from "antd/es/form";
+import Input from "antd/es/input";
+import InputNumber from "antd/es/input-number";
+import Segmented from "antd/es/segmented";
+import Select from "antd/es/select";
+import Space from "antd/es/space";
+import Switch from "antd/es/switch";
+import Typography from "antd/es/typography";
+import Upload from "antd/es/upload";
 import { ReceiptText, Sparkles, UploadIcon } from "lucide-react";
 import dayjs from "dayjs";
 import { useState } from "react";
@@ -40,6 +38,7 @@ export interface TransactionFormValues {
   source?: TransactionSource;
   items?: ParsedExpenseItem[];
   recurring?: boolean;
+  recurringMonths?: number;
 }
 
 interface TransactionFormProps {
@@ -70,6 +69,7 @@ export function TransactionForm({
   const { t } = useI18n();
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const parsedItems = Form.useWatch("items", form) ?? [];
+  const recurring = Form.useWatch("recurring", form);
 
   return (
     <>
@@ -90,7 +90,7 @@ export function TransactionForm({
             <Input.TextArea rows={4} placeholder={t("placeholder.expenseText")} />
           </Form.Item>
           <Button type="primary" htmlType="submit" block icon={<Sparkles size={16} />}>
-            {t("actions.parseMock")}
+            {t("actions.parseSmart")}
           </Button>
         </Form>
       ) : mode === "receipt" ? (
@@ -102,6 +102,7 @@ export function TransactionForm({
               accept="image/*,.pdf"
               beforeUpload={(file) => {
                 setReceiptFileName(file.name);
+                onParseReceipt({ fileName: file.name });
                 return false;
               }}
               maxCount={1}
@@ -114,18 +115,6 @@ export function TransactionForm({
                 {t("receipt.selectedFile", { name: receiptFileName })}
               </Text>
             ) : null}
-            <Button
-              type="primary"
-              disabled={!receiptFileName}
-              onClick={() => {
-                if (receiptFileName) onParseReceipt({ fileName: receiptFileName });
-              }}
-              block
-              icon={<Sparkles size={16} />}
-            >
-              {t("actions.parseReceipt")}
-            </Button>
-            <Button onClick={() => onModeChange("manual")}>{t("actions.backToManual")}</Button>
           </Space>
         </Card>
       ) : (
@@ -137,6 +126,7 @@ export function TransactionForm({
             type: "expense",
             currency: baseCurrency,
             occurredAt: dayjs(),
+            recurringMonths: 12,
           }}
         >
           <Form.Item name="accountId" label={t("form.account")} rules={[{ required: true }]}>
@@ -153,7 +143,6 @@ export function TransactionForm({
               options={[
                 { value: "income", label: t("transaction.income") },
                 { value: "expense", label: t("transaction.expense") },
-                { value: "adjustment", label: t("transaction.adjustment") },
               ]}
             />
           </Form.Item>
@@ -182,19 +171,53 @@ export function TransactionForm({
           </Form.Item>
           {parsedItems.length > 0 ? (
             <Card className="parsed-items-card" size="small" title={t("section.parsedItems")}>
-              <Space direction="vertical" size={8} style={{ width: "100%" }}>
-                {parsedItems.map((item) => (
-                  <div className="parsed-item-row" key={`${item.name}-${item.amount}`}>
-                    <Text>{item.name}</Text>
-                    <Text strong>{formatParsedAmount(item.amount, baseCurrency)}</Text>
-                  </div>
-                ))}
-              </Space>
+              <Form.List name="items">
+                {(fields) => (
+                  <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                    {fields.map((field) => (
+                      <div className="parsed-item-row" key={field.key}>
+                        <Form.Item name={[field.name, "name"]} noStyle>
+                          <Input aria-label={t("form.name")} />
+                        </Form.Item>
+                        <Form.Item name={[field.name, "amount"]} noStyle>
+                          <InputNumber
+                            aria-label={t("form.amount")}
+                            min={0}
+                            className="parsed-item-amount"
+                          />
+                        </Form.Item>
+                        <Form.Item name={[field.name, "categoryId"]} noStyle>
+                          <Select
+                            aria-label={t("assistant.category")}
+                            className="parsed-item-category"
+                            options={categories.map((category) => ({
+                              value: category.id,
+                              label: getCategoryName(category, t),
+                            }))}
+                          />
+                        </Form.Item>
+                        <Form.Item name={[field.name, "confidence"]} noStyle hidden>
+                          <InputNumber />
+                        </Form.Item>
+                      </div>
+                    ))}
+                  </Space>
+                )}
+              </Form.List>
             </Card>
           ) : null}
           <Form.Item name="recurring" label={t("form.monthlyRecurring")} valuePropName="checked">
             <Switch />
           </Form.Item>
+          {recurring ? (
+            <Form.Item
+              name="recurringMonths"
+              label={t("form.recurringMonths")}
+              rules={[{ required: true }]}
+            >
+              <InputNumber min={1} max={120} style={{ width: "100%" }} />
+            </Form.Item>
+          ) : null}
           <Button type="primary" htmlType="submit" block>
             {t("actions.saveTransaction")}
           </Button>
@@ -202,12 +225,4 @@ export function TransactionForm({
       )}
     </>
   );
-}
-
-function formatParsedAmount(amount: number, currency: Currency) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
 }

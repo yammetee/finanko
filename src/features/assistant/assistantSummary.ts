@@ -5,10 +5,12 @@ import type {
   Timeframe,
   Transaction,
 } from "../../shared/types/finance";
-import { buildAnalytics } from "../finance/selectors";
+import { buildAnalytics, filterPeriodTransactions } from "../finance/selectors";
 import type en from "../../shared/i18n/en.json";
 import type { MessageKey } from "../../shared/i18n/i18nContext";
 import { getCategoryNameById } from "../../shared/i18n/displayText";
+import { convertMoney } from "../../shared/lib/currency";
+import { isLiabilityAccount } from "../../shared/lib/accounts";
 
 type Translator = (
   key: keyof typeof en,
@@ -24,6 +26,9 @@ export interface AssistantSummary {
   topCategories: Array<{ id: string; name: string; amount: number }>;
   recurringTotal: number;
   accountCount: number;
+  interestAccountCount: number;
+  debtAccountCount: number;
+  highestInterestRate: number;
 }
 
 export type AssistantActionId =
@@ -70,26 +75,48 @@ export function buildAssistantSummary(
   currency: Currency,
 ): AssistantSummary {
   const analytics = buildAnalytics(accounts, categories, transactions, timeframe, currency);
+  const periodTransactions = filterPeriodTransactions(transactions, timeframe);
   const topCategories = categories
     .filter((category) => category.type === "expense")
     .map((category) => ({
       id: category.id,
       name: category.name,
-      amount: transactions
+      amount: periodTransactions
         .filter(
           (transaction) =>
-            transaction.currency === currency &&
             transaction.type === "expense" &&
             transaction.categoryId === category.id,
         )
-        .reduce((sum, transaction) => sum + transaction.amount, 0),
+        .reduce(
+          (sum, transaction) =>
+            sum +
+            convertMoney(
+              transaction.amount,
+              transaction.currency,
+              currency,
+              transaction.occurredAt,
+            ),
+          0,
+        ),
     }))
     .filter((category) => category.amount > 0)
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
-  const recurringTotal = transactions
+  const recurringTotal = periodTransactions
     .filter((transaction) => transaction.source === "recurring")
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
+    .reduce(
+      (sum, transaction) =>
+        sum +
+        convertMoney(
+          transaction.amount,
+          transaction.currency,
+          currency,
+          transaction.occurredAt,
+        ),
+      0,
+    );
+  const interestAccounts = accounts.filter((account) => account.annualInterestRate);
+  const debtAccounts = accounts.filter(isLiabilityAccount);
 
   return {
     timeframe,
@@ -100,6 +127,12 @@ export function buildAssistantSummary(
     topCategories,
     recurringTotal,
     accountCount: accounts.length,
+    interestAccountCount: interestAccounts.length,
+    debtAccountCount: debtAccounts.length,
+    highestInterestRate: Math.max(
+      0,
+      ...interestAccounts.map((account) => account.annualInterestRate ?? 0),
+    ),
   };
 }
 
@@ -126,6 +159,9 @@ export function getAssistantResponseMock(
       income: Math.round(summary.incomeTotal),
       expenses: Math.round(summary.expenseTotal),
       net: Math.round(summary.netFlow),
+      debts: summary.debtAccountCount,
+      interestAccounts: summary.interestAccountCount,
+      highestRate: Math.round(summary.highestInterestRate * 10) / 10,
     });
   }
 

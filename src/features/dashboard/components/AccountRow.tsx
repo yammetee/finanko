@@ -1,22 +1,55 @@
-import { Button, Progress, Space, Typography } from "antd";
-import { Archive } from "lucide-react";
+import Button from "antd/es/button";
+import Progress from "antd/es/progress";
+import Space from "antd/es/space";
+import Typography from "antd/es/typography";
+import { Archive, Pencil } from "lucide-react";
 import { useI18n } from "../../../shared/i18n/i18nContext";
 import { getAccountName } from "../../../shared/i18n/displayText";
 import { formatMoney } from "../../../shared/lib/format";
+import { isLiabilityAccount } from "../../../shared/lib/accounts";
 import type { Account } from "../../../shared/types/finance";
 
 const { Text } = Typography;
 
 interface AccountRowProps {
   account: Account;
+  accounts: Account[];
   balance: number;
   total: number;
+  onEdit?: (account: Account) => void;
   onArchive?: (account: Account) => void;
 }
 
-export function AccountRow({ account, balance, total, onArchive }: AccountRowProps) {
+export function AccountRow({
+  account,
+  accounts,
+  balance,
+  total,
+  onEdit,
+  onArchive,
+}: AccountRowProps) {
   const { t } = useI18n();
   const percent = total > 0 ? (Math.abs(balance) / total) * 100 : 0;
+  const allocationAccount = accounts.find(
+    (candidate) => candidate.id === account.interestAllocationAccountId,
+  );
+  const isLiability = isLiabilityAccount(account);
+  const interestText =
+    account.annualInterestRate && account.interestFrequency
+      ? isLiability
+        ? t("account.liabilityInterestSummary", {
+            rate: account.annualInterestRate,
+            frequency: t(`interest.${account.interestFrequency}`),
+            term: account.loanTermMonths
+              ? t("account.loanTermMonths", { months: account.loanTermMonths })
+              : t("account.noLoanTerm"),
+          })
+        : t("account.interestSummary", {
+            rate: account.annualInterestRate,
+            frequency: t(`interest.${account.interestFrequency}`),
+            target: allocationAccount ? getAccountName(allocationAccount, t) : t("account.sameAccount"),
+          })
+      : "";
 
   return (
     <div className="account-row">
@@ -31,11 +64,24 @@ export function AccountRow({ account, balance, total, onArchive }: AccountRowPro
               width: 8,
             }}
           />
-          <Text>{getAccountName(account, t)}</Text>
+          <span className="account-row-title-stack">
+            <Text>{getAccountName(account, t)}</Text>
+            {interestText ? <Text className="account-interest-text">{interestText}</Text> : null}
+          </span>
         </Space>
         <Text className="account-row-balance" strong>
           {formatMoney(balance, account.currency)}
         </Text>
+        {onEdit ? (
+          <Button
+            aria-label={t("actions.edit")}
+            className="account-row-action"
+            icon={<Pencil size={13} />}
+            size="small"
+            type="text"
+            onClick={() => onEdit(account)}
+          />
+        ) : null}
         {onArchive ? (
           <Button
             aria-label={t("actions.archive")}

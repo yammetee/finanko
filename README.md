@@ -27,6 +27,8 @@ Finanko is designed as a calm financial cockpit:
 
 The app is web-first, with architecture kept friendly for a future Tauri wrapper.
 
+The current MVP runs in local JSON mode by default. Supabase is kept as a future adapter and only turns on when `VITE_ENABLE_SUPABASE=true`.
+
 ## Documentation
 
 - [Technical specification](./TZ.md)

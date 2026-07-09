@@ -21,6 +21,11 @@ export interface AccountRow {
   currency: Currency;
   initial_balance: number | string;
   color: string;
+  annual_interest_rate?: number | string | null;
+  interest_frequency?: "daily" | "monthly" | null;
+  interest_started_at?: string | null;
+  interest_allocation_account_id?: string | null;
+  loan_term_months?: number | null;
   is_archived: boolean;
   deleted_at: string | null;
 }
@@ -68,5 +73,6 @@ export interface RecurringRuleRow {
   description: string;
   day_of_month: number;
   starts_at: string;
+  ends_at?: string | null;
   is_active: boolean;
 }

@@ -3,6 +3,7 @@ import type {
   AccountType,
   Category,
   Currency,
+  InterestFrequency,
   TransactionItem,
   TransactionSource,
   Portfolio,
@@ -12,11 +13,24 @@ import type {
   TransactionType,
 } from "../../shared/types/finance";
 
+export type TransactionFilter = "all" | "income" | "expense";
+
 export interface NewAccountInput {
   name: string;
   type: AccountType;
   currency: Currency;
   initialBalance: number;
+  annualInterestRate?: number;
+  interestFrequency?: InterestFrequency;
+  interestStartedAt?: string;
+  interestAllocationAccountId?: string;
+  loanTermMonths?: number;
+}
+
+export interface NewCategoryInput {
+  name: string;
+  type: Category["type"];
+  color: string;
 }
 
 export interface NewTransactionInput {
@@ -35,11 +49,13 @@ export interface NewTransactionInput {
     confidence: number;
   }>;
   recurring?: boolean;
+  recurringMonths?: number;
 }
 
 export interface FinanceState {
   activePortfolioId: string;
   timeframe: Timeframe;
+  transactionFilter: TransactionFilter;
   portfolios: Portfolio[];
   accounts: Account[];
   categories: Category[];
@@ -48,18 +64,26 @@ export interface FinanceState {
   recurringRules: RecurringRule[];
   setActivePortfolio: (id: string) => void;
   setTimeframe: (timeframe: Timeframe) => void;
+  setTransactionFilter: (filter: TransactionFilter) => void;
   addPortfolio: (name: string, baseCurrency: Currency) => void;
   deletePortfolio: (id: string) => void;
   addAccount: (input: NewAccountInput) => void;
+  updateAccount: (id: string, input: NewAccountInput) => void;
   archiveAccount: (id: string) => void;
+  addCategory: (input: NewCategoryInput) => void;
   addTransaction: (input: NewTransactionInput) => void;
+  updateTransaction: (id: string, input: NewTransactionInput) => void;
   deleteTransaction: (id: string) => void;
   generateDueRecurring: () => void;
+  exportSnapshot: () => FinanceSnapshot;
+  importSnapshot: (snapshot: FinanceSnapshot) => void;
+  resetDemoData: () => void;
 }
 
 export interface FinanceSnapshot {
   activePortfolioId: string;
   timeframe: Timeframe;
+  transactionFilter: TransactionFilter;
   portfolios: Portfolio[];
   accounts: Account[];
   categories: Category[];

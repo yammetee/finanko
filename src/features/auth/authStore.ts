@@ -1,10 +1,15 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { isSupabaseConfigured, supabase } from "../../shared/api/supabase";
+import { getSupabaseClient, isSupabaseConfigured } from "../../shared/api/supabase";
 
 interface DemoUser {
   id: string;
+  email: string;
+  name: string;
+}
+
+interface LocalAccountInput {
   email: string;
   name: string;
 }
@@ -13,8 +18,10 @@ interface AuthState {
   loading: boolean;
   session: Session | null;
   demoUser: DemoUser | null;
+  localAccounts: DemoUser[];
   initialize: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  createLocalAccount: (input: LocalAccountInput) => void;
   signInDemo: () => void;
   signOut: () => Promise<void>;
   user: () => User | DemoUser | null;
@@ -26,8 +33,15 @@ export const useAuthStore = create<AuthState>()(
       loading: true,
       session: null,
       demoUser: null,
+      localAccounts: [],
       initialize: async () => {
-        if (!isSupabaseConfigured || !supabase) {
+        if (!isSupabaseConfigured) {
+          set({ loading: false });
+          return;
+        }
+
+        const supabase = await getSupabaseClient();
+        if (!supabase) {
           set({ loading: false });
           return;
         }
@@ -40,6 +54,7 @@ export const useAuthStore = create<AuthState>()(
         });
       },
       signInWithGoogle: async () => {
+        const supabase = await getSupabaseClient();
         if (!supabase) return;
 
         await supabase.auth.signInWithOAuth({
@@ -48,6 +63,18 @@ export const useAuthStore = create<AuthState>()(
             redirectTo: window.location.origin,
           },
         });
+      },
+      createLocalAccount: (input) => {
+        const user = {
+          id: `local-${crypto.randomUUID()}`,
+          email: input.email,
+          name: input.name,
+        };
+        set((state) => ({
+          loading: false,
+          demoUser: user,
+          localAccounts: [...state.localAccounts, user],
+        }));
       },
       signInDemo: () =>
         set({
@@ -59,6 +86,7 @@ export const useAuthStore = create<AuthState>()(
           },
         }),
       signOut: async () => {
+        const supabase = await getSupabaseClient();
         if (supabase) {
           await supabase.auth.signOut();
         }
@@ -68,7 +96,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "finanko-auth-v1",
-      partialize: (state) => ({ demoUser: state.demoUser }),
+      partialize: (state) => ({
+        demoUser: state.demoUser,
+        localAccounts: state.localAccounts,
+      }),
     },
   ),
 );

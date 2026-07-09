@@ -1,0 +1,72 @@
+{
+  "portfolio": {
+    "id": "portfolio-personal",
+    "name": "Personal",
+    "baseCurrency": "USD"
+  },
+  "categories": [
+    { "id": "cat-salary", "name": "Salary", "type": "income", "color": "#5fd38a" },
+    { "id": "cat-food", "name": "Food", "type": "expense", "color": "#e8b94c" },
+    { "id": "cat-home", "name": "Home", "type": "expense", "color": "#5a9feb" },
+    { "id": "cat-transport", "name": "Transport", "type": "expense", "color": "#9b82e6" },
+    { "id": "cat-health", "name": "Health", "type": "expense", "color": "#f07f86" },
+    { "id": "cat-travel", "name": "Travel", "type": "expense", "color": "#48c2cf" },
+    { "id": "cat-subscriptions", "name": "Subscriptions", "type": "expense", "color": "#c078d8" },
+    { "id": "cat-other", "name": "Other", "type": "expense", "color": "#7f93a6" }
+  ],
+  "accounts": [
+    {
+      "id": "acc-bank",
+      "name": "Main bank",
+      "type": "bank",
+      "currency": "USD",
+      "initialBalance": -23950,
+      "color": "#4fb6e8"
+    },
+    {
+      "id": "acc-card",
+      "name": "Daily card",
+      "type": "card",
+      "currency": "USD",
+      "initialBalance": 0,
+      "color": "#9b82e6"
+    },
+    {
+      "id": "acc-savings",
+      "name": "Emergency fund",
+      "type": "savings",
+      "currency": "USD",
+      "initialBalance": 0,
+      "color": "#5fd38a",
+      "annualInterestRate": 5,
+      "interestFrequency": "monthly",
+      "interestStartedAt": "2026-01-01",
+      "interestAllocationAccountId": "acc-bank"
+    },
+    {
+      "id": "acc-credit-rub",
+      "name": "Credit balance",
+      "type": "credit",
+      "currency": "RUB",
+      "initialBalance": -900000,
+      "color": "#f07f86",
+      "annualInterestRate": 21,
+      "interestFrequency": "daily",
+      "interestStartedAt": "2026-01-01",
+      "loanTermMonths": 60
+    }
+  ],
+  "recurringRules": [
+    {
+      "id": "rec-rent",
+      "accountId": "acc-bank",
+      "type": "expense",
+      "amount": 1200,
+      "currency": "USD",
+      "categoryId": "cat-home",
+      "description": "Rent",
+      "dayOfMonth": 4,
+      "isActive": true
+    }
+  ]
+}

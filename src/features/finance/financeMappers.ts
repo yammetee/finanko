@@ -41,6 +41,14 @@ export function mapAccountRow(row: AccountRow): Account {
     currency: row.currency,
     initialBalance: numberFromDb(row.initial_balance),
     color: row.color,
+    annualInterestRate:
+      row.annual_interest_rate === null || row.annual_interest_rate === undefined
+        ? undefined
+        : numberFromDb(row.annual_interest_rate),
+    interestFrequency: row.interest_frequency ?? undefined,
+    interestStartedAt: optionalString(row.interest_started_at ?? null),
+    interestAllocationAccountId: optionalString(row.interest_allocation_account_id ?? null),
+    loanTermMonths: row.loan_term_months ?? undefined,
     isArchived: row.is_archived,
     deletedAt: optionalString(row.deleted_at),
   };
@@ -96,6 +104,7 @@ export function mapRecurringRuleRow(row: RecurringRuleRow): RecurringRule {
     description: row.description,
     dayOfMonth: row.day_of_month,
     startsAt: row.starts_at,
+    endsAt: optionalString(row.ends_at ?? null),
     isActive: row.is_active,
   };
 }

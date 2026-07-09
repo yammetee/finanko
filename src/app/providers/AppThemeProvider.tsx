@@ -1,5 +1,10 @@
-import { App as AntApp, ConfigProvider, theme } from "antd";
+import AntApp from "antd/es/app";
+import ConfigProvider from "antd/es/config-provider";
+import theme from "antd/es/theme";
 import type { PropsWithChildren } from "react";
+
+const appFontFamily =
+  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 
 export function AppThemeProvider({ children }: PropsWithChildren) {
   return (
@@ -7,30 +12,37 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
       theme={{
         algorithm: theme.darkAlgorithm,
         token: {
-          colorPrimary: "#6fbfe6",
-          colorBgBase: "#080a0d",
-          colorBgContainer: "#101418",
-          colorBorder: "#1d2836",
+          colorPrimary: "#4fb6e8",
+          colorInfo: "#4fb6e8",
+          colorSuccess: "#5fd38a",
+          colorError: "#f07f86",
+          colorWarning: "#e8b94c",
+          colorBgBase: "#070d12",
+          colorBgContainer: "#101820",
+          colorBgElevated: "#142230",
+          colorBorder: "#233747",
+          colorText: "#edf4f8",
+          colorTextSecondary: "#b7c4ce",
+          colorTextTertiary: "#91a2af",
           borderRadius: 8,
-          fontFamily:
-            'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          fontFamily: appFontFamily,
         },
         components: {
           Card: {
-            colorBgContainer: "#101418",
-            headerBg: "#101418",
+            colorBgContainer: "#101820",
+            headerBg: "#101820",
           },
           Layout: {
-            bodyBg: "#080a0d",
-            siderBg: "#0b0f14",
+            bodyBg: "#070d12",
+            siderBg: "#0b151e",
           },
           Menu: {
-            itemSelectedBg: "#10273a",
-            itemSelectedColor: "#d8f2ff",
-            itemHoverBg: "#101923",
+            itemSelectedBg: "#0d3850",
+            itemSelectedColor: "#f0f9ff",
+            itemHoverBg: "#112838",
           },
           Segmented: {
-            itemSelectedBg: "#18334a",
+            itemSelectedBg: "#123b55",
           },
         },
       }}

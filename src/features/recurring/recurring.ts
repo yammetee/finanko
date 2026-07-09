@@ -25,6 +25,16 @@ export function hasGeneratedRecurringTransaction(
   );
 }
 
+export function isRecurringRuleDue(rule: RecurringRule, date: Dayjs) {
+  const monthStart = date.startOf("month");
+  const startsAt = dayjs(rule.startsAt).startOf("month");
+  const endsAt = rule.endsAt ? dayjs(rule.endsAt).endOf("month") : null;
+
+  if (monthStart.isBefore(startsAt)) return false;
+  if (endsAt && monthStart.isAfter(endsAt)) return false;
+  return true;
+}
+
 export function buildRecurringTransaction({
   rule,
   date,
@@ -60,6 +70,7 @@ export function getDueRecurringTransactions({
 }) {
   return rules
     .filter((rule) => rule.isActive && rule.portfolioId === portfolioId)
+    .filter((rule) => isRecurringRuleDue(rule, date))
     .filter((rule) => !hasGeneratedRecurringTransaction(rule, transactions, date))
     .map((rule) => buildRecurringTransaction({ rule, date, id: createId() }));
 }

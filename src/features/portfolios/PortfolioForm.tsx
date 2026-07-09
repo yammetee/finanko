@@ -1,4 +1,6 @@
-import { Button, Form, Input } from "antd";
+import Button from "antd/es/button";
+import Form from "antd/es/form";
+import Input from "antd/es/input";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { CurrencySelect } from "../../shared/ui/FormSelects";
 import type { Currency } from "../../shared/types/finance";

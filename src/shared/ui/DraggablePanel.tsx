@@ -1,4 +1,5 @@
-import { Button, Card } from "antd";
+import Button from "antd/es/button";
+import Card from "antd/es/card";
 import { X } from "lucide-react";
 import { type PropsWithChildren, type ReactNode, useState } from "react";
 
@@ -7,6 +8,7 @@ interface DraggablePanelProps {
   title: ReactNode;
   className?: string;
   overlay?: boolean;
+  draggable?: boolean;
   defaultPosition?: { x: number; y: number };
   onClose: () => void;
 }
@@ -16,6 +18,7 @@ export function DraggablePanel({
   title,
   className,
   overlay = false,
+  draggable = true,
   defaultPosition = { x: 420, y: 96 },
   onClose,
   children,
@@ -30,20 +33,21 @@ export function DraggablePanel({
       {overlay ? <div className="draggable-panel-overlay" /> : null}
       <div
         className={className ?? "draggable-panel"}
-        style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
+        style={draggable ? { transform: `translate(${position.x}px, ${position.y}px)` } : undefined}
       >
         <Card
           title={
             <div
-              className="draggable-panel-handle"
-              onMouseDown={(event) =>
+              className={draggable ? "draggable-panel-handle" : undefined}
+              onMouseDown={(event) => {
+                if (!draggable) return;
                 setDragStart({
                   x: event.clientX - position.x,
                   y: event.clientY - position.y,
-                })
-              }
+                });
+              }}
               onMouseMove={(event) => {
-                if (!dragStart) return;
+                if (!draggable || !dragStart) return;
                 setPosition({
                   x: Math.max(12, event.clientX - dragStart.x),
                   y: Math.max(12, event.clientY - dragStart.y),

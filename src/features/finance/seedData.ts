@@ -7,80 +7,29 @@ import type {
   Transaction,
   TransactionItem,
 } from "../../shared/types/finance";
+import seedData from "../../shared/data/financeSeed.json";
 import type { FinanceSnapshot } from "./financeTypes";
 
 export const seedNow = dayjs();
-export const seedPortfolioId = "portfolio-personal";
+export const seedPortfolioId = seedData.portfolio.id;
 
-export const defaultCategories: Category[] = [
-  { id: "cat-salary", portfolioId: seedPortfolioId, name: "Salary", type: "income", color: "#75d99a" },
-  { id: "cat-food", portfolioId: seedPortfolioId, name: "Food", type: "expense", color: "#e8bd4f" },
-  { id: "cat-home", portfolioId: seedPortfolioId, name: "Home", type: "expense", color: "#80aee8" },
-  { id: "cat-transport", portfolioId: seedPortfolioId, name: "Transport", type: "expense", color: "#a999e6" },
-  { id: "cat-health", portfolioId: seedPortfolioId, name: "Health", type: "expense", color: "#e88d91" },
-  { id: "cat-travel", portfolioId: seedPortfolioId, name: "Travel", type: "expense", color: "#65c8d6" },
-  { id: "cat-subscriptions", portfolioId: seedPortfolioId, name: "Subscriptions", type: "expense", color: "#bd9de0" },
-  { id: "cat-other", portfolioId: seedPortfolioId, name: "Other", type: "expense", color: "#94a3b8" },
-];
+export const defaultCategories: Category[] = seedData.categories.map((category) => ({
+  ...category,
+  portfolioId: seedPortfolioId,
+})) as Category[];
 
-export const seedPortfolios: Portfolio[] = [
-  { id: seedPortfolioId, name: "Personal", baseCurrency: "USD" },
-];
+export const seedPortfolios: Portfolio[] = [seedData.portfolio as Portfolio];
 
-export const seedAccounts: Account[] = [
-  {
-    id: "acc-bank",
-    portfolioId: seedPortfolioId,
-    name: "Main bank",
-    type: "bank",
-    currency: "USD",
-    initialBalance: -23950,
-    color: "#6fbfe6",
-  },
-  {
-    id: "acc-card",
-    portfolioId: seedPortfolioId,
-    name: "Daily card",
-    type: "card",
-    currency: "USD",
-    initialBalance: 0,
-    color: "#a999e6",
-  },
-  {
-    id: "acc-savings",
-    portfolioId: seedPortfolioId,
-    name: "Emergency fund",
-    type: "savings",
-    currency: "USD",
-    initialBalance: 0,
-    color: "#75d99a",
-  },
-  {
-    id: "acc-credit-rub",
-    portfolioId: seedPortfolioId,
-    name: "Credit balance",
-    type: "debt",
-    currency: "RUB",
-    initialBalance: -900000,
-    color: "#e88d91",
-  },
-];
+export const seedAccounts: Account[] = seedData.accounts.map((account) => ({
+  ...account,
+  portfolioId: seedPortfolioId,
+})) as Account[];
 
-export const seedRecurringRules: RecurringRule[] = [
-  {
-    id: "rec-rent",
-    portfolioId: seedPortfolioId,
-    accountId: "acc-bank",
-    type: "expense",
-    amount: 1200,
-    currency: "USD",
-    categoryId: "cat-home",
-    description: "Rent",
-    dayOfMonth: 4,
-    startsAt: seedNow.startOf("year").toISOString(),
-    isActive: true,
-  },
-];
+export const seedRecurringRules: RecurringRule[] = seedData.recurringRules.map((rule) => ({
+  ...rule,
+  portfolioId: seedPortfolioId,
+  startsAt: seedNow.startOf("year").toISOString(),
+})) as RecurringRule[];
 
 export function buildSeedTransactions() {
   const transactions: Transaction[] = [];
@@ -158,6 +107,7 @@ export function createSeedSnapshot(): FinanceSnapshot {
   return {
     activePortfolioId: seedPortfolioId,
     timeframe: "month",
+    transactionFilter: "all",
     portfolios: seedPortfolios,
     accounts: seedAccounts,
     categories: defaultCategories,

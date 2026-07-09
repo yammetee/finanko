@@ -5,6 +5,10 @@ import type { FinanceState } from "./financeTypes";
 import { createSeedSnapshot, defaultCategories } from "./seedData";
 import type { Transaction } from "../../shared/types/finance";
 import { getDueRecurringTransactions } from "../recurring/recurring";
+import {
+  isLiabilityAccountType,
+  normalizeAccountInitialBalance,
+} from "../../shared/lib/accounts";
 
 const now = dayjs();
 const seedSnapshot = createSeedSnapshot();
@@ -17,12 +21,18 @@ function currentPortfolioId(get: () => FinanceState) {
   return get().activePortfolioId;
 }
 
+function getRecurringEndsAt(startsAt: string, months?: number) {
+  if (!months || months < 1) return undefined;
+  return dayjs(startsAt).add(months - 1, "month").endOf("month").toISOString();
+}
+
 export const useFinanceStore = create<FinanceState>()(
   persist(
     (set, get) => ({
       ...seedSnapshot,
       setActivePortfolio: (id) => set({ activePortfolioId: id }),
       setTimeframe: (timeframe) => set({ timeframe }),
+      setTransactionFilter: (transactionFilter) => set({ transactionFilter }),
       addPortfolio: (name, baseCurrency) => {
         const id = uid("portfolio");
         set((state) => ({
@@ -44,7 +54,7 @@ export const useFinanceStore = create<FinanceState>()(
             portfolio.id === id ? { ...portfolio, deletedAt: new Date().toISOString() } : portfolio,
           );
           const nextActive =
-            portfolios.find((portfolio) => !portfolio.deletedAt && portfolio.id !== id)?.id ?? id;
+            portfolios.find((portfolio) => !portfolio.deletedAt && portfolio.id !== id)?.id ?? "";
           return { portfolios, activePortfolioId: nextActive };
         }),
       addAccount: (input) =>
@@ -54,12 +64,39 @@ export const useFinanceStore = create<FinanceState>()(
             {
               id: uid("acc"),
               portfolioId: state.activePortfolioId,
-              color: ["#7dd3fc", "#86efac", "#fbbf24", "#c4b5fd"][
+              color: ["#4fb6e8", "#5fd38a", "#e8b94c", "#9b82e6"][
                 state.accounts.length % 4
               ],
               ...input,
+              initialBalance: normalizeAccountInitialBalance(
+                input.type,
+                input.initialBalance,
+              ),
+              interestAllocationAccountId:
+                isLiabilityAccountType(input.type)
+                  ? undefined
+                  : input.interestAllocationAccountId,
             },
           ],
+        })),
+      updateAccount: (id, input) =>
+        set((state) => ({
+          accounts: state.accounts.map((account) =>
+            account.id === id
+              ? {
+                  ...account,
+                  ...input,
+                  initialBalance: normalizeAccountInitialBalance(
+                    input.type,
+                    input.initialBalance,
+                  ),
+                  interestAllocationAccountId:
+                    isLiabilityAccountType(input.type)
+                      ? undefined
+                      : input.interestAllocationAccountId,
+                }
+              : account,
+          ),
         })),
       archiveAccount: (id) =>
         set((state) => ({
@@ -69,6 +106,20 @@ export const useFinanceStore = create<FinanceState>()(
               : account,
           ),
         })),
+      addCategory: (input) =>
+        set((state) => {
+          if (!state.activePortfolioId) return state;
+          return {
+            categories: [
+              ...state.categories,
+              {
+                id: uid("cat"),
+                portfolioId: state.activePortfolioId,
+                ...input,
+              },
+            ],
+          };
+        }),
       addTransaction: (input) => {
         const id = uid("tx");
         const activePortfolioId = currentPortfolioId(get);
@@ -109,11 +160,86 @@ export const useFinanceStore = create<FinanceState>()(
                   description: input.description,
                   dayOfMonth: dayjs(input.occurredAt).date(),
                   startsAt: input.occurredAt,
+                  endsAt: getRecurringEndsAt(input.occurredAt, input.recurringMonths),
                   isActive: true,
                 },
               ]
             : state.recurringRules,
         }));
+      },
+      updateTransaction: (id, input) => {
+        const transactionItems =
+          input.items?.map((item) => ({
+            ...item,
+            id: uid("item"),
+            transactionId: id,
+          })) ?? [];
+        set((state) => {
+          const existing = state.transactions.find((transaction) => transaction.id === id);
+          const recurringRuleId = input.recurring
+            ? existing?.recurringRuleId ?? uid("rec")
+            : existing?.recurringRuleId;
+          const hasRecurringRule = state.recurringRules.some((rule) => rule.id === recurringRuleId);
+
+          return {
+            transactions: state.transactions.map((transaction) =>
+              transaction.id === id
+                ? {
+                    ...transaction,
+                    accountId: input.accountId,
+                    type: input.type,
+                    amount: input.amount,
+                    currency: input.currency,
+                    categoryId: input.categoryId,
+                    description: input.description,
+                    occurredAt: input.occurredAt,
+                    source: input.recurring ? "recurring" : input.source ?? transaction.source,
+                    recurringRuleId,
+                  }
+                : transaction,
+            ),
+            transactionItems: [
+              ...(state.transactionItems ?? []).filter((item) => item.transactionId !== id),
+              ...transactionItems,
+            ],
+            recurringRules:
+              input.recurring && recurringRuleId && !hasRecurringRule
+                ? [
+                    ...state.recurringRules,
+                    {
+                      id: recurringRuleId,
+                      portfolioId: currentPortfolioId(get),
+                      accountId: input.accountId,
+                      type: input.type === "income" ? "income" : "expense",
+                      amount: input.amount,
+                      currency: input.currency,
+                      categoryId: input.categoryId,
+                      description: input.description,
+                      dayOfMonth: dayjs(input.occurredAt).date(),
+                      startsAt: input.occurredAt,
+                      endsAt: getRecurringEndsAt(input.occurredAt, input.recurringMonths),
+                      isActive: true,
+                    },
+                  ]
+                : state.recurringRules.map((rule) =>
+                    rule.id === recurringRuleId
+                      ? {
+                          ...rule,
+                          accountId: input.accountId,
+                          type: input.type === "income" ? "income" : "expense",
+                          amount: input.amount,
+                          currency: input.currency,
+                          categoryId: input.categoryId,
+                          description: input.description,
+                          dayOfMonth: dayjs(input.occurredAt).date(),
+                          startsAt: input.occurredAt,
+                          endsAt: getRecurringEndsAt(input.occurredAt, input.recurringMonths),
+                          isActive: Boolean(input.recurring),
+                        }
+                      : rule,
+                  ),
+          };
+        });
       },
       deleteTransaction: (id) =>
         set((state) => ({
@@ -137,6 +263,22 @@ export const useFinanceStore = create<FinanceState>()(
           set({ transactions: [...state.transactions, ...additions] });
         }
       },
+      exportSnapshot: () => {
+        const state = get();
+        return {
+          activePortfolioId: state.activePortfolioId,
+          timeframe: state.timeframe,
+          transactionFilter: state.transactionFilter,
+          portfolios: state.portfolios,
+          accounts: state.accounts,
+          categories: state.categories,
+          transactions: state.transactions,
+          transactionItems: state.transactionItems ?? [],
+          recurringRules: state.recurringRules,
+        };
+      },
+      importSnapshot: (snapshot) => set(snapshot),
+      resetDemoData: () => set(createSeedSnapshot()),
     }),
     { name: "finanko-local-state-v3" },
   ),

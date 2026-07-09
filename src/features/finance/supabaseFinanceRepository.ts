@@ -1,4 +1,4 @@
-import { supabase } from "../../shared/api/supabase";
+import { getSupabaseClient } from "../../shared/api/supabase";
 import type {
   AccountRow,
   CategoryRow,
@@ -19,6 +19,7 @@ import {
 import type { FinanceSnapshot } from "./financeTypes";
 
 async function selectTable<Row>(table: string) {
+  const supabase = await getSupabaseClient();
   if (!supabase) throw new Error("Supabase is not configured");
   const { data, error } = await supabase.from(table).select("*");
   if (error) throw error;
@@ -48,6 +49,7 @@ export async function getSupabaseFinanceSnapshot(): Promise<FinanceSnapshot> {
   return {
     activePortfolioId,
     timeframe: "month",
+    transactionFilter: "all",
     portfolios,
     accounts: accountRows.map(mapAccountRow),
     categories: categoryRows.map(mapCategoryRow),

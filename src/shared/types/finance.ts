@@ -1,4 +1,4 @@
-export type Currency = "USD" | "EUR" | "THB" | "RUB";
+export type Currency = "USD" | "GEL" | "RUB" | "THB";
 
 export type AccountType =
   | "cash"
@@ -8,11 +8,14 @@ export type AccountType =
   | "investment"
   | "crypto"
   | "debt"
+  | "credit"
+  | "mortgage"
   | "custom";
 
 export type TransactionType = "income" | "expense" | "adjustment";
 export type TransactionSource = "manual" | "text_ai" | "receipt_ai" | "recurring";
 export type Timeframe = "week" | "month" | "year" | "all";
+export type InterestFrequency = "daily" | "monthly";
 
 export interface Portfolio {
   id: string;
@@ -29,6 +32,11 @@ export interface Account {
   currency: Currency;
   initialBalance: number;
   color: string;
+  annualInterestRate?: number;
+  interestFrequency?: InterestFrequency;
+  interestStartedAt?: string;
+  interestAllocationAccountId?: string;
+  loanTermMonths?: number;
   isArchived?: boolean;
   deletedAt?: string;
 }
@@ -76,5 +84,6 @@ export interface RecurringRule {
   description: string;
   dayOfMonth: number;
   startsAt: string;
+  endsAt?: string;
   isActive: boolean;
 }

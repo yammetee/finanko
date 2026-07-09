@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",
+    "@ant-design/v5-patch-for-react-19": "^1.0.3",
     "@supabase/supabase-js": "^2.109.0",
     "@vitejs/plugin-react": "^4.3.4",
     "antd": "^5.23.0",
@@ -19,7 +20,6 @@
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^3.9.2",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

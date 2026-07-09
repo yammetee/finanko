@@ -1,6 +1,7 @@
-import { Select } from "antd";
+import Select from "antd/es/select";
 import { ACCOUNT_TYPES, CURRENCIES } from "../constants/finance";
 import { useI18n } from "../i18n/i18nContext";
+import type { AccountType } from "../types/finance";
 
 export function CurrencySelect() {
   return (
@@ -13,11 +14,16 @@ export function CurrencySelect() {
   );
 }
 
-export function AccountTypeSelect() {
+interface AccountTypeSelectProps {
+  onChange?: (type: AccountType) => void;
+}
+
+export function AccountTypeSelect({ onChange }: AccountTypeSelectProps) {
   const { t } = useI18n();
 
   return (
     <Select
+      onChange={onChange}
       options={ACCOUNT_TYPES.map((type) => ({
         value: type,
         label: t(`accountType.${type}`),

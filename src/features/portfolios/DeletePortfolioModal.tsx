@@ -1,4 +1,7 @@
-import { Input, Modal, Space, Typography } from "antd";
+import Input from "antd/es/input";
+import Modal from "antd/es/modal";
+import Space from "antd/es/space";
+import Typography from "antd/es/typography";
 import { useState } from "react";
 import { getPortfolioName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";

@@ -1,4 +1,9 @@
-import type { Category, Currency } from "../../shared/types/finance";
+import type {
+  AccountType,
+  Category,
+  Currency,
+  InterestFrequency,
+} from "../../shared/types/finance";
 
 export interface ParsedExpenseItem {
   name: string;
@@ -8,11 +13,25 @@ export interface ParsedExpenseItem {
 }
 
 export interface ParsedExpense {
+  kind: "transaction";
   description: string;
   currency: Currency;
   items: ParsedExpenseItem[];
   total: number;
 }
+
+export interface ParsedAccount {
+  kind: "account";
+  name: string;
+  type: AccountType;
+  currency: Currency;
+  initialBalance: number;
+  annualInterestRate?: number;
+  interestFrequency?: InterestFrequency;
+  loanTermMonths?: number;
+}
+
+export type ParsedTextInput = ParsedExpense | ParsedAccount;
 
 export interface ParseTextExpenseInput {
   text: string;
@@ -34,7 +53,7 @@ function findCategoryId(categories: Category[], fallbackName: string) {
   );
 }
 
-export function parseTextExpenseMock({
+function parseExpenseText({
   text,
   currency,
   categories,
@@ -59,10 +78,39 @@ export function parseTextExpenseMock({
         ];
 
   return {
+    kind: "transaction",
     description: text,
     currency,
     items,
     total: items.reduce((sum, item) => sum + item.amount, 0),
+  };
+}
+
+export function parseTextExpenseMock(input: ParseTextExpenseInput): ParsedExpense {
+  return parseExpenseText(input);
+}
+
+export function parseTextInputMock(input: ParseTextExpenseInput): ParsedTextInput {
+  const { text, currency } = input;
+  const creditMatch = text.match(/(?:кредит|ипотек|loan|credit|mortgage)/i);
+  if (!creditMatch) return parseExpenseText(input);
+
+  const amountMatch = text.match(/(\d[\d\s.,]*)\s*(?:руб|rub|₽|тысяч|тыс|k)?/i);
+  const rateMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:%|процент|percent)/i);
+  const yearsMatch = text.match(/(\d+)\s*(?:год|года|лет|year|years)/i);
+  const normalizedAmount = amountMatch
+    ? Number(amountMatch[1].replace(/\s/g, "").replace(",", "."))
+    : 0;
+
+  return {
+    kind: "account",
+    name: /сбер|sber/i.test(text) ? "Кредит Сбербанк" : "Кредит",
+    type: /ипотек|mortgage/i.test(text) ? "mortgage" : "credit",
+    currency: /rub|руб|₽/i.test(text) ? "RUB" : currency,
+    initialBalance: normalizedAmount,
+    annualInterestRate: rateMatch ? Number(rateMatch[1].replace(",", ".")) : undefined,
+    interestFrequency: "daily",
+    loanTermMonths: yearsMatch ? Number(yearsMatch[1]) * 12 : undefined,
   };
 }
 
@@ -80,6 +128,7 @@ export function parseReceiptMock({
   ];
 
   return {
+    kind: "transaction",
     description: `Receipt: ${fileName}`,
     currency,
     items,

@@ -1,20 +1,22 @@
-import { Button, Card, Space, Spin, Typography } from "antd";
 import { LogIn } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
 import { useAuthStore } from "./authStore";
-
-const { Text, Title } = Typography;
 
 interface AuthGateProps {
   children: React.ReactNode;
 }
 
 export function AuthGate({ children }: AuthGateProps) {
-  const { initialize, signInDemo, signInWithGoogle, loading, user } = useAuthStore();
+  const { createLocalAccount, initialize, signInDemo, signInWithGoogle, loading, user } =
+    useAuthStore();
   const { t } = useI18n();
   const currentUser = user();
+  const [localAccount, setLocalAccount] = useState({
+    email: "demo@finanko.app",
+    name: "Demo User",
+  });
 
   useEffect(() => {
     initialize();
@@ -23,7 +25,7 @@ export function AuthGate({ children }: AuthGateProps) {
   if (loading) {
     return (
       <div className="auth-screen">
-        <Spin />
+        <div className="auth-loader" />
       </div>
     );
   }
@@ -34,39 +36,64 @@ export function AuthGate({ children }: AuthGateProps) {
 
   return (
     <div className="auth-screen">
-      <Card className="auth-card">
-        <Space direction="vertical" size={18} style={{ width: "100%" }}>
+      <div className="auth-card">
+        <div className="auth-stack">
           <div>
             <span className="brand-mark">F</span>
-            <Title level={2} style={{ marginTop: 18, marginBottom: 6 }}>
-              Finanko
-            </Title>
-            <Text className="muted">
-              {t("auth.description")}
-            </Text>
+            <h1 className="auth-title">Finanko</h1>
+            <p className="muted auth-description">{t("auth.description")}</p>
           </div>
-          <Button
-            type="primary"
-            size="large"
-            block
-            icon={<LogIn size={18} />}
+          <button
+            className="auth-action auth-action-primary"
             disabled={!isSupabaseConfigured}
+            type="button"
             onClick={signInWithGoogle}
           >
+            <LogIn size={18} />
             {t("actions.continueGoogle")}
-          </Button>
+          </button>
           {!isSupabaseConfigured ? (
-            <Button size="large" block onClick={signInDemo}>
+            <form
+              className="auth-local-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                createLocalAccount(localAccount);
+              }}
+            >
+              <input
+                className="auth-input"
+                required
+                value={localAccount.name}
+                placeholder={t("form.name")}
+                onChange={(event) =>
+                  setLocalAccount((value) => ({ ...value, name: event.target.value }))
+                }
+              />
+              <input
+                className="auth-input"
+                required
+                type="email"
+                value={localAccount.email}
+                placeholder={t("form.email")}
+                onChange={(event) =>
+                  setLocalAccount((value) => ({ ...value, email: event.target.value }))
+                }
+              />
+              <button className="auth-action auth-action-primary" type="submit">
+                {t("actions.createLocalAccount")}
+              </button>
+            </form>
+          ) : null}
+          {!isSupabaseConfigured ? (
+            <button className="auth-action" type="button" onClick={signInDemo}>
               {t("actions.continueDemo")}
-            </Button>
+            </button>
           ) : null}
           {!isSupabaseConfigured ? (
-            <Text className="muted">
-              {t("auth.envHint")}
-            </Text>
+            <p className="muted auth-description">{t("auth.envHint")}</p>
           ) : null}
-        </Space>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

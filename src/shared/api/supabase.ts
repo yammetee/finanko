@@ -1,10 +1,19 @@
-import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const enableSupabase = import.meta.env.VITE_ENABLE_SUPABASE === "true";
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = Boolean(enableSupabase && supabaseUrl && supabaseAnonKey);
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl!, supabaseAnonKey!)
-  : null;
+let supabasePromise: Promise<SupabaseClient | null> | null = null;
+
+export function getSupabaseClient() {
+  if (!isSupabaseConfigured) return Promise.resolve(null);
+
+  supabasePromise ??= import("@supabase/supabase-js").then(({ createClient }) =>
+    createClient(supabaseUrl!, supabaseAnonKey!),
+  );
+
+  return supabasePromise;
+}
