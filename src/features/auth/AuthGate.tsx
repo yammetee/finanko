@@ -1,4 +1,5 @@
-import { LogIn } from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+import { LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
@@ -9,26 +10,26 @@ interface AuthGateProps {
   children: React.ReactNode;
 }
 
-type AuthUser = ReturnType<ReturnType<typeof useAuthStore.getState>["user"]>;
-
-function getUserFinanceName(user: AuthUser) {
+function getUserFinanceName(user: User | null): string {
   if (!user) return "Personal";
-  if ("name" in user && user.name) return user.name;
+  const userName = user.user_metadata?.name;
+  if (typeof userName === "string" && userName.trim()) return userName;
   return user.email ?? "Personal";
 }
 
 export function AuthGate({ children }: AuthGateProps) {
-  const { createLocalAccount, initialize, signInWithGoogle, loading, user } =
-    useAuthStore();
+  const { initialize, signInWithPassword, signUpWithPassword, loading, user } = useAuthStore();
   const { t } = useI18n();
   const currentUser = user();
-  const currentUserId = currentUser?.id;
+  const currentUserId = typeof currentUser?.id === "string" ? currentUser.id : null;
   const currentUserFinanceName = getUserFinanceName(currentUser);
   const [financeReady, setFinanceReady] = useState(false);
-  const [localAccount, setLocalAccount] = useState({
-    email: "",
-    name: "",
-  });
+  const [authMode, setAuthMode] = useState<"signIn" | "signUp">("signIn");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     initialize();
@@ -37,7 +38,7 @@ export function AuthGate({ children }: AuthGateProps) {
   useEffect(() => {
     let active = true;
 
-    if (!currentUserId) {
+    if (typeof currentUserId !== "string") {
       setFinanceReady(false);
       return () => {
         active = false;
@@ -45,9 +46,11 @@ export function AuthGate({ children }: AuthGateProps) {
     }
 
     setFinanceReady(false);
-    void switchFinanceStorageScope(currentUserId, currentUserFinanceName).then(() => {
-      if (active) setFinanceReady(true);
-    });
+    void switchFinanceStorageScope(currentUserId, currentUserFinanceName)
+      .catch(() => undefined)
+      .then(() => {
+        if (active) setFinanceReady(true);
+      });
 
     return () => {
       active = false;
@@ -66,6 +69,26 @@ export function AuthGate({ children }: AuthGateProps) {
     return children;
   }
 
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAuthError(null);
+    setAuthNotice(null);
+    setSubmitting(true);
+
+    try {
+      if (authMode === "signIn") {
+        await signInWithPassword(email.trim(), password);
+      } else {
+        await signUpWithPassword(email.trim(), password);
+        setAuthNotice(t("auth.signUpCheckEmail"));
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : t("auth.authFailed"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="auth-screen">
       <div className="auth-card">
@@ -75,47 +98,52 @@ export function AuthGate({ children }: AuthGateProps) {
             <h1 className="auth-title">Finanko</h1>
             <p className="muted auth-description">{t("auth.description")}</p>
           </div>
-          <button
-            className="auth-action auth-action-primary"
-            disabled={!isSupabaseConfigured}
-            type="button"
-            onClick={signInWithGoogle}
-          >
-            <LogIn size={18} />
-            {t("actions.continueGoogle")}
-          </button>
-          {!isSupabaseConfigured ? (
-            <form
-              className="auth-local-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                createLocalAccount(localAccount);
-              }}
+          <form className="auth-local-form" onSubmit={handleSubmit}>
+            <input
+              autoComplete="email"
+              className="auth-input"
+              disabled={!isSupabaseConfigured || submitting}
+              inputMode="email"
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder={t("auth.emailPlaceholder")}
+              required
+              type="email"
+              value={email}
+            />
+            <input
+              autoComplete={authMode === "signIn" ? "current-password" : "new-password"}
+              className="auth-input"
+              disabled={!isSupabaseConfigured || submitting}
+              minLength={6}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={t("auth.passwordPlaceholder")}
+              required
+              type="password"
+              value={password}
+            />
+            <button
+              className="auth-action auth-action-primary"
+              disabled={!isSupabaseConfigured || submitting}
+              type="submit"
             >
-              <input
-                className="auth-input"
-                required
-                value={localAccount.name}
-                placeholder={t("form.name")}
-                onChange={(event) =>
-                  setLocalAccount((value) => ({ ...value, name: event.target.value }))
-                }
-              />
-              <input
-                className="auth-input"
-                required
-                type="email"
-                value={localAccount.email}
-                placeholder={t("form.email")}
-                onChange={(event) =>
-                  setLocalAccount((value) => ({ ...value, email: event.target.value }))
-                }
-              />
-              <button className="auth-action auth-action-primary" type="submit">
-                {t("actions.createLocalAccount")}
-              </button>
-            </form>
-          ) : null}
+              {authMode === "signIn" ? <LogIn size={18} /> : <UserPlus size={18} />}
+              {authMode === "signIn" ? t("actions.signIn") : t("actions.signUp")}
+            </button>
+          </form>
+          <button
+            className="auth-action"
+            disabled={submitting}
+            type="button"
+            onClick={() => {
+              setAuthError(null);
+              setAuthNotice(null);
+              setAuthMode((mode) => (mode === "signIn" ? "signUp" : "signIn"));
+            }}
+          >
+            {authMode === "signIn" ? t("auth.needAccount") : t("auth.haveAccount")}
+          </button>
+          {authError ? <p className="muted auth-description">{authError}</p> : null}
+          {authNotice ? <p className="muted auth-description">{authNotice}</p> : null}
           {!isSupabaseConfigured ? (
             <p className="muted auth-description">{t("auth.envHint")}</p>
           ) : null}

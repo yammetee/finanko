@@ -408,15 +408,15 @@ export function FinanceDashboard() {
     textParserForm.resetFields();
   }
 
-  function confirmResetLocalData() {
+  function confirmResetData() {
     confirmDanger({
       modal,
-      title: t("confirm.resetLocalData.title"),
-      content: t("confirm.resetLocalData.content"),
-      okText: t("actions.resetLocalData"),
+      title: t("confirm.resetData.title"),
+      content: t("confirm.resetData.content"),
+      okText: t("actions.resetData"),
       onConfirm: () => {
-        state.resetLocalData();
-        message.success(t("feedback.localDataReset"));
+        state.resetFinanceData();
+        message.success(t("feedback.dataReset"));
       },
     });
   }
@@ -578,7 +578,7 @@ export function FinanceDashboard() {
           <Button type="primary" icon={<Plus size={16} />} onClick={() => setPortfolioModal(true)}>
             {t("actions.createPortfolio")}
           </Button>
-          <Button onClick={confirmResetLocalData}>{t("actions.resetLocalData")}</Button>
+          <Button onClick={confirmResetData}>{t("actions.resetData")}</Button>
         </Space>
       </Empty>
     </section>
@@ -652,8 +652,8 @@ export function FinanceDashboard() {
               onChange={(value) => setLocale(value as "en" | "ru")}
             />
             <div className="sider-tools">
-              <Button block type="text" onClick={confirmResetLocalData}>
-                {t("actions.resetLocalData")}
+              <Button block type="text" onClick={confirmResetData}>
+                {t("actions.resetData")}
               </Button>
               <Button
                 block
@@ -863,8 +863,8 @@ export function FinanceDashboard() {
           >
             {t("actions.assistant")}
           </Button>
-          <Button block onClick={confirmResetLocalData}>
-            {t("actions.resetLocalData")}
+          <Button block onClick={confirmResetData}>
+            {t("actions.resetData")}
           </Button>
           <Button block icon={<LogOut size={16} />} onClick={signOut}>
             {t("actions.signOut")}

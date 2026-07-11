@@ -84,7 +84,7 @@ export interface FinanceState {
   updateTransaction: (id: string, input: NewTransactionInput) => void;
   deleteTransaction: (id: string) => void;
   generateDueRecurring: () => void;
-  resetLocalData: () => void;
+  resetFinanceData: () => void;
 }
 
 export interface FinanceSnapshot {

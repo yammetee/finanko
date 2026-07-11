@@ -1,5 +1,3 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -31,7 +29,6 @@ declare const fetch: (
 }>;
 
 const maxAiParserTextChars = 20_000;
-const localDbRelativePath = "data/finanko.local.json";
 
 function readJsonBody(request: DevRequest) {
   return new Promise<unknown>((resolve, reject) => {
@@ -54,34 +51,6 @@ function sendJson(response: DevResponse, status: number, payload: unknown) {
   response.statusCode = status;
   response.setHeader("content-type", "application/json");
   response.end(JSON.stringify(payload));
-}
-
-function getLocalDbPath(root: string) {
-  return path.join(root, localDbRelativePath);
-}
-
-async function readLocalDb(root: string): Promise<{ finance: Record<string, unknown> }> {
-  try {
-    const raw = await readFile(getLocalDbPath(root), "utf8");
-    const parsed = JSON.parse(raw) as { finance?: Record<string, unknown> };
-    return {
-      finance:
-        parsed.finance && typeof parsed.finance === "object" && !Array.isArray(parsed.finance)
-          ? parsed.finance
-          : {},
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { finance: {} };
-    throw error;
-  }
-}
-
-async function writeLocalDb(root: string, db: { finance: Record<string, unknown> }) {
-  const filePath = getLocalDbPath(root);
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(db, null, 2)}\n`, "utf8");
-  await rename(tempPath, filePath);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -120,87 +89,6 @@ function aiParserPlugin(): Plugin {
           handler: (request: DevRequest, response: DevResponse) => Promise<void>,
         ): void;
       };
-
-      middlewares.use("/api/local-db/finance", async (request, response) => {
-        const rawUrl = request.url ?? "";
-        const pathname = new URL(rawUrl, "http://localhost").pathname;
-        const rawKey = pathname.replace(/^\/api\/local-db\/finance\/?/, "").replace(/^\//, "");
-        const key = rawKey ? decodeURIComponent(rawKey) : "";
-
-        if (!key) {
-          sendJson(response, 400, { error: "Missing finance storage key" });
-          return;
-        }
-
-        try {
-          const db = await readLocalDb(server.config.root);
-
-          if (request.method === "GET") {
-            if (!Object.prototype.hasOwnProperty.call(db.finance, key)) {
-              sendJson(response, 404, { error: "Finance state not found" });
-              return;
-            }
-            sendJson(response, 200, { value: db.finance[key] });
-            return;
-          }
-
-          if (request.method === "PUT") {
-            const payload = await readJsonBody(request);
-            if (!isRecord(payload) || typeof payload.value !== "string") {
-              sendJson(response, 400, { error: "Invalid finance state payload" });
-              return;
-            }
-            db.finance[key] = payload.value;
-            await writeLocalDb(server.config.root, db);
-            sendJson(response, 200, { ok: true });
-            return;
-          }
-
-          if (request.method === "DELETE") {
-            delete db.finance[key];
-            await writeLocalDb(server.config.root, db);
-            sendJson(response, 200, { ok: true });
-            return;
-          }
-
-          sendJson(response, 405, { error: "Method not allowed" });
-        } catch {
-          sendJson(response, 500, { error: "Local finance database failed" });
-        }
-      });
-
-      middlewares.use("/api/exchange-rates", async (_request, response) => {
-        const env = loadEnv(server.config.mode, server.config.root, "");
-        const ratesUrl = env.EXCHANGE_RATES_URL ?? "https://open.er-api.com/v6/latest/USD";
-
-        try {
-          const ratesResponse = await fetch(ratesUrl);
-          if (!ratesResponse.ok) {
-            sendJson(response, ratesResponse.status, { error: "Exchange rates request failed" });
-            return;
-          }
-
-          const data = (await ratesResponse.json()) as {
-            time_last_update_utc?: string;
-            date?: string;
-            rates?: Record<string, number>;
-          };
-          const rates = data.rates ?? {};
-          const date = data.date ?? data.time_last_update_utc ?? new Date().toISOString();
-
-          sendJson(response, 200, {
-            date,
-            rates: {
-              USD: 1,
-              GEL: rates.GEL,
-              RUB: rates.RUB,
-              THB: rates.THB,
-            },
-          });
-        } catch {
-          sendJson(response, 502, { error: "Exchange rates unavailable" });
-        }
-      });
 
       middlewares.use("/api/ai/parse", async (request, response) => {
         if (request.method !== "POST") {
@@ -444,6 +332,7 @@ function aiParserPlugin(): Plugin {
 }
 
 export default defineConfig({
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   plugins: [react(), aiParserPlugin()],
   build: {
     modulePreload: false,

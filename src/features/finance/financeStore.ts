@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import { create } from "zustand";
-import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+import { createJSONStorage, persist, type PersistStorage, type StateStorage } from "zustand/middleware";
 import type { FinanceSnapshot, FinanceState, NewAccountInput } from "./financeTypes";
 import {
   createSeedSnapshot,
@@ -21,6 +21,7 @@ import {
   normalizeAccountInitialBalance,
   supportsInterestAccountType,
 } from "../../shared/lib/accounts";
+import { getSupabaseClient, isSupabaseConfigured } from "../../shared/api/supabase";
 
 const seedSnapshot = createSeedSnapshot();
 
@@ -180,8 +181,9 @@ function sanitizeFinanceState(state: FinanceState) {
   };
 }
 
-const financeStorageBaseKey = "finanko-local-state-v3";
+const financeStorageBaseKey = "finanko-supabase-state-v1";
 const financePersistVersion = 6;
+const financeSupabaseTable = "finance_snapshots";
 
 function financeStorageKeyForUser(userId: string) {
   return `${financeStorageBaseKey}:${encodeURIComponent(userId)}`;
@@ -203,82 +205,112 @@ function prepareFinanceStateForUser(state: FinanceSnapshot, portfolioName: strin
   return isUntouchedStarterState(state) ? createSeedSnapshot(portfolioName) : state;
 }
 
-function clearBrowserFinanceStorage(storageKey: string) {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(storageKey);
-  window.localStorage.removeItem(financeStorageBaseKey);
-
-  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-    const key = window.localStorage.key(index);
-    if (key?.startsWith(`${financeStorageBaseKey}:`)) {
-      window.localStorage.removeItem(key);
-    }
+function parsePersistedFinanceValue(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
   }
 }
 
-function readBrowserFinanceStorage(storageKey: string) {
-  if (typeof window === "undefined") return null;
-  const exactState =
-    window.localStorage.getItem(storageKey) ?? window.localStorage.getItem(financeStorageBaseKey);
-  if (exactState) return exactState;
+async function writeFinanceStateToSupabase(userId: string, value: string) {
+  const payload = parsePersistedFinanceValue(value);
+  if (!payload) return false;
 
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (key?.startsWith(`${financeStorageBaseKey}:`)) {
-      const value = window.localStorage.getItem(key);
-      if (value) return value;
-    }
+  const supabase = await getSupabaseClient();
+  if (!supabase) return false;
+
+  const { error } = await supabase.from(financeSupabaseTable).upsert(
+    {
+      user_id: userId,
+      payload,
+    },
+    {
+      onConflict: "user_id",
+    },
+  );
+
+  if (error) {
+    console.error("Supabase finance snapshot write failed", error);
+    return false;
   }
 
-  return null;
+  return true;
 }
 
-function createFinanceFileStateStorage(): StateStorage<Promise<void>> {
+async function readFinanceStateFromSupabase(userId: string) {
+  const supabase = await getSupabaseClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from(financeSupabaseTable)
+    .select("payload")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Supabase finance snapshot read failed", error);
+    return null;
+  }
+
+  return data?.payload ? JSON.stringify(data.payload) : null;
+}
+
+async function deleteFinanceStateFromSupabase(userId: string) {
+  const supabase = await getSupabaseClient();
+  if (!supabase) return false;
+
+  const { error } = await supabase.from(financeSupabaseTable).delete().eq("user_id", userId);
+  if (error) {
+    console.error("Supabase finance snapshot delete failed", error);
+    return false;
+  }
+
+  return true;
+}
+
+function createFinanceSupabaseStateStorage(userId: string): StateStorage<Promise<void>> {
   return {
-    getItem: async (name) => {
-      const response = await fetch(`/api/local-db/finance/${encodeURIComponent(name)}`);
-      if (response.ok) {
-        const payload = (await response.json()) as { value?: unknown };
-        return typeof payload.value === "string" ? payload.value : null;
-      }
-      if (response.status !== 404) {
-        throw new Error("Local finance database is unavailable");
-      }
-
-      const browserState = readBrowserFinanceStorage(name);
-      if (!browserState) return null;
-
-      await fetch(`/api/local-db/finance/${encodeURIComponent(name)}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ value: browserState }),
-      });
-      clearBrowserFinanceStorage(name);
-      return browserState;
+    getItem: async () => readFinanceStateFromSupabase(userId),
+    setItem: async (_name, value) => {
+      const saved = await writeFinanceStateToSupabase(userId, value);
+      if (!saved) throw new Error("Supabase finance storage write failed");
     },
-    setItem: async (name, value) => {
-      const response = await fetch(`/api/local-db/finance/${encodeURIComponent(name)}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ value }),
-      });
-      if (!response.ok) throw new Error("Local finance database write failed");
-    },
-    removeItem: async (name) => {
-      const response = await fetch(`/api/local-db/finance/${encodeURIComponent(name)}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error("Local finance database delete failed");
+    removeItem: async () => {
+      const deleted = await deleteFinanceStateFromSupabase(userId);
+      if (!deleted) throw new Error("Supabase finance storage delete failed");
     },
   };
 }
 
-const financeFileStorage = createJSONStorage<Partial<FinanceState>, Promise<void>>(
-  createFinanceFileStateStorage,
-);
+function createFinanceJsonStorage(storage: StateStorage<Promise<void>>): PersistStorage<Partial<FinanceState>> {
+  const jsonStorage = createJSONStorage<Partial<FinanceState>, Promise<void>>(() => storage);
+  if (!jsonStorage) {
+    throw new Error("Finance JSON storage is unavailable");
+  }
+  return jsonStorage;
+}
 
-async function readFileFinanceState(storageKey: string) {
-  const persisted = await financeFileStorage?.getItem(storageKey);
+function createEmptyFinanceStateStorage(): StateStorage<Promise<void>> {
+  return {
+    getItem: async () => null,
+    setItem: async () => undefined,
+    removeItem: async () => undefined,
+  };
+}
+
+function getFinanceStorageForUser(userId: string): PersistStorage<Partial<FinanceState>> {
+  if (!isSupabaseConfigured) {
+    throw new Error("Supabase is not configured");
+  }
+  return createFinanceJsonStorage(createFinanceSupabaseStateStorage(userId));
+}
+
+async function readStoredFinanceState(
+  storage: PersistStorage<Partial<FinanceState>>,
+  storageKey: string,
+) {
+  const persisted = await storage.getItem(storageKey);
   if (!persisted?.state) return null;
   return sanitizeFinanceState({
     ...createSeedSnapshot(),
@@ -288,9 +320,10 @@ async function readFileFinanceState(storageKey: string) {
 
 export async function switchFinanceStorageScope(userId: string, portfolioName: string) {
   const storageKey = financeStorageKeyForUser(userId);
-  useFinanceStore.persist.setOptions({ name: storageKey, storage: financeFileStorage });
+  const storage = getFinanceStorageForUser(userId);
+  useFinanceStore.persist.setOptions({ name: storageKey, storage });
 
-  const storedState = (await readFileFinanceState(storageKey)) ?? createSeedSnapshot(portfolioName);
+  const storedState = (await readStoredFinanceState(storage, storageKey)) ?? createSeedSnapshot(portfolioName);
   const userState = prepareFinanceStateForUser(storedState, portfolioName);
   useFinanceStore.setState(userState as Partial<FinanceState>);
 }
@@ -542,7 +575,7 @@ export const useFinanceStore = create<FinanceState>()(
           });
         }
       },
-      resetLocalData: () =>
+      resetFinanceData: () =>
         set((state) => {
           const portfolioName =
             state.portfolios.find((portfolio) => portfolio.id === state.activePortfolioId)?.name ??
@@ -552,7 +585,7 @@ export const useFinanceStore = create<FinanceState>()(
     }),
     {
       name: financeStorageBaseKey,
-      storage: financeFileStorage,
+      storage: createFinanceJsonStorage(createEmptyFinanceStateStorage()),
       version: financePersistVersion,
       skipHydration: true,
       migrate: (persistedState) => {

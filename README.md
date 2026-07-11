@@ -20,14 +20,16 @@ Finanko is designed as a calm financial cockpit:
 - React
 - TypeScript
 - Ant Design
-- Zustand state with a project-local JSON database
-- Optional Supabase Auth behind `VITE_ENABLE_SUPABASE=true`
+- Zustand state with Supabase snapshot persistence
+- Supabase Auth when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are set
 
 The app is web-first, with architecture kept friendly for a future Tauri wrapper.
 
-The current MVP runs in local file mode by default. Financial data is stored in `data/finanko.local.json` through the Vite local API at `/api/local-db/finance/:userId`, so browsers connected to the same dev server share one source of truth. The database file is git-ignored because it contains personal financial data.
+The app stores each authenticated user's finance state in `public.finance_snapshots` as a compact JSON snapshot, which keeps the current MVP backend small while syncing across devices.
 
-Currency conversion is wired through the Vite local API proxy at `/api/exchange-rates`, which reads `EXCHANGE_RATES_URL` and defaults to `https://open.er-api.com/v6/latest/USD`. The bundled rates file is only a fallback when the live API is unavailable.
+Create the Supabase table and RLS policies from [supabase/finance_snapshots.sql](./supabase/finance_snapshots.sql) before using cloud persistence.
+
+Currency conversion loads live rates directly from `https://open.er-api.com/v6/latest/USD`. The bundled rates file is only a fallback when the live API is unavailable.
 
 AI parser and assistant features are wired through `/api/ai/parse` and `/api/ai/assistant`. Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in `.env` to use real AI responses. Text parsing has a local deterministic fallback; receipt parsing fails explicitly when the receipt cannot be recognized reliably.
 

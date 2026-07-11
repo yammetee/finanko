@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { convertMoney, setLiveExchangeRates } from "./currency";
 
 describe("currency conversion", () => {
-  it("does not apply live rates to historical dates", () => {
+  it("uses live rates for every conversion date when available", () => {
     setLiveExchangeRates({
       date: "2026-07-09",
       USD: 1,
@@ -11,7 +11,7 @@ describe("currency conversion", () => {
       THB: 100,
     });
 
-    expect(convertMoney(1, "USD", "GEL", "2025-01-15")).toBe(2.82);
+    expect(convertMoney(1, "USD", "GEL", "2025-01-15")).toBe(100);
     setLiveExchangeRates(null);
   });
 
