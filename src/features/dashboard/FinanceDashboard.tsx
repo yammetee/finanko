@@ -5,6 +5,7 @@ import Drawer from "antd/es/drawer";
 import Empty from "antd/es/empty";
 import Form from "antd/es/form";
 import Layout from "antd/es/layout";
+import Menu from "antd/es/menu";
 import Modal from "antd/es/modal";
 import Segmented from "antd/es/segmented";
 import Select from "antd/es/select";
@@ -14,9 +15,13 @@ import {
   LogOut,
   Menu as MenuIcon,
   Plus,
+  Pencil,
+  RotateCcw,
   Sparkles,
   Tags,
+  Trash2,
   Wallet,
+  X,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -45,6 +50,7 @@ import type {
 import type { TransactionFilter } from "../finance/financeTypes";
 import type { CurrencyDisplayMode } from "../finance/financeTypes";
 import { confirmDanger } from "../../shared/ui/confirmations";
+import { CurrencyIcon, NativeCurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import {
   getAccountName,
   getPortfolioName,
@@ -126,6 +132,7 @@ export function FinanceDashboard() {
   const [categoryDrawer, setCategoryDrawer] = useState(false);
   const [transactionDrawer, setTransactionDrawer] = useState(false);
   const [portfolioModal, setPortfolioModal] = useState(false);
+  const [editingPortfolio, setEditingPortfolio] = useState(false);
   const [deletePortfolioModal, setDeletePortfolioModal] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -142,12 +149,10 @@ export function FinanceDashboard() {
   const state = useFinanceStore();
   const { signOut } = useAuthStore();
   const generateDueRecurring = useFinanceStore((store) => store.generateDueRecurring);
-  const repairAccountCurrencies = useFinanceStore((store) => store.repairAccountCurrencies);
 
   useEffect(() => {
-    repairAccountCurrencies();
-    generateDueRecurring();
-  }, [generateDueRecurring, repairAccountCurrencies]);
+    void generateDueRecurring().catch(() => message.error(t("feedback.saveFailed")));
+  }, [generateDueRecurring, message, t]);
 
   useEffect(() => {
     let active = true;
@@ -164,9 +169,10 @@ export function FinanceDashboard() {
   );
   const activePortfolioId = activePortfolio?.id ?? "";
   const portfolios = state.portfolios.filter((portfolio) => !portfolio.deletedAt);
-  const accounts = state.accounts.filter(
+  const portfolioAccounts = state.accounts.filter(
     (account) => account.portfolioId === activePortfolioId && !account.deletedAt,
   );
+  const accounts = portfolioAccounts.filter((account) => !account.isArchived);
   const categories = state.categories.filter(
     (category) => category.portfolioId === activePortfolioId,
   );
@@ -188,50 +194,53 @@ export function FinanceDashboard() {
     () => {
       void ratesVersion;
       return buildAnalytics(
-        accounts,
+        portfolioAccounts,
         categories,
         dashboardTransactions,
         state.timeframe,
         analyticsCurrency,
+        state.transactionItems,
       );
     },
-    [accounts, analyticsCurrency, categories, dashboardTransactions, state.timeframe, ratesVersion],
+    [portfolioAccounts, analyticsCurrency, categories, dashboardTransactions, state.timeframe, state.transactionItems, ratesVersion],
   );
   const assistantSummary = useMemo(
     () => {
       void ratesVersion;
       return assistantOpen
         ? buildAssistantSummary(
-            accounts,
+            portfolioAccounts,
             categories,
             visibleTransactions,
             state.timeframe,
             activePortfolio?.baseCurrency ?? "USD",
+            state.transactionItems,
           )
         : null;
     },
     [
-      accounts,
+      portfolioAccounts,
       assistantOpen,
       categories,
       visibleTransactions,
       state.timeframe,
+      state.transactionItems,
       activePortfolio?.baseCurrency,
       ratesVersion,
     ],
   );
 
-  function addAccount(values: AccountFormValues) {
+  async function addAccount(values: AccountFormValues) {
     if (!isValidMoneyDecimal(values.initialBalance, values.currency)) {
       message.error(t("feedback.invalidMoneyAmount"));
       return;
     }
 
     if (editingAccount) {
-      state.updateAccount(editingAccount.id, values);
+      await state.updateAccount(editingAccount.id, values);
       message.success(t("feedback.accountUpdated"));
     } else {
-      state.addAccount(values);
+      await state.addAccount(values);
       message.success(t("feedback.accountAdded"));
     }
     accountForm.resetFields();
@@ -239,14 +248,14 @@ export function FinanceDashboard() {
     setAccountDrawer(false);
   }
 
-  function addCategory(values: CategoryFormValues) {
-    state.addCategory(values);
+  async function addCategory(values: CategoryFormValues) {
+    await state.addCategory(values);
     categoryForm.resetFields();
     setCategoryDrawer(false);
     message.success(t("feedback.categoryAdded"));
   }
 
-  function addTransaction(values: TransactionFormValues) {
+  async function addTransaction(values: TransactionFormValues) {
     if (!isValidMoneyDecimal(values.amount, values.currency)) {
       message.error(t("feedback.invalidMoneyAmount"));
       return;
@@ -314,10 +323,10 @@ export function FinanceDashboard() {
       recurringMonths: values.recurringMonths,
     };
     if (editingTransaction) {
-      state.updateTransaction(editingTransaction.id, input);
+      await state.updateTransaction(editingTransaction.id, input);
       message.success(t("feedback.transactionUpdated"));
     } else {
-      state.addTransaction(input);
+      await state.addTransaction(input);
       message.success(t("feedback.transactionSaved"));
     }
     transactionForm.resetFields();
@@ -414,9 +423,9 @@ export function FinanceDashboard() {
       title: t("confirm.resetData.title"),
       content: t("confirm.resetData.content"),
       okText: t("actions.resetData"),
-      onConfirm: () => {
-        state.resetFinanceData();
-        message.success(t("feedback.dataReset"));
+      onConfirm: async () => {
+        try { await state.resetFinanceData(); message.success(t("feedback.dataReset")); }
+        catch { message.error(t("feedback.saveFailed")); }
       },
     });
   }
@@ -431,9 +440,9 @@ export function FinanceDashboard() {
           t("confirm.deleteTransaction.fallback"),
       }),
       okText: t("actions.delete"),
-      onConfirm: () => {
-        state.deleteTransaction(transaction.id);
-        message.success(t("feedback.transactionDeleted"));
+      onConfirm: async () => {
+        try { await state.deleteTransaction(transaction.id); message.success(t("feedback.transactionDeleted")); }
+        catch { message.error(t("feedback.saveFailed")); }
       },
     });
   }
@@ -446,15 +455,36 @@ export function FinanceDashboard() {
         name: getAccountName(account, t),
       }),
       okText: t("actions.archive"),
-      onConfirm: () => state.archiveAccount(account.id),
+      onConfirm: async () => { try { await state.archiveAccount(account.id); } catch { message.error(t("feedback.saveFailed")); } },
     });
   }
 
-  function addPortfolio(values: PortfolioFormValues) {
-    state.addPortfolio(values.name, values.baseCurrency);
+  async function addPortfolio(values: PortfolioFormValues) {
+    if (editingPortfolio && activePortfolio) await state.renamePortfolio(activePortfolio.id, values.name);
+    else await state.addPortfolio(values.name, values.baseCurrency);
     portfolioForm.resetFields();
+    setEditingPortfolio(false);
     setPortfolioModal(false);
-    message.success(t("feedback.portfolioCreated"));
+    message.success(t(editingPortfolio ? "feedback.portfolioRenamed" : "feedback.portfolioCreated"));
+  }
+
+  function openRenamePortfolio() {
+    if (!activePortfolio) return;
+    setEditingPortfolio(true);
+    portfolioForm.setFieldsValue({ name: activePortfolio.name, baseCurrency: activePortfolio.baseCurrency });
+    setPortfolioModal(true);
+  }
+
+  function handleMobileMenuAction(key: string) {
+    setMobileMenuOpen(false);
+    if (key === "portfolio") setPortfolioModal(true);
+    if (key === "rename-portfolio") openRenamePortfolio();
+    if (key === "delete-portfolio") setDeletePortfolioModal(true);
+    if (key === "account") openNewAccountDrawer();
+    if (key === "category") setCategoryDrawer(true);
+    if (key === "assistant") setAssistantOpen(true);
+    if (key === "reset") confirmResetData();
+    if (key === "sign-out") void signOut();
   }
 
   function fillParsedTransaction(values: TransactionFormValues) {
@@ -520,7 +550,7 @@ export function FinanceDashboard() {
     const accountId = values.accountId;
     if (!accountId) {
       message.warning(t("feedback.createAccountFirst"));
-      return;
+      return false;
     }
     const parserInput = {
       fileName: values.fileName,
@@ -529,11 +559,8 @@ export function FinanceDashboard() {
       currency: accounts.find((account) => account.id === accountId)?.currency ?? activePortfolio?.baseCurrency ?? "USD",
       categories,
     };
-    const parsed = await parseReceiptInput(parserInput).catch(() => {
-      message.error(t("feedback.receiptParseFailed"));
-      return null;
-    });
-    if (!parsed) return;
+    const parsed = await parseReceiptInput(parserInput).catch(() => null);
+    if (!parsed) return false;
     fillParsedTransaction({
       accountId,
       type: parsed.type ?? "expense",
@@ -546,6 +573,7 @@ export function FinanceDashboard() {
       items: parsed.items,
     });
     message.success(t("feedback.parserPrepared"));
+    return true;
   }
 
   const dashboardBody = activePortfolio ? (
@@ -560,7 +588,7 @@ export function FinanceDashboard() {
         />
       </Suspense>
 
-      <Card className="span-6" title={t("section.history")} id="history-section">
+      <Card className="span-7" title={t("section.history")} id="history-section">
         <Suspense fallback={<div className="panel-loading" />}>
           <TransactionHistory
             transactions={dashboardTransactions}
@@ -587,22 +615,21 @@ export function FinanceDashboard() {
   return (
     <>
       <Layout className="app-shell">
-        <Sider width={336} className="app-sider">
+        <Sider width={368} className="app-sider">
           <div className="brand">
             <span className="brand-mark">F</span>
             <span className="brand-name">Finanko</span>
           </div>
           <Space className="sidebar-actions" direction="vertical" size={8}>
-            <Select
-              value={activePortfolio?.id}
-              placeholder={t("empty.noPortfolios")}
-              style={{ width: "100%" }}
-              options={portfolios.map((portfolio) => ({
-                value: portfolio.id,
-                label: getPortfolioName(portfolio, t),
-              }))}
-              onChange={state.setActivePortfolio}
-            />
+            <div className="portfolio-switcher">
+              <Select
+                value={activePortfolio?.id}
+                placeholder={t("empty.noPortfolios")}
+                options={portfolios.map((portfolio) => ({ value: portfolio.id, label: getPortfolioName(portfolio, t) }))}
+                onChange={state.setActivePortfolio}
+              />
+              <Button id='rename' aria-label={t("actions.renamePortfolio")} disabled={!activePortfolio} icon={<Pencil size={15} />} onClick={openRenamePortfolio} />
+            </div>
             <Button
               type="primary"
               block
@@ -668,40 +695,49 @@ export function FinanceDashboard() {
             <Button block type="text" icon={<LogOut size={16} />} onClick={signOut}>
               {t("actions.signOut")}
             </Button>
+            <div className="legal-links"><a href="/privacy.html" target="_blank">{t("legal.privacy")}</a><a href="/terms.html" target="_blank">{t("legal.terms")}</a></div>
           </div>
         </Sider>
         <Content className="shell-content">
           <header className="toolbar">
             <div className="toolbar-filters">
-              <Segmented
-                className="timeframe-filter"
-                value={state.timeframe}
-                options={TIMEFRAME_OPTIONS.map((option) => ({
-                  ...option,
-                  label: t(option.label),
-                }))}
-                onChange={(value) => state.setTimeframe(value as Timeframe)}
-              />
-              <Segmented
-                className="transaction-type-filter"
-                value={state.transactionFilter}
-                options={[
-                  { label: t("filter.all"), value: "all" },
-                  { label: t("filter.income"), value: "income" },
-                  { label: t("filter.expense"), value: "expense" },
-                ]}
-                onChange={(value) => state.setTransactionFilter(value as TransactionFilter)}
-              />
-              <Select
-                className="currency-display-filter"
-                value={displayCurrency}
-                style={{ width: 132 }}
-                options={[
-                  { value: "native", label: t("currency.native") },
-                  ...CURRENCIES.map((currency) => ({ value: currency, label: currency })),
-                ]}
-                onChange={(value) => state.setCurrencyDisplay(value as CurrencyDisplayMode)}
-              />
+              <div className="toolbar-primary">
+                <Segmented
+                  block
+                  className="timeframe-filter"
+                  value={state.timeframe}
+                  options={TIMEFRAME_OPTIONS.map((option) => ({ ...option, label: t(option.label) }))}
+                  onChange={(value) => state.setTimeframe(value as Timeframe)}
+                />
+                <Button
+                  className="mobile-menu-button"
+                  aria-label="Menu"
+                  icon={<MenuIcon size={18} />}
+                  onClick={() => setMobileMenuOpen(true)}
+                />
+              </div>
+              <div className="toolbar-secondary">
+                <Segmented
+                  block
+                  className="transaction-type-filter"
+                  value={state.transactionFilter}
+                  options={[
+                    { label: t("filter.all"), value: "all" },
+                    { label: t("filter.income"), value: "income" },
+                    { label: t("filter.expense"), value: "expense" },
+                  ]}
+                  onChange={(value) => state.setTransactionFilter(value as TransactionFilter)}
+                />
+                <Segmented
+                  className="currency-display-filter"
+                  value={displayCurrency}
+                  options={[
+                    { value: "native", label: <NativeCurrencyIcon />, title: t("currency.native") },
+                    ...CURRENCIES.map((currency) => ({ value: currency, label: <CurrencyIcon currency={currency} />, title: currency })),
+                  ]}
+                  onChange={(value) => state.setCurrencyDisplay(value as CurrencyDisplayMode)}
+                />
+              </div>
               <Button
                 className="mobile-transaction-button"
                 type="primary"
@@ -711,11 +747,6 @@ export function FinanceDashboard() {
               >
                 {t("actions.transaction")}
               </Button>
-              <Button
-                className="mobile-menu-button"
-                icon={<MenuIcon size={18} />}
-                onClick={() => setMobileMenuOpen(true)}
-              />
             </div>
             <div className="toolbar-metrics">
               <MetricCard
@@ -782,10 +813,19 @@ export function FinanceDashboard() {
       <Drawer
         title="Finanko"
         className="mobile-menu-drawer"
+        closable={false}
+        extra={
+          <Button
+            aria-label="Close menu"
+            icon={<X size={20} />}
+            type="text"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        }
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         placement="right"
-        width="min(320px, 86vw)"
+        width="min(340px, 88vw)"
       >
         <div className="mobile-menu-content">
           <div className="mobile-menu-field">
@@ -811,64 +851,28 @@ export function FinanceDashboard() {
             ]}
             onChange={(value) => setLocale(value as "en" | "ru")}
           />
-          <Button
-            block
-            icon={<Plus size={16} />}
-            onClick={() => {
-              setMobileMenuOpen(false);
-              setPortfolioModal(true);
-            }}
-          >
-            {t("actions.createPortfolio")}
-          </Button>
-          <Button
-            block
-            danger
-            disabled={!activePortfolio}
-            onClick={() => {
-              setMobileMenuOpen(false);
-              setDeletePortfolioModal(true);
-            }}
-          >
-            {t("actions.deletePortfolio")}
-          </Button>
-          <Button
-            block
-            icon={<Wallet size={16} />}
-            onClick={() => {
-              setMobileMenuOpen(false);
-              openNewAccountDrawer();
-            }}
-          >
-            {t("actions.account")}
-          </Button>
-          <Button
-            block
-            disabled={!activePortfolio}
-            icon={<Tags size={16} />}
-            onClick={() => {
-              setMobileMenuOpen(false);
-              setCategoryDrawer(true);
-            }}
-          >
-            {t("actions.category")}
-          </Button>
-          <Button
-            block
-            icon={<Sparkles size={16} />}
-            onClick={() => {
-              setMobileMenuOpen(false);
-              setAssistantOpen(true);
-            }}
-          >
-            {t("actions.assistant")}
-          </Button>
-          <Button block onClick={confirmResetData}>
-            {t("actions.resetData")}
-          </Button>
-          <Button block icon={<LogOut size={16} />} onClick={signOut}>
-            {t("actions.signOut")}
-          </Button>
+          <Menu
+            className="mobile-menu-navigation"
+            mode="inline"
+            selectable={false}
+            onClick={({ key }) => handleMobileMenuAction(key)}
+            items={[
+              { key: "workspace", type: "group", label: t("menu.manage"), children: [
+                { key: "portfolio", icon: <Plus size={17} />, label: t("actions.createPortfolio") },
+                { key: "rename-portfolio", icon: <Pencil size={17} />, label: t("actions.renamePortfolio"), disabled: !activePortfolio },
+                { key: "account", icon: <Wallet size={17} />, label: t("actions.account") },
+                { key: "category", icon: <Tags size={17} />, label: t("actions.category"), disabled: !activePortfolio },
+                { key: "assistant", icon: <Sparkles size={17} />, label: t("actions.assistant") },
+              ] },
+              { type: "divider" },
+              { key: "settings", type: "group", label: t("menu.account"), children: [
+                { key: "reset", icon: <RotateCcw size={17} />, label: t("actions.resetData") },
+                { key: "delete-portfolio", danger: true, icon: <Trash2 size={17} />, label: t("actions.deletePortfolio"), disabled: !activePortfolio },
+                { key: "sign-out", icon: <LogOut size={17} />, label: t("actions.signOut") },
+              ] },
+            ]}
+          />
+          <div className="legal-links"><a href="/privacy.html" target="_blank">{t("legal.privacy")}</a><a href="/terms.html" target="_blank">{t("legal.terms")}</a></div>
         </div>
       </Drawer>
 
@@ -897,14 +901,14 @@ export function FinanceDashboard() {
       </Drawer>
 
       <Modal
-        title={t("modal.newPortfolio")}
+        title={t(editingPortfolio ? "modal.renamePortfolio" : "modal.newPortfolio")}
         open={portfolioModal}
-        onCancel={() => setPortfolioModal(false)}
+        onCancel={() => { setPortfolioModal(false); setEditingPortfolio(false); portfolioForm.resetFields(); }}
         footer={null}
       >
         {portfolioModal ? (
           <Suspense fallback={<div className="panel-loading" />}>
-            <PortfolioForm form={portfolioForm} onFinish={addPortfolio} />
+            <PortfolioForm form={portfolioForm} onFinish={addPortfolio} editing={editingPortfolio} />
           </Suspense>
         ) : null}
       </Modal>
@@ -915,9 +919,9 @@ export function FinanceDashboard() {
             open={deletePortfolioModal}
             portfolio={activePortfolio}
             onCancel={() => setDeletePortfolioModal(false)}
-            onConfirm={(portfolioId) => {
-              state.deletePortfolio(portfolioId);
-              setDeletePortfolioModal(false);
+            onConfirm={async (portfolioId) => {
+              try { await state.deletePortfolio(portfolioId); setDeletePortfolioModal(false); }
+              catch { message.error(t("feedback.saveFailed")); }
             }}
           />
         </Suspense>

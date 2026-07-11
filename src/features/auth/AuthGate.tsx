@@ -3,7 +3,7 @@ import { LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
-import { switchFinanceStorageScope } from "../finance/financeStore";
+import { initializeFinanceData } from "../finance/financeStore";
 import { useAuthStore } from "./authStore";
 
 interface AuthGateProps {
@@ -24,12 +24,14 @@ export function AuthGate({ children }: AuthGateProps) {
   const currentUserId = typeof currentUser?.id === "string" ? currentUser.id : null;
   const currentUserFinanceName = getUserFinanceName(currentUser);
   const [financeReady, setFinanceReady] = useState(false);
+  const [financeError, setFinanceError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   useEffect(() => {
     initialize();
@@ -46,16 +48,19 @@ export function AuthGate({ children }: AuthGateProps) {
     }
 
     setFinanceReady(false);
-    void switchFinanceStorageScope(currentUserId, currentUserFinanceName)
-      .catch(() => undefined)
-      .then(() => {
-        if (active) setFinanceReady(true);
-      });
+    setFinanceError(null);
+    void initializeFinanceData(currentUserId, currentUserFinanceName)
+      .then(() => { if (active) setFinanceReady(true); })
+      .catch((error) => { if (active) setFinanceError(error instanceof Error ? error.message : "Finance data could not be loaded"); });
 
     return () => {
       active = false;
     };
   }, [currentUserFinanceName, currentUserId]);
+
+  if (currentUser && financeError) {
+    return <div className="auth-screen"><div className="auth-card"><p className="muted auth-description">{financeError}</p><button className="auth-action auth-action-primary" type="button" onClick={() => window.location.reload()}>{t("actions.retry")}</button></div></div>;
+  }
 
   if (loading || (currentUser && !financeReady)) {
     return (
@@ -79,7 +84,8 @@ export function AuthGate({ children }: AuthGateProps) {
       if (authMode === "signIn") {
         await signInWithPassword(email.trim(), password);
       } else {
-        await signUpWithPassword(email.trim(), password);
+        if (!legalAccepted) throw new Error(t("auth.acceptLegalError"));
+        await signUpWithPassword(email.trim(), password, new Date().toISOString());
         setAuthNotice(t("auth.signUpCheckEmail"));
       }
     } catch (error) {
@@ -121,6 +127,12 @@ export function AuthGate({ children }: AuthGateProps) {
               type="password"
               value={password}
             />
+            {authMode === "signUp" ? (
+              <label className="auth-legal-consent">
+                <input checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} type="checkbox" />
+                <span>{t("auth.acceptLegalPrefix")} <a href="/terms.html" target="_blank">{t("legal.terms")}</a> {t("auth.acceptLegalAnd")} <a href="/privacy.html" target="_blank">{t("legal.privacy")}</a>.</span>
+              </label>
+            ) : null}
             <button
               className="auth-action auth-action-primary"
               disabled={!isSupabaseConfigured || submitting}
@@ -147,6 +159,7 @@ export function AuthGate({ children }: AuthGateProps) {
           {!isSupabaseConfigured ? (
             <p className="muted auth-description">{t("auth.envHint")}</p>
           ) : null}
+          <div className="legal-links"><a href="/privacy.html" target="_blank">{t("legal.privacy")}</a><a href="/terms.html" target="_blank">{t("legal.terms")}</a></div>
         </div>
       </div>
     </div>

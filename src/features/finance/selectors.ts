@@ -6,6 +6,7 @@ import type {
   Currency,
   Timeframe,
   Transaction,
+  TransactionItem,
 } from "../../shared/types/finance";
 import {
   buildLedgerAnalytics,
@@ -90,11 +91,13 @@ export function buildAnalytics(
   transactions: Transaction[],
   timeframe: Timeframe,
   baseCurrency: Currency,
+  transactionItems: TransactionItem[] = [],
 ) {
   const snapshot = financeStateToLedgerSnapshot({
     accounts,
     categories,
     transactions,
+    transactionItems,
   });
 
   return buildLedgerAnalytics(

@@ -4,6 +4,7 @@ import {
   type AssistantActionId,
   type AssistantSummary,
 } from "./assistantSummary";
+import { getSupabaseClient } from "../../shared/api/supabase";
 
 interface AssistantAiInput {
   actionId: AssistantActionId;
@@ -17,10 +18,14 @@ export async function getAssistantResponse(input: AssistantAiInput) {
   if (!action) return null;
 
   try {
-    const response = await fetch("/api/ai/assistant", {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return null;
+    const session = (await supabase.auth.getSession()).data.session;
+    if (!session) return null;
+    const response = await fetch("/api/ai", {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+      headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ kind: "assistant", payload: {
         action: {
           id: action.id,
           backendDescription: action.backendDescription,
@@ -28,13 +33,10 @@ export async function getAssistantResponse(input: AssistantAiInput) {
         summary: input.summary,
         selectedCategoryId: input.selectedCategoryId,
         locale: input.locale,
-      }),
+      } }),
     });
-    if (!response.ok) {
-      return null;
-    }
-    const payload = (await response.json()) as { text?: string };
-    return payload.text?.trim() || null;
+    if (!response.ok) return null;
+    return ((await response.json()) as { analysis?: import("./assistantSummary").AssistantResponse }).analysis ?? null;
   } catch {
     return null;
   }
@@ -43,8 +45,8 @@ export async function getAssistantResponse(input: AssistantAiInput) {
 export function getAssistantFallbackResponse(
   actionId: AssistantActionId,
   summary: AssistantSummary,
-  selectedCategoryId: string | undefined,
-  t: Parameters<typeof buildAssistantFallbackResponse>[3],
+  locale: "en" | "ru" = "en",
+  selectedCategoryId?: string,
 ) {
-  return buildAssistantFallbackResponse(actionId, summary, selectedCategoryId, t);
+  return buildAssistantFallbackResponse(actionId, summary, locale, selectedCategoryId);
 }

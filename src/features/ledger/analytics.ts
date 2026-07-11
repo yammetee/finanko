@@ -61,8 +61,7 @@ function isExpensePosting(posting: Posting) {
 }
 
 function getTrendLabel(date: dayjs.Dayjs, timeframe: Timeframe) {
-  if (timeframe === "year") return date.format("MMM YYYY");
-  return date.format("MMM D");
+  return timeframe === "year" ? date.startOf("month").format("YYYY-MM-DD") : date.format("YYYY-MM-DD");
 }
 
 function getBucketKey(date: dayjs.Dayjs, timeframe: Timeframe) {

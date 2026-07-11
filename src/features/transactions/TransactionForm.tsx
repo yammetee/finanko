@@ -1,4 +1,5 @@
 import Button from "antd/es/button";
+import Alert from "antd/es/alert";
 import Card from "antd/es/card";
 import DatePicker from "antd/es/date-picker";
 import Form from "antd/es/form";
@@ -25,6 +26,7 @@ import type {
   TransactionType,
 } from "../../shared/types/finance";
 import type { ParsedExpenseItem } from "../receipts/expenseParser";
+import { prepareReceiptImage } from "../receipts/receiptImage";
 
 const { Text } = Typography;
 
@@ -60,52 +62,7 @@ interface TransactionFormProps {
     fileName: string;
     fileType?: string;
     fileDataUrl?: string;
-  }) => void | Promise<void>;
-}
-
-function readFileAsDataUrl(file: File | Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-const maxReceiptDataUrlChars = 3_500_000;
-
-async function prepareReceiptFileDataUrl(file: File) {
-  if (!file.type.startsWith("image/")) {
-    if (file.size > 750_000) return undefined;
-    const dataUrl = await readFileAsDataUrl(file);
-    return dataUrl.length <= maxReceiptDataUrlChars ? dataUrl : undefined;
-  }
-
-  const imageUrl = URL.createObjectURL(file);
-  try {
-    const image = new Image();
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("Receipt image could not be loaded"));
-      image.src = imageUrl;
-    });
-
-    const maxSide = 2200;
-    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
-    const width = Math.max(1, Math.round(image.width * scale));
-    const height = Math.max(1, Math.round(image.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d");
-    if (!context) return readFileAsDataUrl(file);
-    context.drawImage(image, 0, 0, width, height);
-
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-    return dataUrl.length <= maxReceiptDataUrlChars ? dataUrl : undefined;
-  } finally {
-    URL.revokeObjectURL(imageUrl);
-  }
+  }) => boolean | Promise<boolean>;
 }
 
 export function TransactionForm({
@@ -123,6 +80,7 @@ export function TransactionForm({
   const { t } = useI18n();
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const [receiptParsing, setReceiptParsing] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
   const [textParsing, setTextParsing] = useState(false);
   const [parserAccountId, setParserAccountId] = useState(accounts[0]?.id ?? "");
   const parsedItems = Form.useWatch("items", { form, preserve: true }) ?? [];
@@ -166,14 +124,24 @@ export function TransactionForm({
   async function parseReceipt(file: File) {
     if (!parserAccountId) return;
     setReceiptFileName(file.name);
+    setReceiptError(null);
     setReceiptParsing(true);
     try {
-      await onParseReceipt({
+      const parsed = await onParseReceipt({
         accountId: parserAccountId,
         fileName: file.name,
-        fileType: file.type,
-        fileDataUrl: await prepareReceiptFileDataUrl(file),
+        fileType: "image/jpeg",
+        fileDataUrl: await prepareReceiptImage(file),
       });
+      if (!parsed) setReceiptError(t("receipt.parseError"));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      const key = code === "file_too_large" || code === "compressed_file_too_large"
+        ? "receipt.fileTooLarge"
+        : code === "unsupported_file" || code === "unsupported_image"
+          ? "receipt.unsupported"
+          : "receipt.parseError";
+      setReceiptError(t(key));
     } finally {
       setReceiptParsing(false);
     }
@@ -224,7 +192,7 @@ export function TransactionForm({
             <ReceiptText size={28} />
             <Text>{t("receipt.description")}</Text>
             <Upload
-              accept="image/*,.pdf"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
               beforeUpload={(file) => {
                 void parseReceipt(file);
                 return false;
@@ -241,6 +209,7 @@ export function TransactionForm({
                 {t("receipt.selectedFile", { name: receiptFileName })}
               </Text>
             ) : null}
+            {receiptError ? <Alert message={receiptError} type="error" showIcon /> : null}
           </Space>
         </Card>
       ) : null}

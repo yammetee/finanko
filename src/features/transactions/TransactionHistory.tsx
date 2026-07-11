@@ -2,6 +2,8 @@ import Button from "antd/es/button";
 import Space from "antd/es/space";
 import Table from "antd/es/table";
 import Tag from "antd/es/tag";
+import Tooltip from "antd/es/tooltip";
+import { Pencil, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { getTransactionDescription } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
@@ -85,15 +87,15 @@ export function TransactionHistory({
           {
             title: "",
             className: "history-actions-cell",
-            width: 132,
+            width: 76,
             render: (_, row) => (
               <Space className="row-actions" size={4}>
-                <Button size="small" type="text" onClick={() => onEdit(row)}>
-                  {t("actions.edit")}
-                </Button>
-                <Button danger size="small" type="text" onClick={() => onDelete(row)}>
-                  {t("actions.delete")}
-                </Button>
+                <Tooltip title={t("actions.edit")}>
+                  <Button aria-label={t("actions.edit")} icon={<Pencil size={14} />} size="small" type="text" onClick={() => onEdit(row)} />
+                </Tooltip>
+                <Tooltip title={t("actions.delete")}>
+                  <Button aria-label={t("actions.delete")} danger icon={<Trash2 size={14} />} size="small" type="text" onClick={() => onDelete(row)} />
+                </Tooltip>
               </Space>
             ),
           },

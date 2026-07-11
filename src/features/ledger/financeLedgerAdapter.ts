@@ -1,5 +1,5 @@
 import type { Account, Category, Transaction, TransactionItem } from "../../shared/types/finance";
-import { normalizeAccountInitialBalance } from "../../shared/lib/accounts";
+import { isLiabilityAccountType, normalizeAccountInitialBalance } from "../../shared/lib/accounts";
 import { decimalToMinor } from "./money";
 import { buildAccountOnlyEntry, buildLedgerEntry } from "./postings";
 import type { EntryItem, LedgerAccount, LedgerEntry, LedgerSnapshot } from "./ledgerTypes";
@@ -21,6 +21,7 @@ function mapAccount(account: Account): LedgerAccount {
 
 function mapTransaction(
   transaction: Transaction,
+  accounts: Account[],
   categories: Category[],
   transactionItems: TransactionItem[] = [],
 ): LedgerEntry {
@@ -28,7 +29,8 @@ function mapTransaction(
   const category = categories.find((candidate) => candidate.id === transaction.categoryId);
 
   if (transaction.type === "interest_accrual") {
-    const isExpense = category?.type === "expense";
+    const linkedAccount = accounts.find((account) => account.id === transaction.linkedAccountId);
+    const isExpense = category?.type === "expense" || Boolean(linkedAccount && isLiabilityAccountType(linkedAccount.type));
 
     return buildLedgerEntry({
       id: transaction.id,
@@ -228,6 +230,7 @@ export function financeStateToLedgerSnapshot(input: {
     entries: input.transactions.map((transaction) =>
       mapTransaction(
         transaction,
+        input.accounts,
         input.categories,
         itemsByTransactionId.get(transaction.id) ?? [],
       ),

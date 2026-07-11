@@ -20,18 +20,18 @@ Finanko is designed as a calm financial cockpit:
 - React
 - TypeScript
 - Ant Design
-- Zustand state with Supabase snapshot persistence
+- Zustand in-memory UI state backed by relational Supabase tables
 - Supabase Auth when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are set
 
 The app is web-first, with architecture kept friendly for a future Tauri wrapper.
 
-The app stores each authenticated user's finance state in `public.finance_snapshots` as a compact JSON snapshot, which keeps the current MVP backend small while syncing across devices.
+All financial records live in normalized Supabase tables (`portfolios`, `accounts`, `categories`, `transactions`, `transaction_items`, and `recurring_rules`). Zustand is only an in-memory view cache and is never used for persistence.
 
-Create the Supabase table and RLS policies from [supabase/finance_snapshots.sql](./supabase/finance_snapshots.sql) before using cloud persistence.
+Apply [supabase/schema.sql](./supabase/schema.sql) before running the app. It creates constraints, indexes, explicit Data API grants, and owner-scoped RLS policies. If the former `finance_snapshots` table exists, the script migrates its records and removes the legacy table.
 
 Currency conversion loads live rates directly from `https://open.er-api.com/v6/latest/USD`. The bundled rates file is only a fallback when the live API is unavailable.
 
-AI parser and assistant features are wired through `/api/ai/parse` and `/api/ai/assistant`. Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in `.env` to use real AI responses. Text parsing has a local deterministic fallback; receipt parsing fails explicitly when the receipt cannot be recognized reliably.
+AI parser and assistant features run in the authenticated Vercel Function at [api/ai.ts](./api/ai.ts). Keep `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and `OPENAI_MODEL` in Vercel Environment Variables. The browser sends the current Supabase access token, and the function validates it before making a paid AI request. Text parsing keeps a deterministic fallback; receipt parsing fails explicitly when recognition is unreliable.
 
 ## Documentation
 

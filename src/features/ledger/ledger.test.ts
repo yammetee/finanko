@@ -4,6 +4,7 @@ import { buildLedgerAnalytics } from "./analytics";
 import { getLedgerAccountBalance } from "./balances";
 import { buildLedgerEntry } from "./postings";
 import type { LedgerAccount, LedgerEntry } from "./ledgerTypes";
+import { financeStateToLedgerSnapshot } from "./financeLedgerAdapter";
 
 const portfolioId = "portfolio-test";
 const bank: LedgerAccount = {
@@ -144,5 +145,18 @@ describe("ledger balances and analytics", () => {
     expect(getLedgerAccountBalance(credit, entries)).toBe(-1015);
     expect(analytics.expenses).toBe(15);
     expect(analytics.netWorth).toBe(-1015);
+  });
+
+  it("infers liability interest direction even when category metadata is unavailable", () => {
+    const snapshot = financeStateToLedgerSnapshot({
+      accounts: [{ id: credit.id, portfolioId, name: credit.name, type: credit.type, currency: "USD", initialBalance: -1000, color: "#fff" }],
+      categories: [],
+      transactions: [{
+        id: "entry-interest-without-category", portfolioId, accountId: credit.id, linkedAccountId: credit.id,
+        type: "interest_accrual", amount: 15, currency: "USD", categoryId: "cat-interest",
+        occurredAt: "2026-07-05T00:00:00.000Z", description: "Credit interest", source: "system",
+      }],
+    });
+    expect(getLedgerAccountBalance(snapshot.accounts[0], snapshot.entries)).toBe(-1015);
   });
 });

@@ -1,8 +1,11 @@
 import Card from "antd/es/card";
 import Empty from "antd/es/empty";
+import Flex from "antd/es/flex";
+import Typography from "antd/es/typography";
 import { memo, useMemo } from "react";
 import { getCategoryNameById } from "../../../shared/i18n/displayText";
 import { useI18n } from "../../../shared/i18n/i18nContext";
+import { formatMoney } from "../../../shared/lib/format";
 import type { Currency, Timeframe } from "../../../shared/types/finance";
 
 interface TrendPoint {
@@ -36,6 +39,15 @@ const SVG_HEIGHT = 360;
 const PADDING = { top: 12, right: 12, bottom: 42, left: 58 };
 const INNER_WIDTH = SVG_WIDTH - PADDING.left - PADDING.right;
 const INNER_HEIGHT = SVG_HEIGHT - PADDING.top - PADDING.bottom;
+const { Text } = Typography;
+
+function formatDateLabel(value: string, timeframe: Timeframe, locale: "en" | "ru") {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", timeframe === "year"
+    ? { month: "short" }
+    : { day: "numeric", month: "short" }).format(date).replace(" г.", "");
+}
 
 function formatAxis(value: number) {
   const abs = Math.abs(value);
@@ -80,7 +92,7 @@ function linePath(values: number[], min: number, max: number) {
     .join(" ");
 }
 
-function SingleLineChart({ data }: { data: NetWorthPoint[] }) {
+function SingleLineChart({ data, timeframe, locale, currency }: { data: NetWorthPoint[]; timeframe: Timeframe; locale: "en" | "ru"; currency: Currency }) {
   const values = data.map((point) => point.netWorth);
   const { min, max } = getRange(values);
   const labels = labelIndexes(data.length);
@@ -99,10 +111,15 @@ function SingleLineChart({ data }: { data: NetWorthPoint[] }) {
         );
       })}
       <path className="chart-line chart-line-primary" d={linePath(values, min, max)} />
+      {data.map((point, index) => (
+        <circle key={`point-${point.label}`} className="chart-point chart-point-primary" cx={xFor(index, data.length)} cy={yFor(point.netWorth, min, max)} r={3}>
+          <title>{`${formatDateLabel(point.label, timeframe, locale)} · ${formatMoney(point.netWorth, currency)}`}</title>
+        </circle>
+      ))}
       {data.map((point, index) =>
         labels.has(index) ? (
           <text key={point.label} className="chart-axis-label" x={xFor(index, data.length)} y={SVG_HEIGHT - 13} textAnchor="middle">
-            {point.label}
+            {formatDateLabel(point.label, timeframe, locale)}
           </text>
         ) : null,
       )}
@@ -110,7 +127,7 @@ function SingleLineChart({ data }: { data: NetWorthPoint[] }) {
   );
 }
 
-function IncomeExpenseChart({ data, timeframe }: { data: TrendPoint[]; timeframe: Timeframe }) {
+function IncomeExpenseChart({ data, timeframe, locale, currency }: { data: TrendPoint[]; timeframe: Timeframe; locale: "en" | "ru"; currency: Currency }) {
   const values = data.flatMap((point) => [point.income, point.expenses]);
   const { min, max } = getRange(values);
   const labels = labelIndexes(data.length);
@@ -136,7 +153,7 @@ function IncomeExpenseChart({ data, timeframe }: { data: TrendPoint[]; timeframe
         {data.map((point, index) =>
           labels.has(index) ? (
             <text key={point.label} className="chart-axis-label" x={xFor(index, data.length)} y={SVG_HEIGHT - 13} textAnchor="middle">
-              {point.label}
+                {formatDateLabel(point.label, timeframe, locale)}
             </text>
           ) : null,
         )}
@@ -164,15 +181,19 @@ function IncomeExpenseChart({ data, timeframe }: { data: TrendPoint[]; timeframe
         const zeroY = yFor(0, min, max);
         return (
           <g key={`${point.label}-${index}`}>
-            <rect className="chart-bar chart-bar-income" x={x - barWidth - 1} y={incomeY} width={barWidth} height={Math.max(2, zeroY - incomeY)} rx={5} />
-            <rect className="chart-bar chart-bar-expense" x={x + 1} y={expensesY} width={barWidth} height={Math.max(2, zeroY - expensesY)} rx={5} />
+            <rect className="chart-bar chart-bar-income" x={x - barWidth - 1} y={incomeY} width={barWidth} height={Math.max(2, zeroY - incomeY)} rx={5}>
+              <title>{`${formatDateLabel(point.label, timeframe, locale)} · ${formatMoney(point.income, currency)}`}</title>
+            </rect>
+            <rect className="chart-bar chart-bar-expense" x={x + 1} y={expensesY} width={barWidth} height={Math.max(2, zeroY - expensesY)} rx={5}>
+              <title>{`${formatDateLabel(point.label, timeframe, locale)} · ${formatMoney(point.expenses, currency)}`}</title>
+            </rect>
           </g>
         );
       })}
       {data.map((point, index) =>
         labels.has(index) ? (
           <text key={point.label} className="chart-axis-label" x={xFor(index, data.length)} y={SVG_HEIGHT - 13} textAnchor="middle">
-            {point.label}
+            {formatDateLabel(point.label, timeframe, locale)}
           </text>
         ) : null,
       )}
@@ -180,7 +201,7 @@ function IncomeExpenseChart({ data, timeframe }: { data: TrendPoint[]; timeframe
   );
 }
 
-function DonutChart({ data }: { data: CategoryPoint[] }) {
+function DonutChart({ data, currency }: { data: CategoryPoint[]; currency: Currency }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   const radius = 82;
   const circumference = 2 * Math.PI * radius;
@@ -209,6 +230,8 @@ function DonutChart({ data }: { data: CategoryPoint[] }) {
           </circle>
         );
       })}
+      <text className="chart-donut-label" x="150" y="142" textAnchor="middle">{formatMoney(total, currency)}</text>
+      <text className="chart-donut-caption" x="150" y="166" textAnchor="middle">100%</text>
     </svg>
   );
 }
@@ -220,7 +243,7 @@ export const DashboardCharts = memo(function DashboardCharts({
   timeframe,
   currency,
 }: DashboardChartsProps) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const localizedCategories = useMemo(
     () =>
       byCategory.map((category) => ({
@@ -234,23 +257,39 @@ export const DashboardCharts = memo(function DashboardCharts({
     <>
       <Card className="span-6" title={t("section.portfolioNetWorth")}>
         <div className="chart chart-tall" aria-label={`${currency} ${t("section.portfolioNetWorth")}`}>
-          <SingleLineChart data={netWorthTrend} />
+          <SingleLineChart data={netWorthTrend} timeframe={timeframe} locale={locale} currency={currency} />
         </div>
       </Card>
 
       <Card className="span-6" title={t("section.incomeVsExpenses")}>
-        <div className="chart chart-tall" aria-label={`${currency} ${t("section.incomeVsExpenses")}`}>
-          <IncomeExpenseChart data={trend} timeframe={timeframe} />
-        </div>
+        {trend.some((point) => point.income !== 0 || point.expenses !== 0) ? (
+          <div className="chart chart-tall" aria-label={`${currency} ${t("section.incomeVsExpenses")}`}>
+            <IncomeExpenseChart data={trend} timeframe={timeframe} locale={locale} currency={currency} />
+          </div>
+        ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noTransactions")} />}
       </Card>
 
-      <Card className="span-6" title={t("section.expensesByCategory")}>
+      <Card className="span-5" title={t("section.expensesByCategory")}>
         {localizedCategories.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noExpenses")} />
         ) : (
-          <div className="chart chart-tall" aria-label={`${currency} ${t("section.expensesByCategory")}`}>
-            <DonutChart data={localizedCategories} />
-          </div>
+          <Flex className="category-breakdown" align="center" gap={20}>
+            <div className="chart category-donut" aria-label={`${currency} ${t("section.expensesByCategory")}`}>
+              <DonutChart data={localizedCategories} currency={currency} />
+            </div>
+            <Flex className="category-legend" vertical gap={10}>
+              {localizedCategories.map((category) => {
+                const total = localizedCategories.reduce((sum, item) => sum + item.value, 0);
+                return <Flex key={category.id} align="center" gap={8} justify="space-between">
+                  <Flex align="center" gap={8} className="category-legend-name">
+                    <span className="category-legend-dot" style={{ background: category.fill }} />
+                    <Text ellipsis={{ tooltip: category.name }}>{category.name}</Text>
+                  </Flex>
+                  <Text className="category-legend-value">{formatMoney(category.value, currency)} · {Math.round(category.value / total * 100)}%</Text>
+                </Flex>;
+              })}
+            </Flex>
+          </Flex>
         )}
       </Card>
     </>

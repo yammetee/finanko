@@ -73,18 +73,18 @@ export interface FinanceState {
   setTimeframe: (timeframe: Timeframe) => void;
   setTransactionFilter: (filter: TransactionFilter) => void;
   setCurrencyDisplay: (currencyDisplay: CurrencyDisplayMode) => void;
-  addPortfolio: (name: string, baseCurrency: Currency) => void;
-  deletePortfolio: (id: string) => void;
-  addAccount: (input: NewAccountInput) => void;
-  updateAccount: (id: string, input: NewAccountInput) => void;
-  archiveAccount: (id: string) => void;
-  repairAccountCurrencies: () => void;
-  addCategory: (input: NewCategoryInput) => void;
-  addTransaction: (input: NewTransactionInput) => void;
-  updateTransaction: (id: string, input: NewTransactionInput) => void;
-  deleteTransaction: (id: string) => void;
-  generateDueRecurring: () => void;
-  resetFinanceData: () => void;
+  addPortfolio: (name: string, baseCurrency: Currency) => Promise<void>;
+  renamePortfolio: (id: string, name: string) => Promise<void>;
+  deletePortfolio: (id: string) => Promise<void>;
+  addAccount: (input: NewAccountInput) => Promise<void>;
+  updateAccount: (id: string, input: NewAccountInput) => Promise<void>;
+  archiveAccount: (id: string) => Promise<void>;
+  addCategory: (input: NewCategoryInput) => Promise<void>;
+  addTransaction: (input: NewTransactionInput) => Promise<void>;
+  updateTransaction: (id: string, input: NewTransactionInput) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
+  generateDueRecurring: () => Promise<void>;
+  resetFinanceData: () => Promise<void>;
 }
 
 export interface FinanceSnapshot {

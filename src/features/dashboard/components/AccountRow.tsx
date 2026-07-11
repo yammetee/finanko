@@ -28,6 +28,7 @@ export function AccountRow({
   onArchive,
 }: AccountRowProps) {
   const { t } = useI18n();
+  const accountName = getAccountName(account, t);
   const allocationAccount = accounts.find(
     (candidate) => candidate.id === account.interestAllocationAccountId,
   );
@@ -63,7 +64,7 @@ export function AccountRow({
             }}
           />
           <span className="account-row-title-stack">
-            <Text>{getAccountName(account, t)}</Text>
+            <Text title={accountName}>{accountName}</Text>
             {interestText ? <Text className="account-interest-text">{interestText}</Text> : null}
           </span>
         </Space>

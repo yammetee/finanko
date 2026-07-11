@@ -13,9 +13,10 @@ export interface PortfolioFormValues {
 interface PortfolioFormProps {
   form: ReturnType<typeof Form.useForm<PortfolioFormValues>>[0];
   onFinish: (values: PortfolioFormValues) => void;
+  editing?: boolean;
 }
 
-export function PortfolioForm({ form, onFinish }: PortfolioFormProps) {
+export function PortfolioForm({ form, onFinish, editing = false }: PortfolioFormProps) {
   const { t } = useI18n();
 
   return (
@@ -23,11 +24,11 @@ export function PortfolioForm({ form, onFinish }: PortfolioFormProps) {
       <Form.Item name="name" label={t("form.name")} rules={[{ required: true }]}>
         <Input placeholder={t("placeholder.portfolioName")} />
       </Form.Item>
-      <Form.Item name="baseCurrency" label={t("form.baseCurrency")} initialValue="USD">
+      <Form.Item name="baseCurrency" label={t("form.baseCurrency")} initialValue="USD" hidden={editing}>
         <CurrencySelect />
       </Form.Item>
       <Button type="primary" htmlType="submit" block>
-        {t("actions.createPortfolio")}
+        {t(editing ? "actions.renamePortfolio" : "actions.createPortfolio")}
       </Button>
     </Form>
   );

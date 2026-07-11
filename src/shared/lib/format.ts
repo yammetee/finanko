@@ -4,6 +4,7 @@ export function formatMoney(amount: number, currency: Currency) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
+    currencyDisplay: "narrowSymbol",
     maximumFractionDigits: 0,
   }).format(amount);
 }

@@ -1,4 +1,5 @@
 import type { Category, Currency } from "../../shared/types/finance";
+import { getSupabaseClient } from "../../shared/api/supabase";
 import {
   detectAmountInText,
   detectCurrencyInText,
@@ -25,15 +26,11 @@ interface ParseReceiptInput {
 
 async function requestAiParser<T>(payload: unknown): Promise<T | null> {
   try {
-    const response = await fetch("/api/ai/parse", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      return null;
-    }
-    return (await response.json()) as T;
+    const supabase = await getSupabaseClient();
+    const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+    if (!session) return null;
+    const response = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ kind: "parse", payload }) });
+    return response.ok ? await response.json() as T : null;
   } catch {
     return null;
   }
