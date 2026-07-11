@@ -33,6 +33,7 @@ import {
 import { CURRENCIES, TIMEFRAME_OPTIONS } from "../../shared/constants/finance";
 import { MetricCard } from "./components/MetricCard";
 import { AccountsPanel } from "./components/AccountsPanel";
+import { DashboardCharts } from "./components/DashboardCharts";
 import { useAuthStore } from "../auth/authStore";
 import type { AccountFormValues } from "../accounts/AccountForm";
 import type { CategoryFormValues } from "../categories/CategoryForm";
@@ -74,9 +75,6 @@ const AssistantDialog = lazy(() =>
 );
 const CategoryForm = lazy(() =>
   import("../categories/CategoryForm").then((module) => ({ default: module.CategoryForm })),
-);
-const DashboardCharts = lazy(() =>
-  import("./components/DashboardCharts").then((module) => ({ default: module.DashboardCharts })),
 );
 const DeletePortfolioModal = lazy(() =>
   import("../portfolios/DeletePortfolioModal").then((module) => ({
@@ -164,26 +162,26 @@ export function FinanceDashboard() {
     };
   }, []);
 
-  const activePortfolio = state.portfolios.find(
+  const activePortfolio = useMemo(() => state.portfolios.find(
     (portfolio) => portfolio.id === state.activePortfolioId && !portfolio.deletedAt,
-  );
+  ), [state.activePortfolioId, state.portfolios]);
   const activePortfolioId = activePortfolio?.id ?? "";
-  const portfolios = state.portfolios.filter((portfolio) => !portfolio.deletedAt);
-  const portfolioAccounts = state.accounts.filter(
+  const portfolios = useMemo(() => state.portfolios.filter((portfolio) => !portfolio.deletedAt), [state.portfolios]);
+  const portfolioAccounts = useMemo(() => state.accounts.filter(
     (account) => account.portfolioId === activePortfolioId && !account.deletedAt,
-  );
-  const accounts = portfolioAccounts.filter((account) => !account.isArchived);
-  const categories = state.categories.filter(
+  ), [activePortfolioId, state.accounts]);
+  const accounts = useMemo(() => portfolioAccounts.filter((account) => !account.isArchived), [portfolioAccounts]);
+  const categories = useMemo(() => state.categories.filter(
     (category) => category.portfolioId === activePortfolioId,
-  );
-  const visibleTransactions = filterVisibleTransactions(
+  ), [activePortfolioId, state.categories]);
+  const visibleTransactions = useMemo(() => filterVisibleTransactions(
     state.transactions,
     activePortfolioId,
-  );
-  const dashboardTransactions = visibleTransactions.filter((transaction) => {
+  ), [activePortfolioId, state.transactions]);
+  const dashboardTransactions = useMemo(() => visibleTransactions.filter((transaction) => {
     if (state.transactionFilter === "all") return true;
     return transaction.type === state.transactionFilter;
-  });
+  }), [state.transactionFilter, visibleTransactions]);
   const displayCurrency = state.currencyDisplay ?? "native";
   const analyticsCurrency =
     displayCurrency === "native"
@@ -559,8 +557,7 @@ export function FinanceDashboard() {
       currency: accounts.find((account) => account.id === accountId)?.currency ?? activePortfolio?.baseCurrency ?? "USD",
       categories,
     };
-    const parsed = await parseReceiptInput(parserInput).catch(() => null);
-    if (!parsed) return false;
+    const parsed = await parseReceiptInput(parserInput);
     fillParsedTransaction({
       accountId,
       type: parsed.type ?? "expense",
@@ -578,15 +575,13 @@ export function FinanceDashboard() {
 
   const dashboardBody = activePortfolio ? (
     <main className="dashboard-grid" id="dashboard-section">
-      <Suspense fallback={<div className="dashboard-loading span-12" />}>
-        <DashboardCharts
-          trend={analytics.trend}
-          netWorthTrend={analytics.netWorthTrend}
-          byCategory={analytics.byCategory}
-          timeframe={state.timeframe}
-          currency={analyticsCurrency}
-        />
-      </Suspense>
+      <DashboardCharts
+        trend={analytics.trend}
+        netWorthTrend={analytics.netWorthTrend}
+        byCategory={analytics.byCategory}
+        timeframe={state.timeframe}
+        currency={analyticsCurrency}
+      />
 
       <Card className="span-7" title={t("section.history")} id="history-section">
         <Suspense fallback={<div className="panel-loading" />}>

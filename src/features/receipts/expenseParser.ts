@@ -125,6 +125,10 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function roundQuantity(value: number) {
+  return Math.round(value * 1000) / 1000;
+}
+
 function nearlyEqual(left: number, right: number) {
   return Math.abs(left - right) <= 0.01;
 }
@@ -136,8 +140,12 @@ function containsThaiText(value: string) {
   return thaiTextPattern.test(value);
 }
 
+function isDiscountName(name: string) {
+  return /(?:all\s*cafe|discount|coupon|promo|скид|купон|ส่วนลด|ลด|ფასდაკ)/i.test(name);
+}
+
 function isDiscountLikeItem(item: ParsedExpenseItem) {
-  return /(?:all\s*cafe|discount|coupon|promo|скид|купон|ส่วนลด|ลด)/i.test(item.name);
+  return isDiscountName(item.name);
 }
 
 function getRussianDescriptionNames(description: unknown) {
@@ -158,6 +166,17 @@ const russianItemNameFallbacks: Array<[RegExp, string]> = [
   [/\b(egg)\b/i, "Яйца"],
   [/\b(rice)\b/i, "Рис"],
   [/\b(chicken)\b/i, "Курица"],
+  [/\b(sandwich)\b/i, "Сэндвич"],
+  [/\b(burger)\b/i, "Бургер"],
+  [/\b(noodle|ramen)\b/i, "Лапша"],
+  [/\b(ice\s*cream)\b/i, "Мороженое"],
+  [/\b(yogurt|yoghurt)\b/i, "Йогурт"],
+  [/\b(chocolate)\b/i, "Шоколад"],
+  [/\b(cookie|biscuit)\b/i, "Печенье"],
+  [/\b(chips|crisps)\b/i, "Чипсы"],
+  [/\b(sausage)\b/i, "Колбаса"],
+  [/\b(salad)\b/i, "Салат"],
+  [/\b(cake)\b/i, "Торт"],
 ];
 
 function normalizeItemName(name: string) {
@@ -213,7 +232,8 @@ export function normalizeParsedExpense(
             confidence?: unknown;
           };
           if (!isNonZeroFiniteNumber(rawItem.amount)) return null;
-          const quantity = isPositiveFiniteNumber(rawItem.quantity)
+          const rawName = cleanText(rawItem.name);
+          let quantity = isPositiveFiniteNumber(rawItem.quantity)
             ? roundMoney(rawItem.quantity)
             : undefined;
           let unitPrice = isNonZeroFiniteNumber(rawItem.unitPrice)
@@ -221,9 +241,14 @@ export function normalizeParsedExpense(
             : quantity
               ? roundMoney(rawItem.amount / quantity)
               : undefined;
-          const rawAmount = roundMoney(rawItem.amount);
+          const rawAmount = roundMoney(rawItem.amount < 0 && !isDiscountName(rawName) ? Math.abs(rawItem.amount) : rawItem.amount);
+          if (unitPrice && unitPrice < 0 && !isDiscountName(rawName)) unitPrice = Math.abs(unitPrice);
           let amount = rawAmount;
           const computedAmount = quantity && unitPrice ? roundMoney(quantity * unitPrice) : undefined;
+          if (quantity && quantity >= 10 && unitPrice && Math.abs(unitPrice) < 1 && computedAmount !== undefined && nearlyEqual(rawAmount, computedAmount)) {
+            quantity = roundQuantity(quantity / 1000);
+            unitPrice = roundMoney(unitPrice * 1000);
+          }
           if (
             quantity &&
             quantity > 1 &&
@@ -240,12 +265,11 @@ export function normalizeParsedExpense(
           ) {
             amount = computedAmount;
           }
-          const rawName = cleanText(rawItem.name);
           const normalizedName = normalizeItemName(rawName || russianDescriptionNames[index] || "");
           const translatedName =
             /all\s*cafe/i.test(normalizedName)
               ? "All Cafe"
-              : containsThaiText(normalizedName)
+              : containsThaiText(rawName) || (!cyrillicTextPattern.test(rawName) && Boolean(russianDescriptionNames[index]))
               ? russianDescriptionNames[index] ?? normalizedName
               : normalizedName;
           return {

@@ -53,25 +53,3 @@ export function moneyFromDecimal(amount: number, currency: Currency): Money {
     currency,
   };
 }
-
-export function addMoney(left: Money, right: Money): Money {
-  if (left.currency !== right.currency) {
-    throw new Error(`Cannot add ${left.currency} to ${right.currency}`);
-  }
-
-  return {
-    amountMinor: left.amountMinor + right.amountMinor,
-    currency: left.currency,
-  };
-}
-
-export function negateMoney(value: Money): Money {
-  return {
-    amountMinor: -value.amountMinor,
-    currency: value.currency,
-  };
-}
-
-export function isZeroMoney(value: Money) {
-  return value.amountMinor === 0;
-}

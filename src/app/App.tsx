@@ -3,7 +3,7 @@ import { AuthGate } from "../features/auth/AuthGate";
 import { I18nProvider } from "../shared/i18n/i18n";
 
 const AuthenticatedApp = lazy(() =>
-  import("./AuthenticatedApp").then((module) => ({ default: module.AuthenticatedApp })),
+  import("./AuthenticatedApp").then(({ AuthenticatedApp }) => ({ default: AuthenticatedApp })),
 );
 
 export function App() {

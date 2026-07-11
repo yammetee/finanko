@@ -33,5 +33,16 @@ describe("assistant financial summary", () => {
     expect(summary.savingsRatePercent).toBe(50);
     expect(summary.totalAssets).toBe(1100);
     expect(summary.totalLiabilities).toBe(500);
+    expect(summary.dataQuality).toMatchObject({
+      canProject: false,
+      isSparse: true,
+      observedDays: 1,
+    });
+  });
+
+  it("marks a short history as insufficient for projections", () => {
+    const summary = buildAssistantSummary(accounts, categories, transactions, "month", "USD", items);
+    expect(summary.dataQuality.canProject).toBe(false);
+    expect(summary.accounts.map(({ name }) => name)).toEqual(["Cash", "Debt"]);
   });
 });

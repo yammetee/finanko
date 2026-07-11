@@ -1,19 +1,15 @@
 import Alert from "antd/es/alert";
-import Card from "antd/es/card";
+import Button from "antd/es/button";
 import Flex from "antd/es/flex";
 import List from "antd/es/list";
 import Modal from "antd/es/modal";
-import Select from "antd/es/select";
 import Skeleton from "antd/es/skeleton";
 import Tag from "antd/es/tag";
-import Tabs from "antd/es/tabs";
 import Typography from "antd/es/typography";
-import { useEffect, useState } from "react";
-import { getCategoryNameById } from "../../shared/i18n/displayText";
+import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
-import { formatMoney } from "../../shared/lib/format";
-import { ASSISTANT_ACTIONS, type AssistantActionId, type AssistantResponse, type AssistantSummary } from "./assistantSummary";
-import { getAssistantFallbackResponse, getAssistantResponse } from "./assistantAi";
+import { type AssistantResponse, type AssistantSummary } from "./assistantSummary";
+import { getAssistantResponse } from "./assistantAi";
 
 const { Paragraph, Text, Title } = Typography;
 const toneColors = { positive: "success", warning: "warning", critical: "error", neutral: "default" } as const;
@@ -26,21 +22,25 @@ interface AssistantDialogProps {
 
 export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps) {
   const { locale, t } = useI18n();
-  const [activeAction, setActiveAction] = useState<AssistantActionId>("portfolio_overview");
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>();
-  const [response, setResponse] = useState<AssistantResponse>(() => getAssistantFallbackResponse("portfolio_overview", summary, locale));
+  const [response, setResponse] = useState<AssistantResponse | null>(null);
+  const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const runAnalysis = useCallback(() => {
+    let active = true;
+    setError(false);
+    setLoading(true);
+    void getAssistantResponse({ summary, locale })
+      .then((result) => { if (active) setResponse(result); })
+      .catch(() => { if (active) setError(true); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [locale, summary]);
 
   useEffect(() => {
     if (!open) return;
-    let active = true;
-    setResponse(getAssistantFallbackResponse(activeAction, summary, locale, selectedCategoryId));
-    setLoading(true);
-    void getAssistantResponse({ actionId: activeAction, summary, selectedCategoryId: selectedCategoryId ?? summary.topCategories[0]?.id, locale })
-      .then((result) => { if (active && result) setResponse(result); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [activeAction, locale, open, selectedCategoryId, summary]);
+    return runAnalysis();
+  }, [open, runAnalysis]);
 
   return (
     <Modal
@@ -53,61 +53,52 @@ export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps
       width={760}
       onCancel={onClose}
     >
-      <Flex vertical gap={16}>
-        <Tabs
-          activeKey={activeAction}
-          items={ASSISTANT_ACTIONS.map((action) => ({ key: action.id, label: t(action.label) }))}
-          onChange={(value) => setActiveAction(value as AssistantActionId)}
-        />
-
-        {activeAction === "category_spending" ? (
-          <Select
-            aria-label={t("assistant.category")}
-            placeholder={t("assistant.category")}
-            value={selectedCategoryId ?? summary.topCategories[0]?.id}
-            options={summary.topCategories.map((category) => ({
-              value: category.id,
-              label: `${getCategoryNameById(category.id, category.name, t)} · ${formatMoney(category.amount, summary.currency)} · ${Math.round(category.sharePercent)}%`,
-            }))}
-            onChange={setSelectedCategoryId}
+      <Flex className="assistant-content" vertical gap={20}>
+        {loading ? <Skeleton active paragraph={{ rows: 4 }} /> : error || !response ? (
+          <Alert
+            action={<Button onClick={runAnalysis}>{t("actions.retry")}</Button>}
+            message={t("assistant.requestFailed")}
+            showIcon
+            type="error"
           />
-        ) : null}
-
-        {loading ? <Skeleton active paragraph={{ rows: 4 }} /> : (
+        ) : (
           <>
-            <div>
-              <Title level={4}>{response.headline}</Title>
-              <Paragraph className="assistant-summary">{response.summary}</Paragraph>
+            <div className="assistant-verdict">
+              <Text className="assistant-eyebrow">{t("assistant.currentSituation")}</Text>
+              <Title level={3}>{response.verdict}</Title>
+              <Paragraph className="assistant-summary">{response.diagnosis}</Paragraph>
             </div>
 
-            {response.insights.length ? (
-              <div className="assistant-insight-grid">
-                {response.insights.map((insight) => (
-                  <Card key={`${insight.label}-${insight.value}`} size="small">
-                    <Flex align="center" justify="space-between" gap={8}>
-                      <Text type="secondary">{insight.label}</Text>
-                      <Tag color={toneColors[insight.tone]}>{insight.value}</Tag>
-                    </Flex>
-                    <Paragraph className="assistant-insight-detail">{insight.detail}</Paragraph>
-                  </Card>
-                ))}
-              </div>
-            ) : null}
-
-            {response.scenarios.length ? (
+            {response.recommendations.length ? (
+              <section>
+                <Title level={5}>{t("assistant.actionPlan")}</Title>
               <List
-                className="assistant-scenarios"
-                header={<Text strong>{t("assistant.scenarios")}</Text>}
-                dataSource={response.scenarios}
-                renderItem={(scenario) => (
+                className="assistant-plan"
+                dataSource={response.recommendations}
+                renderItem={(recommendation) => (
                   <List.Item>
-                    <List.Item.Meta title={scenario.title} description={`${scenario.impact} · ${scenario.tradeoff}`} />
+                    <div className="assistant-plan-item">
+                      <span className="assistant-priority">{recommendation.priority}</span>
+                      <div>
+                        <Flex align="center" gap={8} wrap>
+                          <Text strong>{recommendation.title}</Text>
+                          <Tag color={toneColors[recommendation.tone]}>{recommendation.target}</Tag>
+                        </Flex>
+                        <Paragraph>{recommendation.action}</Paragraph>
+                        <Text type="secondary">{recommendation.rationale}</Text>
+                      </div>
+                    </div>
                   </List.Item>
                 )}
               />
+              </section>
             ) : null}
 
-            {response.caveats.map((caveat) => <Alert key={caveat} message={caveat} type="info" showIcon />)}
+            <Alert message={response.nextReview} type="info" showIcon />
+            <Flex align="center" justify="space-between" gap={12} wrap>
+              <Text className="assistant-disclaimer" type="secondary">{response.disclaimer}</Text>
+              <Button loading={loading} onClick={runAnalysis}>{t("assistant.refresh")}</Button>
+            </Flex>
           </>
         )}
       </Flex>

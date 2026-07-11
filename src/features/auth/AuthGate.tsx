@@ -64,7 +64,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (loading || (currentUser && !financeReady)) {
     return (
-      <div className="auth-screen">
+      <div className="auth-screen auth-loading-screen">
         <div className="auth-loader" />
       </div>
     );

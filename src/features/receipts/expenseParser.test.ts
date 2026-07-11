@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Category } from "../../shared/types/finance";
+import { buildReceiptAiPayload } from "./aiParser";
 import { normalizeParsedExpense, parseTextInputLocally } from "./expenseParser";
 
 const categories: Category[] = [
@@ -13,6 +14,12 @@ const categories: Category[] = [
 ];
 
 describe("normalizeParsedExpense", () => {
+  it("sends account currency only as a receipt fallback", () => {
+    const payload = buildReceiptAiPayload({ fileName: "thai-receipt.jpg", currency: "GEL", categories });
+    expect(payload).toMatchObject({ fallbackCurrency: "GEL" });
+    expect(payload).not.toHaveProperty("currency");
+  });
+
   it("rejects empty AI transaction payloads", () => {
     expect(
       normalizeParsedExpense(
@@ -30,6 +37,46 @@ describe("normalizeParsedExpense", () => {
         },
       ),
     ).toBeNull();
+  });
+
+  it("rejects an incomplete legacy receipt response instead of creating a wrong transaction", () => {
+    expect(normalizeParsedExpense(
+      { fileName: "thai-receipt.jpg", currency: "GEL", categories },
+      {
+        kind: "receipt",
+        description: "CP ALL 7-Eleven",
+        currency: "GEL",
+        total: 9,
+        items: [{ name: "Сигареты Cafe", amount: 9, quantity: 1, unitPrice: 9, categoryId: "Food", confidence: 0.32 }],
+      },
+    )).toBeNull();
+  });
+
+  it("repairs a false negative sign and converts Georgian receipt gram weights to kilograms", () => {
+    const parsed = normalizeParsedExpense(
+      { fileName: "georgian-receipt.jpg", currency: "GEL", categories },
+      {
+        kind: "transaction",
+        description: "Покупки в магазине",
+        currency: "GEL",
+        total: 55.21,
+        items: [
+          { name: "Товар", amount: -1.25, quantity: 1, unitPrice: -1.25, categoryId: "Other", confidence: 0.6 },
+          { name: "Весовой товар", amount: 1.27, quantity: 98, unitPrice: 0.0129591837, categoryId: "Other", confidence: 0.5 },
+          { name: "Куриное филе", amount: 15.44, quantity: 336, unitPrice: 0.045952381, categoryId: "Other", confidence: 0.5 },
+          { name: "Баклажанный рулет", amount: 3.83, quantity: 120, unitPrice: 0.0319166667, categoryId: "Other", confidence: 0.5 },
+          { name: "Овощной салат", amount: 2.15, quantity: 108, unitPrice: 0.0199074074, categoryId: "Other", confidence: 0.5 },
+          { name: "Куриная колбаса", amount: 2.18, quantity: 118, unitPrice: 0.0184745763, categoryId: "Other", confidence: 0.5 },
+          { name: "Карнавали", amount: 2.99, quantity: 1, unitPrice: 2.99, categoryId: "Other", confidence: 0.5 },
+          { name: "Биоразлагаемый пакет", amount: 0.2, quantity: 1, unitPrice: 0.2, categoryId: "Other", confidence: 0.5 },
+          { name: "Салат Цезарь", amount: 25.9, quantity: 2, unitPrice: 12.95, categoryId: "Other", confidence: 0.5 },
+        ],
+      },
+    );
+
+    expect(parsed?.total).toBe(55.21);
+    expect(parsed?.items[0]).toMatchObject({ amount: 1.25, unitPrice: 1.25 });
+    expect(parsed?.items[2]).toMatchObject({ quantity: 0.336, unitPrice: 45.95, amount: 15.44 });
   });
 
   it("rejects receipt totals without line items", () => {
@@ -117,7 +164,7 @@ describe("normalizeParsedExpense", () => {
       currency: "THB",
       total: 357,
       items: [
-        { name: "sandwich", quantity: 1, unitPrice: 52, amount: 52 },
+        { name: "Сэндвич", quantity: 1, unitPrice: 52, amount: 52 },
         { name: "Напитки", quantity: 1, unitPrice: 314, amount: 314 },
         { name: "Скидка/корректировка", quantity: 1, unitPrice: -9, amount: -9 },
       ],
@@ -152,6 +199,23 @@ describe("normalizeParsedExpense", () => {
         { name: "напиток", amount: 49 },
       ],
     });
+  });
+
+  it("replaces untranslated English receipt rows with aligned Russian description names", () => {
+    const parsed = normalizeParsedExpense(
+      { fileName: "receipt.jpg", currency: "USD", categories },
+      {
+        kind: "transaction",
+        description: "Молочный напиток, ореховый батончик",
+        currency: "USD",
+        total: 10,
+        items: [
+          { name: "Meiji milk drink", amount: 6, quantity: 1, unitPrice: 6, categoryId: "Food", confidence: 0.8 },
+          { name: "Brand X nut bar", amount: 4, quantity: 1, unitPrice: 4, categoryId: "Food", confidence: 0.7 },
+        ],
+      },
+    );
+    expect(parsed?.items.map((item) => item.name)).toEqual(["Молочный напиток", "ореховый батончик"]);
   });
 
   it("does not use Thai receipt savings amount as total and infers THB from All Cafe", () => {
@@ -358,6 +422,20 @@ describe("normalizeParsedExpense", () => {
       currency: "GEL",
       total: 25,
       items: [{ name: "обед", amount: 25 }],
+    });
+  });
+
+  it("parses multiple priced text items and sums them deterministically", () => {
+    const parsed = parseTextInputLocally({
+      text: "кофе 5, продукты 40 лари",
+      currency: "USD",
+      categories,
+    });
+    expect(parsed).toMatchObject({
+      kind: "transaction",
+      currency: "GEL",
+      total: 45,
+      items: [{ name: "кофе", amount: 5 }, { name: "продукты", amount: 40 }],
     });
   });
 

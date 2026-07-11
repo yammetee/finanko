@@ -4,8 +4,16 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api/ai": {
+        target: "https://finanko.vercel.app",
+        changeOrigin: true,
+        secure: true,
+      },
+    },
+  },
   build: {
-    modulePreload: false,
     rollupOptions: {
       output: {
         manualChunks(id) {

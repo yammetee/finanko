@@ -27,11 +27,13 @@ The app is web-first, with architecture kept friendly for a future Tauri wrapper
 
 All financial records live in normalized Supabase tables (`portfolios`, `accounts`, `categories`, `transactions`, `transaction_items`, and `recurring_rules`). Zustand is only an in-memory view cache and is never used for persistence.
 
-Apply [supabase/schema.sql](./supabase/schema.sql) before running the app. It creates constraints, indexes, explicit Data API grants, and owner-scoped RLS policies. If the former `finance_snapshots` table exists, the script migrates its records and removes the legacy table.
+Apply [supabase/schema.sql](./supabase/schema.sql) before running the app. It creates constraints, indexes, explicit Data API grants, and owner-scoped RLS policies.
 
 Currency conversion loads live rates directly from `https://open.er-api.com/v6/latest/USD`. The bundled rates file is only a fallback when the live API is unavailable.
 
 AI parser and assistant features run in the authenticated Vercel Function at [api/ai.ts](./api/ai.ts). Keep `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and `OPENAI_MODEL` in Vercel Environment Variables. The browser sends the current Supabase access token, and the function validates it before making a paid AI request. Text parsing keeps a deterministic fallback; receipt parsing fails explicitly when recognition is unreliable.
+
+During local development, Vite proxies `/api/ai` to the deployed Vercel function. No AI handler or secret runs in the local browser.
 
 ## Documentation
 

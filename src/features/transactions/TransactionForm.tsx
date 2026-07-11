@@ -140,6 +140,8 @@ export function TransactionForm({
         ? "receipt.fileTooLarge"
         : code === "unsupported_file" || code === "unsupported_image"
           ? "receipt.unsupported"
+          : code === "receipt_incomplete"
+            ? "receipt.incomplete"
           : "receipt.parseError";
       setReceiptError(t(key));
     } finally {
