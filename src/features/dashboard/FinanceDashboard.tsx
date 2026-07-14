@@ -630,7 +630,7 @@ export function FinanceDashboard() {
         assistantSummary={assistantSummary}
       />
 
-      <Card className="span-7" title={t("section.history")} id="history-section">
+      <Card className="dashboard-history-card" title={t("section.history")} id="history-section">
         <Suspense fallback={<div className="panel-loading" />}>
           <TransactionHistory
             transactions={dashboardTransactions}
@@ -657,7 +657,7 @@ export function FinanceDashboard() {
   return (
     <>
       <Layout className="app-shell">
-        <Sider width={368} className="app-sider">
+        <Sider width={320} className="app-sider">
           <div className="brand">
             <span className="brand-mark">F</span>
             <span className="brand-name">Finanko</span>

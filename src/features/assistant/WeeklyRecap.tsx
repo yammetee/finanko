@@ -43,10 +43,13 @@ export function WeeklyRecap({ portfolioId, summary }: { portfolioId: string; sum
   return <section className="weekly-recap">
     <Sparkles size={18} className="weekly-recap-icon" />
     {loading ? <Skeleton active paragraph={{ rows: 2 }} /> : recap ? <div className="weekly-recap-body">
-      <Text className="assistant-section-label">{t("assistant.weeklyRecap")}</Text><Title level={4}>{recap.headline}</Title><Paragraph>{recap.summary}</Paragraph>
-      <div className="weekly-recap-highlights">{recap.highlights.map((item) => <div key={`${item.label}-${item.value}`} className={`is-${item.tone}`}><Text type="secondary">{item.label}</Text><Text strong>{item.value}</Text></div>)}</div>
-      <Text className="weekly-recap-focus"><span>{t("assistant.weeklyFocus")}</span> {recap.focus}</Text>
-      <div className="weekly-recap-feedback"><Button type="text" className={feedback === "up" ? "is-active" : ""} aria-label={t("assistant.helpful")} icon={<ThumbsUp size={14} />} onClick={() => setFeedback("up")} /><Button type="text" className={feedback === "down" ? "is-active" : ""} aria-label={t("assistant.notHelpful")} icon={<ThumbsDown size={14} />} onClick={() => setFeedback("down")} /></div>
+      <div className="weekly-recap-heading"><Text className="assistant-section-label">{t("assistant.weeklyRecap")}</Text><Title level={4}>{recap.headline}</Title></div>
+      <Paragraph>{recap.summary}</Paragraph>
+      <div className="weekly-recap-details">
+        <div className="weekly-recap-highlights">{recap.highlights.map((item) => <div key={`${item.label}-${item.value}`} className={`is-${item.tone}`}><Text type="secondary">{item.label}</Text><Text strong>{item.value}</Text></div>)}</div>
+        <Text className="weekly-recap-focus"><span>{t("assistant.weeklyFocus")}</span> {recap.focus}</Text>
+        <div className="weekly-recap-feedback"><Button type="text" className={feedback === "up" ? "is-active" : ""} aria-label={t("assistant.helpful")} icon={<ThumbsUp size={14} />} onClick={() => setFeedback("up")} /><Button type="text" className={feedback === "down" ? "is-active" : ""} aria-label={t("assistant.notHelpful")} icon={<ThumbsDown size={14} />} onClick={() => setFeedback("down")} /></div>
+      </div>
     </div> : null}
     <Button type="text" className="weekly-recap-close" aria-label={t("actions.dismiss")} icon={<X size={16} />} onClick={dismiss} />
   </section>;

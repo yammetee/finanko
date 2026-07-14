@@ -1,8 +1,9 @@
 import Card from "antd/es/card";
 import Empty from "antd/es/empty";
 import Flex from "antd/es/flex";
+import Tabs from "antd/es/tabs";
 import Typography from "antd/es/typography";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { getCategoryNameById } from "../../../shared/i18n/displayText";
 import { useI18n } from "../../../shared/i18n/i18nContext";
 import { formatMoney } from "../../../shared/lib/format";
@@ -37,8 +38,10 @@ interface DashboardChartsProps {
   assistantSummary: AssistantSummary;
 }
 
+type DashboardChartKey = "net_worth" | "cash_flow" | "categories";
+
 const SVG_WIDTH = 640;
-const SVG_HEIGHT = 360;
+const SVG_HEIGHT = 600;
 const PADDING = { top: 12, right: 12, bottom: 42, left: 58 };
 const INNER_WIDTH = SVG_WIDTH - PADDING.left - PADDING.right;
 const INNER_HEIGHT = SVG_HEIGHT - PADDING.top - PADDING.bottom;
@@ -101,7 +104,7 @@ function SingleLineChart({ data, timeframe, locale, currency }: { data: NetWorth
   const labels = labelIndexes(data.length);
 
   return (
-    <svg className="chart-svg" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} role="img">
+    <svg className="chart-svg" preserveAspectRatio="none" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} role="img">
       {gridLines(min, max).map((value) => {
         const y = yFor(value, min, max);
         return (
@@ -139,7 +142,7 @@ function IncomeExpenseChart({ data, timeframe, locale, currency }: { data: Trend
 
   if (timeframe === "all") {
     return (
-      <svg className="chart-svg" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} role="img">
+      <svg className="chart-svg" preserveAspectRatio="none" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} role="img">
         {gridLines(min, max).map((value) => {
           const y = yFor(value, min, max);
           return (
@@ -165,7 +168,7 @@ function IncomeExpenseChart({ data, timeframe, locale, currency }: { data: Trend
   }
 
   return (
-    <svg className="chart-svg" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} role="img">
+    <svg className="chart-svg" preserveAspectRatio="none" viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} role="img">
       {gridLines(min, max).map((value) => {
         const y = yFor(value, min, max);
         return (
@@ -206,7 +209,7 @@ function IncomeExpenseChart({ data, timeframe, locale, currency }: { data: Trend
 
 function DonutChart({ data, currency }: { data: CategoryPoint[]; currency: Currency }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
-  const radius = 82;
+  const radius = 96;
   const circumference = 2 * Math.PI * radius;
   let offset = 0;
 
@@ -248,6 +251,7 @@ export const DashboardCharts = memo(function DashboardCharts({
   assistantSummary,
 }: DashboardChartsProps) {
   const { locale, t } = useI18n();
+  const [activeChart, setActiveChart] = useState<DashboardChartKey>("net_worth");
   const localizedCategories = useMemo(
     () =>
       byCategory.map((category) => ({
@@ -257,45 +261,71 @@ export const DashboardCharts = memo(function DashboardCharts({
     [byCategory, t],
   );
 
-  return (
-    <>
-      <Card className="span-6" title={t("section.portfolioNetWorth")} extra={<ContextInsightButton context="net_worth" summary={assistantSummary} />}>
-        <div className="chart chart-tall" aria-label={`${currency} ${t("section.portfolioNetWorth")}`}>
-          <SingleLineChart data={netWorthTrend} timeframe={timeframe} locale={locale} currency={currency} />
-        </div>
-      </Card>
-
-      <Card className="span-6" title={t("section.incomeVsExpenses")} extra={<ContextInsightButton context="cash_flow" summary={assistantSummary} />}>
-        {trend.some((point) => point.income !== 0 || point.expenses !== 0) ? (
-          <div className="chart chart-tall" aria-label={`${currency} ${t("section.incomeVsExpenses")}`}>
-            <IncomeExpenseChart data={trend} timeframe={timeframe} locale={locale} currency={currency} />
+  const chartTabs = [
+    {
+      key: "net_worth",
+      label: t("section.portfolioNetWorthShort"),
+      children: (
+        <div className="dashboard-chart-view">
+          <div className="chart chart-tall" aria-label={`${currency} ${t("section.portfolioNetWorth")}`}>
+            <SingleLineChart data={netWorthTrend} timeframe={timeframe} locale={locale} currency={currency} />
           </div>
-        ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noTransactions")} />}
-      </Card>
-
-      <Card className="span-5" title={t("section.expensesByCategory")} extra={<ContextInsightButton context="categories" summary={assistantSummary} />}>
-        {localizedCategories.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noExpenses")} />
-        ) : (
-          <Flex className="category-breakdown" align="center" gap={20}>
-            <div className="chart category-donut" aria-label={`${currency} ${t("section.expensesByCategory")}`}>
-              <DonutChart data={localizedCategories} currency={currency} />
+        </div>
+      ),
+    },
+    {
+      key: "cash_flow",
+      label: t("section.incomeVsExpensesShort"),
+      children: (
+        <div className="dashboard-chart-view">
+          {trend.some((point) => point.income !== 0 || point.expenses !== 0) ? (
+            <div className="chart chart-tall" aria-label={`${currency} ${t("section.incomeVsExpenses")}`}>
+              <IncomeExpenseChart data={trend} timeframe={timeframe} locale={locale} currency={currency} />
             </div>
-            <Flex className="category-legend" vertical gap={10}>
-              {localizedCategories.map((category) => {
-                const total = localizedCategories.reduce((sum, item) => sum + item.value, 0);
-                return <Flex key={category.id} align="center" gap={8} justify="space-between">
-                  <Flex align="center" gap={8} className="category-legend-name">
-                    <span className="category-legend-dot" style={{ background: category.fill }} />
-                    <Text ellipsis={{ tooltip: category.name }}>{category.name}</Text>
-                  </Flex>
-                  <Text className="category-legend-value">{formatMoney(category.value, currency)} · {Math.round(category.value / total * 100)}%</Text>
-                </Flex>;
-              })}
+          ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noTransactions")} />}
+        </div>
+      ),
+    },
+    {
+      key: "categories",
+      label: t("section.expensesByCategoryShort"),
+      children: (
+        <div className="dashboard-chart-view">
+          {localizedCategories.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noExpenses")} />
+          ) : (
+            <Flex className="category-breakdown" align="center" gap={20}>
+              <div className="chart category-donut" aria-label={`${currency} ${t("section.expensesByCategory")}`}>
+                <DonutChart data={localizedCategories} currency={currency} />
+              </div>
+              <Flex className="category-legend" vertical gap={10}>
+                {localizedCategories.map((category) => {
+                  const total = localizedCategories.reduce((sum, item) => sum + item.value, 0);
+                  return <Flex key={category.id} align="center" gap={8} justify="space-between">
+                    <Flex align="center" gap={8} className="category-legend-name">
+                      <span className="category-legend-dot" style={{ background: category.fill }} />
+                      <Text ellipsis={{ tooltip: category.name }}>{category.name}</Text>
+                    </Flex>
+                    <Text className="category-legend-value">{formatMoney(category.value, currency)} · {Math.round(category.value / total * 100)}%</Text>
+                  </Flex>;
+                })}
+              </Flex>
             </Flex>
-          </Flex>
-        )}
-      </Card>
-    </>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <Card className="dashboard-chart-card">
+      <Tabs
+        activeKey={activeChart}
+        className="dashboard-chart-tabs"
+        items={chartTabs}
+        onChange={(key) => setActiveChart(key as DashboardChartKey)}
+        tabBarExtraContent={<ContextInsightButton context={activeChart} summary={assistantSummary} />}
+      />
+    </Card>
   );
 });

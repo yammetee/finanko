@@ -4,7 +4,7 @@ import Table from "antd/es/table";
 import Tag from "antd/es/tag";
 import Tooltip from "antd/es/tooltip";
 import { Pencil, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getTransactionDescription } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { convertMoney } from "../../shared/lib/currency";
@@ -25,6 +25,15 @@ export function TransactionHistory({
   onDelete,
 }: TransactionHistoryProps) {
   const { t } = useI18n();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 560px)").matches);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 560px)");
+    const update = () => setIsMobile(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
   const visibleTransactions = useMemo(() => {
     return [...transactions].sort(
       (a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt),
@@ -37,7 +46,7 @@ export function TransactionHistory({
         className="history-table"
         size="small"
         rowKey="id"
-        pagination={{ pageSize: 6, size: "small", showSizeChanger: false }}
+        pagination={{ pageSize: isMobile ? 8 : 12, size: "small", showSizeChanger: false }}
         locale={{ emptyText: t("empty.noTransactions") }}
         dataSource={visibleTransactions}
         columns={[
@@ -45,7 +54,7 @@ export function TransactionHistory({
             title: t("table.date"),
             dataIndex: "occurredAt",
             className: "history-date-cell",
-            width: 72,
+            width: isMobile ? 62 : 72,
             render: (value: string) => shortDate(value),
           },
           {
@@ -67,7 +76,7 @@ export function TransactionHistory({
           {
             title: t("table.amount"),
             className: "history-amount-cell",
-            width: 128,
+            width: isMobile ? 96 : 128,
             render: (_, row) => {
               const currency = displayCurrency === "native" ? row.currency : displayCurrency;
               const amount =
@@ -87,7 +96,7 @@ export function TransactionHistory({
           {
             title: "",
             className: "history-actions-cell",
-            width: 76,
+            width: isMobile ? 64 : 76,
             render: (_, row) => (
               <Space className="row-actions" size={4}>
                 <Tooltip title={t("actions.edit")}>

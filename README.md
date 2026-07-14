@@ -39,4 +39,5 @@ During local development, Vite serves `/api/ai` with the same local handler used
 
 - [Technical specification](./TZ.md)
 - [Accounting remediation plan](./ACCOUNTING_REMEDIATION_PLAN.md)
+- [Subscription product plan](./SUBSCRIPTION_PRODUCT_PLAN.md)
 - [Agent instructions](./AGENTS.md)
