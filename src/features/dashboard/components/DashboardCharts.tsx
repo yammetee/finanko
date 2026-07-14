@@ -7,6 +7,8 @@ import { getCategoryNameById } from "../../../shared/i18n/displayText";
 import { useI18n } from "../../../shared/i18n/i18nContext";
 import { formatMoney } from "../../../shared/lib/format";
 import type { Currency, Timeframe } from "../../../shared/types/finance";
+import { ContextInsightButton } from "../../assistant/ContextInsightButton";
+import type { AssistantSummary } from "../../assistant/assistantSummary";
 
 interface TrendPoint {
   label: string;
@@ -32,6 +34,7 @@ interface DashboardChartsProps {
   byCategory: CategoryPoint[];
   timeframe: Timeframe;
   currency: Currency;
+  assistantSummary: AssistantSummary;
 }
 
 const SVG_WIDTH = 640;
@@ -242,6 +245,7 @@ export const DashboardCharts = memo(function DashboardCharts({
   byCategory,
   timeframe,
   currency,
+  assistantSummary,
 }: DashboardChartsProps) {
   const { locale, t } = useI18n();
   const localizedCategories = useMemo(
@@ -255,13 +259,13 @@ export const DashboardCharts = memo(function DashboardCharts({
 
   return (
     <>
-      <Card className="span-6" title={t("section.portfolioNetWorth")}>
+      <Card className="span-6" title={t("section.portfolioNetWorth")} extra={<ContextInsightButton context="net_worth" summary={assistantSummary} />}>
         <div className="chart chart-tall" aria-label={`${currency} ${t("section.portfolioNetWorth")}`}>
           <SingleLineChart data={netWorthTrend} timeframe={timeframe} locale={locale} currency={currency} />
         </div>
       </Card>
 
-      <Card className="span-6" title={t("section.incomeVsExpenses")}>
+      <Card className="span-6" title={t("section.incomeVsExpenses")} extra={<ContextInsightButton context="cash_flow" summary={assistantSummary} />}>
         {trend.some((point) => point.income !== 0 || point.expenses !== 0) ? (
           <div className="chart chart-tall" aria-label={`${currency} ${t("section.incomeVsExpenses")}`}>
             <IncomeExpenseChart data={trend} timeframe={timeframe} locale={locale} currency={currency} />
@@ -269,7 +273,7 @@ export const DashboardCharts = memo(function DashboardCharts({
         ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noTransactions")} />}
       </Card>
 
-      <Card className="span-5" title={t("section.expensesByCategory")}>
+      <Card className="span-5" title={t("section.expensesByCategory")} extra={<ContextInsightButton context="categories" summary={assistantSummary} />}>
         {localizedCategories.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noExpenses")} />
         ) : (

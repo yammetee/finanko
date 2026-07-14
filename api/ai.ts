@@ -162,6 +162,51 @@ const assistantFormat = {
   },
 };
 
+const assistantChatFormat = {
+  type: "json_schema",
+  name: "finanko_assistant_chat",
+  strict: true,
+  schema: {
+    type: "object", additionalProperties: false,
+    required: ["answer", "evidence", "suggestedQuestions", "disclaimer"],
+    properties: {
+      answer: { type: "string" },
+      evidence: { type: "array", maxItems: 3, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string" }, value: { type: "string" } } } },
+      suggestedQuestions: { type: "array", minItems: 2, maxItems: 3, items: { type: "string" } },
+      disclaimer: { type: "string" },
+    },
+  },
+};
+
+const assistantInsightFormat = {
+  type: "json_schema",
+  name: "finanko_context_insight",
+  strict: true,
+  schema: {
+    type: "object", additionalProperties: false,
+    required: ["headline", "explanation", "factors", "confidence"],
+    properties: {
+      headline: { type: "string" }, explanation: { type: "string" },
+      factors: { type: "array", maxItems: 3, items: { type: "string" } },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+    },
+  },
+};
+
+const assistantRecapFormat = {
+  type: "json_schema",
+  name: "finanko_weekly_recap",
+  strict: true,
+  schema: {
+    type: "object", additionalProperties: false,
+    required: ["headline", "summary", "highlights", "focus", "disclaimer"],
+    properties: {
+      headline: { type: "string" }, summary: { type: "string" }, focus: { type: "string" }, disclaimer: { type: "string" },
+      highlights: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["label", "value", "tone"], properties: { label: { type: "string" }, value: { type: "string" }, tone: { type: "string", enum: ["positive", "warning", "neutral"] } } } },
+    },
+  },
+};
+
 function parserSystem(mode: unknown) {
   const shared = "Return only data matching the supplied JSON schema. Currency aliases are strict: бат/baht/THB/฿/บาท = THB; руб/RUB/₽ = RUB; лари/GEL/₾/ლარი = GEL; доллар/USD/$ = USD. fallbackCurrency is only a last resort when the source contains no currency evidence. Any currency visible in text or image overrides fallbackCurrency. categoryId must be one of the supplied category names, never an invented database id. Numbers must be JSON numbers, not strings.";
   if (mode !== "receipt") {
@@ -182,6 +227,23 @@ const assistantSystem = [
   "When dataQuality.canProject=false, do not project categories or cash flow. A supplied spendingOpportunity is still valid because it has its own history threshold.",
   "Use account names and rates only when they clarify priority. Never expose internal field names.",
   "Write in the requested locale. Do not provide regulated investment, tax, legal, or individualized credit-product advice.",
+].join(" ");
+
+const assistantChatSystem = [
+  "You are Finanko's conversational financial copilot. Answer the user's exact question from supplied aggregates and the short conversation only.",
+  "Start with the direct answer, keep it under 110 words, and include at most three short evidence points. Never invent transactions, benchmarks, projections, or missing household facts.",
+  "If data is insufficient, say what is missing and suggest a useful follow-up. Distinguish balances from cash flow and recorded income from actual income.",
+  "Suggested questions must be relevant follow-ups. Write in the requested locale. Do not provide regulated investment, tax, legal, or individualized credit-product advice.",
+].join(" ");
+
+const assistantInsightSystem = [
+  "Explain one financial surface using only its supplied context and aggregates. Headline under 9 words, explanation under 45 words, and at most three concrete factors.",
+  "Explain what changed or matters and why. Do not give a broad portfolio review, generic advice, or unsupported projections. Be calm and write in the requested locale.",
+].join(" ");
+
+const assistantRecapSystem = [
+  "Create a compact weekly financial recap from supplied aggregates. Summarize spending, income, cash flow, net worth, recurring activity, and major drivers only when supported.",
+  "Headline under 10 words, summary under 45 words, at most three highlights, and one gentle focus for next week. Never extrapolate sparse data or shame spending. Write in the requested locale.",
 ].join(" ");
 
 function extractOutputText(result: { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> }) {
@@ -390,11 +452,19 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       return;
     }
 
+    const assistantMode = payload.assistantMode;
+    const assistantConfig = assistantMode === "chat"
+      ? { system: assistantChatSystem, format: assistantChatFormat }
+      : assistantMode === "insight"
+        ? { system: assistantInsightSystem, format: assistantInsightFormat }
+        : assistantMode === "weekly_recap"
+          ? { system: assistantRecapSystem, format: assistantRecapFormat }
+          : { system: assistantSystem, format: assistantFormat };
     const parsed = await requestStructuredOutput(
       apiKey,
-      kind === "parse" ? parserSystem(payload.mode) : assistantSystem,
+      kind === "parse" ? parserSystem(payload.mode) : assistantConfig.system,
       kind === "parse" ? parserContent(payload) : JSON.stringify(payload),
-      kind === "parse" ? parserFormat : assistantFormat,
+      kind === "parse" ? parserFormat : assistantConfig.format,
     );
     response.status(200).json(kind === "parse" ? parsed : { analysis: parsed });
   } catch {

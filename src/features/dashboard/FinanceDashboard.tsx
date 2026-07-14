@@ -46,6 +46,7 @@ import {
   type AssistantActionType,
 } from "../assistant/assistantSummary";
 import { AssistantInsightStrip } from "../assistant/AssistantInsightStrip";
+import { WeeklyRecap } from "../assistant/WeeklyRecap";
 import type {
   Account,
   Timeframe,
@@ -237,6 +238,10 @@ export function FinanceDashboard() {
       ratesVersion,
     ],
   );
+  const weeklyAssistantSummary = useMemo(() => {
+    void ratesVersion;
+    return buildAssistantSummary(portfolioAccounts, categories, visibleTransactions, "week", activePortfolio?.baseCurrency ?? "USD", state.transactionItems);
+  }, [portfolioAccounts, categories, visibleTransactions, state.transactionItems, activePortfolio?.baseCurrency, ratesVersion]);
 
   async function addAccount(values: AccountFormValues) {
     if (!isValidMoneyDecimal(values.initialBalance, values.currency)) {
@@ -622,6 +627,7 @@ export function FinanceDashboard() {
         byCategory={analytics.byCategory}
         timeframe={state.timeframe}
         currency={analyticsCurrency}
+        assistantSummary={assistantSummary}
       />
 
       <Card className="span-7" title={t("section.history")} id="history-section">
@@ -699,6 +705,7 @@ export function FinanceDashboard() {
             transactions={visibleTransactions}
             displayCurrency={displayCurrency}
             className="sidebar-accounts"
+            assistantSummary={assistantSummary}
             onEditAccount={openEditAccountDrawer}
             onArchiveAccount={confirmArchiveAccount}
           />
@@ -806,6 +813,8 @@ export function FinanceDashboard() {
               />
             </div>
           </header>
+
+          {activePortfolio ? <WeeklyRecap portfolioId={activePortfolio.id} summary={weeklyAssistantSummary} /> : null}
 
           {activePortfolio && assistantSummary.spendingOpportunities[0] ? (
             <AssistantInsightStrip

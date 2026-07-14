@@ -73,6 +73,28 @@ export interface AssistantResponse {
   disclaimer: string;
 }
 
+export interface AssistantChatResponse {
+  answer: string;
+  evidence: Array<{ label: string; value: string }>;
+  suggestedQuestions: string[];
+  disclaimer: string;
+}
+
+export interface ContextInsightResponse {
+  headline: string;
+  explanation: string;
+  factors: string[];
+  confidence: number;
+}
+
+export interface WeeklyRecapResponse {
+  headline: string;
+  summary: string;
+  highlights: Array<{ label: string; value: string; tone: "positive" | "warning" | "neutral" }>;
+  focus: string;
+  disclaimer: string;
+}
+
 function round(value: number) {
   return Math.round(value * 100) / 100;
 }

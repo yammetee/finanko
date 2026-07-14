@@ -7,6 +7,8 @@ import {
 } from "../../finance/selectors";
 import { AccountRow } from "./AccountRow";
 import type { Account, Currency, Transaction } from "../../../shared/types/finance";
+import { ContextInsightButton } from "../../assistant/ContextInsightButton";
+import type { AssistantSummary } from "../../assistant/assistantSummary";
 
 const { Text } = Typography;
 
@@ -18,6 +20,7 @@ interface AccountsPanelProps {
   className?: string;
   onEditAccount?: (account: Account) => void;
   onArchiveAccount?: (account: Account) => void;
+  assistantSummary?: AssistantSummary;
 }
 
 export function AccountsPanel({
@@ -28,12 +31,13 @@ export function AccountsPanel({
   className = "span-4",
   onEditAccount,
   onArchiveAccount,
+  assistantSummary,
 }: AccountsPanelProps) {
   const { t } = useI18n();
 
   return (
     <section className={className} id={id}>
-      <Text className="sidebar-section-title">{t("section.accounts")}</Text>
+      <div className="sidebar-section-heading"><Text className="sidebar-section-title">{t("section.accounts")}</Text>{assistantSummary ? <ContextInsightButton context="accounts" summary={assistantSummary} /> : null}</div>
       <div className="sidebar-account-list">
         {accounts.length === 0 ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("empty.noAccounts")} />

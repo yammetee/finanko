@@ -1234,6 +1234,187 @@ select {
   min-width: 0;
 }
 
+.sidebar-section-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.context-insight-button {
+  color: var(--color-primary);
+  height: 30px;
+  width: 30px;
+}
+
+.context-insight-content {
+  display: flex;
+  flex-direction: column;
+  max-width: 330px;
+  min-width: 280px;
+}
+
+.context-insight-content p.ant-typography {
+  color: var(--color-muted);
+  margin: 6px 0 10px;
+}
+
+.context-insight-factor {
+  border-top: 1px solid var(--color-border);
+  padding: 7px 0;
+}
+
+.context-insight-feedback,
+.weekly-recap-feedback {
+  display: flex;
+  margin-left: -8px;
+  margin-top: 4px;
+}
+
+.assistant-feedback .is-active,
+.context-insight-feedback .is-active,
+.weekly-recap-feedback .is-active {
+  color: var(--color-primary);
+}
+
+.weekly-recap {
+  align-items: start;
+  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 22px minmax(0, 1fr) 32px;
+  margin-bottom: 12px;
+  padding: 16px 12px;
+}
+
+.weekly-recap-icon {
+  color: var(--color-primary);
+  margin-top: 2px;
+}
+
+.weekly-recap-body h4.ant-typography {
+  margin: 5px 0 4px;
+}
+
+.weekly-recap-body > p.ant-typography {
+  color: var(--color-muted);
+  margin-bottom: 12px;
+  max-width: 70ch;
+}
+
+.weekly-recap-highlights {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.weekly-recap-highlights > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.weekly-recap-highlights .is-positive strong { color: var(--color-income); }
+.weekly-recap-highlights .is-warning strong { color: var(--color-warning); }
+
+.weekly-recap-focus {
+  display: block;
+}
+
+.weekly-recap-focus > span {
+  color: var(--color-primary);
+  font-weight: 650;
+}
+
+.weekly-recap-close {
+  height: 30px;
+  width: 30px;
+}
+
+.assistant-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 440px;
+}
+
+.assistant-chat-log {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(490px, 55dvh);
+  overflow: auto;
+  padding: 4px 2px;
+}
+
+.assistant-chat-empty {
+  margin: auto;
+  max-width: 380px;
+  text-align: center;
+}
+
+.assistant-chat-empty h4.ant-typography {
+  margin-bottom: 4px;
+}
+
+.assistant-chat-message {
+  max-width: 88%;
+  overflow-wrap: anywhere;
+}
+
+.assistant-chat-message.is-user {
+  align-self: flex-end;
+  background: var(--color-primary-soft);
+  border-radius: 8px 8px 2px 8px;
+  padding: 9px 12px;
+}
+
+.assistant-chat-message.is-assistant {
+  border-left: 2px solid var(--color-primary);
+  padding: 5px 0 5px 12px;
+}
+
+.assistant-chat-message p.ant-typography {
+  margin-bottom: 0;
+}
+
+.assistant-chat-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 9px;
+}
+
+.assistant-chat-evidence span {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.assistant-chat-evidence span > span {
+  color: var(--color-primary);
+}
+
+.assistant-question-chips .ant-btn {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.assistant-chat-composer {
+  align-items: end;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 40px;
+}
+
+.assistant-chat-composer .ant-btn {
+  height: 40px;
+  width: 40px;
+}
+
 .empty-portfolio-state {
   align-items: center;
   border: 1px solid var(--color-border);
@@ -1496,6 +1677,23 @@ select {
   .assistant-evidence,
   .assistant-scenario-values {
     grid-template-columns: 1fr;
+  }
+
+  .weekly-recap {
+    padding: 13px 8px;
+  }
+
+  .weekly-recap-highlights {
+    gap: 8px;
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-chat {
+    min-height: calc(100dvh - 190px);
+  }
+
+  .assistant-chat-message {
+    max-width: 94%;
   }
 
   .category-breakdown {
