@@ -1,5 +1,3 @@
-import { deriveReceiptTotal } from "../src/features/receipts/receiptRecovery";
-
 interface ApiRequest {
   method?: string;
   headers: { authorization?: string };
@@ -29,6 +27,40 @@ interface ReceiptOcrResult {
   totals: { subtotal: number | null; discount: number | null; tax: number | null; total: number | null };
   documentConfidence: number;
   warnings: string[];
+}
+
+function positiveReceiptAmount(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function roundReceiptMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+// Keep the serverless entrypoint self-contained so Vercel never has to load client source at runtime.
+function deriveReceiptTotal(ocr: ReceiptOcrResult) {
+  if (positiveReceiptAmount(ocr.totals.total)) return roundReceiptMoney(ocr.totals.total);
+
+  const explicitTotal = [...ocr.rows]
+    .reverse()
+    .find((row) => row.rowType === "total" && positiveReceiptAmount(row.amount))?.amount;
+  if (positiveReceiptAmount(explicitTotal)) return roundReceiptMoney(explicitTotal);
+
+  if (positiveReceiptAmount(ocr.totals.subtotal)) {
+    const calculated = ocr.totals.subtotal
+      - Math.abs(ocr.totals.discount ?? 0)
+      + (ocr.totals.tax ?? 0);
+    if (positiveReceiptAmount(calculated)) return roundReceiptMoney(calculated);
+  }
+
+  const itemTotal = ocr.rows.reduce((sum, row) => {
+    if (!positiveReceiptAmount(row.amount)) return sum;
+    if (row.rowType === "product") return sum + row.amount;
+    if (row.rowType === "discount") return sum - Math.abs(row.amount);
+    if (row.rowType === "tax") return sum + row.amount;
+    return sum;
+  }, 0);
+  return positiveReceiptAmount(itemTotal) ? roundReceiptMoney(itemTotal) : null;
 }
 
 function parserContent(payload: Record<string, unknown>) {
@@ -384,25 +416,25 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     return;
   }
 
-  const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!token || !supabaseUrl || !supabaseKey) {
-    response.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  if (!await isAuthenticatedUser(supabaseUrl, supabaseKey, token)) {
-    response.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    response.status(503).json({ error: "AI is not configured" });
-    return;
-  }
-
   try {
+    const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!token || !supabaseUrl || !supabaseKey) {
+      response.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    if (!await isAuthenticatedUser(supabaseUrl, supabaseKey, token)) {
+      response.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      response.status(503).json({ error: "AI is not configured" });
+      return;
+    }
+
     const kind = request.body?.kind;
     const payload = request.body?.payload ?? {};
     if (kind !== "parse" && kind !== "assistant") {
@@ -467,7 +499,8 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       kind === "parse" ? parserFormat : assistantConfig.format,
     );
     response.status(200).json(kind === "parse" ? parsed : { analysis: parsed });
-  } catch {
+  } catch (error) {
+    console.error("Finanko AI request failed", error);
     response.status(500).json({ error: "AI request failed" });
   }
 }
