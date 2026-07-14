@@ -14,6 +14,19 @@ export interface ParsedExpenseItem {
   confidence: number;
 }
 
+export interface ReceiptReview {
+  confidence: number;
+  requiresReview: boolean;
+  warnings: string[];
+  rawRows: string[];
+  totals: {
+    subtotal?: number;
+    discount?: number;
+    tax?: number;
+    total?: number;
+  };
+}
+
 export interface ParsedExpense {
   kind: "transaction";
   type?: "income" | "expense";
@@ -21,6 +34,7 @@ export interface ParsedExpense {
   currency: Currency;
   items: ParsedExpenseItem[];
   total: number;
+  receiptReview?: ReceiptReview;
 }
 
 export interface ParsedAccount {
@@ -115,6 +129,43 @@ function isNonZeroFiniteNumber(value: unknown): value is number {
 
 function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function optionalFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeReceiptReview(value: unknown): ReceiptReview | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const review = value as {
+    confidence?: unknown;
+    requiresReview?: unknown;
+    warnings?: unknown;
+    rawRows?: unknown;
+    totals?: unknown;
+  };
+  const totals = review.totals && typeof review.totals === "object"
+    ? review.totals as Record<string, unknown>
+    : {};
+  return {
+    confidence:
+      typeof review.confidence === "number" && Number.isFinite(review.confidence)
+        ? Math.max(0, Math.min(1, review.confidence))
+        : 0.5,
+    requiresReview: review.requiresReview !== false,
+    warnings: Array.isArray(review.warnings)
+      ? review.warnings.filter((warning): warning is string => typeof warning === "string")
+      : [],
+    rawRows: Array.isArray(review.rawRows)
+      ? review.rawRows.filter((row): row is string => typeof row === "string" && Boolean(row.trim()))
+      : [],
+    totals: {
+      subtotal: optionalFiniteNumber(totals.subtotal),
+      discount: optionalFiniteNumber(totals.discount),
+      tax: optionalFiniteNumber(totals.tax),
+      total: optionalFiniteNumber(totals.total),
+    },
+  };
 }
 
 function isReceiptInput(input: ParseReceiptInput | ParseTextExpenseInput): input is ParseReceiptInput {
@@ -214,6 +265,7 @@ export function normalizeParsedExpense(
     type?: unknown;
     items?: unknown;
     total?: unknown;
+    receiptReview?: unknown;
   };
   if (payload.kind !== "transaction") return null;
 
@@ -234,10 +286,10 @@ export function normalizeParsedExpense(
           if (!isNonZeroFiniteNumber(rawItem.amount)) return null;
           const rawName = cleanText(rawItem.name);
           let quantity = isPositiveFiniteNumber(rawItem.quantity)
-            ? roundMoney(rawItem.quantity)
+            ? roundQuantity(rawItem.quantity)
             : undefined;
           let unitPrice = isNonZeroFiniteNumber(rawItem.unitPrice)
-            ? roundMoney(rawItem.unitPrice)
+            ? rawItem.unitPrice
             : quantity
               ? roundMoney(rawItem.amount / quantity)
               : undefined;
@@ -276,7 +328,7 @@ export function normalizeParsedExpense(
             name: translatedName,
             amount,
             quantity,
-            unitPrice,
+            unitPrice: unitPrice === undefined ? undefined : roundMoney(unitPrice),
             categoryId: resolveCategoryId(input.categories, rawItem.categoryId, "food"),
             confidence:
               typeof rawItem.confidence === "number" && Number.isFinite(rawItem.confidence)
@@ -333,7 +385,19 @@ export function normalizeParsedExpense(
   const total = itemsTotal !== 0 ? itemsTotal : payloadTotal ?? detectedTotal;
 
   if (!isPositiveFiniteNumber(total)) return null;
-  if (isReceiptInput(input) && items.length === 0) return null;
+
+  let receiptReview = normalizeReceiptReview(payload.receiptReview);
+  if (isReceiptInput(input) && items.length === 0) {
+    const warnings = new Set(receiptReview?.warnings ?? []);
+    warnings.add("unreadable_rows");
+    receiptReview = {
+      confidence: receiptReview?.confidence ?? 0.35,
+      requiresReview: true,
+      warnings: Array.from(warnings),
+      rawRows: receiptReview?.rawRows ?? [],
+      totals: receiptReview?.totals ?? { total },
+    };
+  }
 
   const normalizedItems =
     items.length > 0
@@ -356,6 +420,7 @@ export function normalizeParsedExpense(
     currency: detectCurrencyInText(searchableText) ?? (isCurrency(payload.currency) ? payload.currency : input.currency),
     items: normalizedItems,
     total,
+    receiptReview,
   };
 }
 

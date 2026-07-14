@@ -10,6 +10,7 @@ import Modal from "antd/es/modal";
 import Segmented from "antd/es/segmented";
 import Select from "antd/es/select";
 import Space from "antd/es/space";
+import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import {
   LogOut,
@@ -42,7 +43,9 @@ import type { TransactionFormValues } from "../transactions/TransactionForm";
 import { parseReceiptInput, parseTextInput } from "../receipts/aiParser";
 import {
   buildAssistantSummary,
+  type AssistantActionType,
 } from "../assistant/assistantSummary";
+import { AssistantInsightStrip } from "../assistant/AssistantInsightStrip";
 import type {
   Account,
   Timeframe,
@@ -60,7 +63,7 @@ import {
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isLiabilityAccount } from "../../shared/lib/accounts";
 import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
-import { parseTextInputLocally } from "../receipts/expenseParser";
+import { parseTextInputLocally, type ReceiptReview } from "../receipts/expenseParser";
 import { validateItemsMatchTotal } from "../ledger/validation";
 import { isValidMoneyDecimal } from "../ledger/money";
 
@@ -134,7 +137,8 @@ export function FinanceDashboard() {
   const [deletePortfolioModal, setDeletePortfolioModal] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [inputMode, setInputMode] = useState("manual");
+  const [inputMode, setInputMode] = useState("text");
+  const [receiptReview, setReceiptReview] = useState<ReceiptReview | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [ratesVersion, setRatesVersion] = useState(0);
@@ -187,6 +191,15 @@ export function FinanceDashboard() {
     displayCurrency === "native"
       ? activePortfolio?.baseCurrency ?? "USD"
       : displayCurrency;
+  const currencyModes: CurrencyDisplayMode[] = ["native", ...CURRENCIES];
+  const currentCurrencyIndex = currencyModes.indexOf(displayCurrency);
+  const nextCurrencyMode = currencyModes[(currentCurrencyIndex + 1) % currencyModes.length];
+  const currentCurrencyLabel = displayCurrency === "native" ? t("currency.native") : displayCurrency;
+  const nextCurrencyLabel = nextCurrencyMode === "native" ? t("currency.native") : nextCurrencyMode;
+
+  function cycleDisplayCurrency() {
+    state.setCurrencyDisplay(nextCurrencyMode);
+  }
 
   const analytics = useMemo(
     () => {
@@ -205,20 +218,17 @@ export function FinanceDashboard() {
   const assistantSummary = useMemo(
     () => {
       void ratesVersion;
-      return assistantOpen
-        ? buildAssistantSummary(
-            portfolioAccounts,
-            categories,
-            visibleTransactions,
-            state.timeframe,
-            activePortfolio?.baseCurrency ?? "USD",
-            state.transactionItems,
-          )
-        : null;
+      return buildAssistantSummary(
+        portfolioAccounts,
+        categories,
+        visibleTransactions,
+        state.timeframe,
+        activePortfolio?.baseCurrency ?? "USD",
+        state.transactionItems,
+      );
     },
     [
       portfolioAccounts,
-      assistantOpen,
       categories,
       visibleTransactions,
       state.timeframe,
@@ -328,6 +338,7 @@ export function FinanceDashboard() {
       message.success(t("feedback.transactionSaved"));
     }
     transactionForm.resetFields();
+    setReceiptReview(null);
     setEditingTransaction(null);
     setTransactionDrawer(false);
   }
@@ -363,8 +374,20 @@ export function FinanceDashboard() {
   function openNewTransactionDrawer() {
     setEditingTransaction(null);
     transactionForm.resetFields();
-    setInputMode("manual");
+    setReceiptReview(null);
+    setInputMode("text");
     setTransactionDrawer(true);
+  }
+
+  function handleAssistantAction(action: AssistantActionType) {
+    setAssistantOpen(false);
+    if (action === "add_transaction") {
+      openNewTransactionDrawer();
+      return;
+    }
+    if (action === "review_transactions") {
+      requestAnimationFrame(() => document.getElementById("history-section")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
   }
 
   function openEditTransactionDrawer(transaction: Transaction) {
@@ -379,6 +402,7 @@ export function FinanceDashboard() {
         confidence,
       }));
     setEditingTransaction(transaction);
+    setReceiptReview(null);
     setInputMode("manual");
     const recurringRule = transaction.recurringRuleId
       ? state.recurringRules.find((rule) => rule.id === transaction.recurringRuleId)
@@ -413,6 +437,7 @@ export function FinanceDashboard() {
     setEditingTransaction(null);
     transactionForm.resetFields();
     textParserForm.resetFields();
+    setReceiptReview(null);
   }
 
   function confirmResetData() {
@@ -457,6 +482,16 @@ export function FinanceDashboard() {
     });
   }
 
+  function openMobileEditAccountDrawer(account: Account) {
+    setMobileMenuOpen(false);
+    openEditAccountDrawer(account);
+  }
+
+  function confirmMobileArchiveAccount(account: Account) {
+    setMobileMenuOpen(false);
+    confirmArchiveAccount(account);
+  }
+
   async function addPortfolio(values: PortfolioFormValues) {
     if (editingPortfolio && activePortfolio) await state.renamePortfolio(activePortfolio.id, values.name);
     else await state.addPortfolio(values.name, values.baseCurrency);
@@ -485,9 +520,15 @@ export function FinanceDashboard() {
     if (key === "sign-out") void signOut();
   }
 
-  function fillParsedTransaction(values: TransactionFormValues) {
+  function handleInputModeChange(mode: string) {
+    setReceiptReview(null);
+    setInputMode(mode);
+  }
+
+  function fillParsedTransaction(values: TransactionFormValues, review?: ReceiptReview) {
     transactionForm.resetFields();
     transactionForm.setFieldsValue(values);
+    setReceiptReview(review ?? null);
     setInputMode("manual");
   }
 
@@ -568,8 +609,8 @@ export function FinanceDashboard() {
       occurredAt: dayjs(),
       source: "receipt_ai",
       items: parsed.items,
-    });
-    message.success(t("feedback.parserPrepared"));
+    }, parsed.receiptReview);
+    message.success(t(parsed.receiptReview?.requiresReview ? "feedback.receiptPreparedForReview" : "feedback.parserPrepared"));
     return true;
   }
 
@@ -723,15 +764,15 @@ export function FinanceDashboard() {
                   ]}
                   onChange={(value) => state.setTransactionFilter(value as TransactionFilter)}
                 />
-                <Segmented
-                  className="currency-display-filter"
-                  value={displayCurrency}
-                  options={[
-                    { value: "native", label: <NativeCurrencyIcon />, title: t("currency.native") },
-                    ...CURRENCIES.map((currency) => ({ value: currency, label: <CurrencyIcon currency={currency} />, title: currency })),
-                  ]}
-                  onChange={(value) => state.setCurrencyDisplay(value as CurrencyDisplayMode)}
-                />
+                <Tooltip title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })}>
+                  <Button
+                    className="currency-cycle-button"
+                    type="text"
+                    aria-label={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })}
+                    icon={displayCurrency === "native" ? <NativeCurrencyIcon size={18} /> : <CurrencyIcon currency={displayCurrency} size={18} />}
+                    onClick={cycleDisplayCurrency}
+                  />
+                </Tooltip>
               </div>
               <Button
                 className="mobile-transaction-button"
@@ -765,6 +806,14 @@ export function FinanceDashboard() {
               />
             </div>
           </header>
+
+          {activePortfolio && assistantSummary.spendingOpportunities[0] ? (
+            <AssistantInsightStrip
+              opportunity={assistantSummary.spendingOpportunities[0]}
+              portfolioId={activePortfolio.id}
+              onOpen={() => setAssistantOpen(true)}
+            />
+          ) : null}
 
           {dashboardBody}
         </Content>
@@ -846,6 +895,14 @@ export function FinanceDashboard() {
             ]}
             onChange={(value) => setLocale(value as "en" | "ru")}
           />
+          <AccountsPanel
+            accounts={accounts}
+            transactions={visibleTransactions}
+            displayCurrency={displayCurrency}
+            className="mobile-menu-accounts"
+            onEditAccount={openMobileEditAccountDrawer}
+            onArchiveAccount={confirmMobileArchiveAccount}
+          />
           <Menu
             className="mobile-menu-navigation"
             mode="inline"
@@ -886,7 +943,8 @@ export function FinanceDashboard() {
               baseCurrency={activePortfolio?.baseCurrency ?? "USD"}
               accounts={accounts}
               categories={categories}
-              onModeChange={setInputMode}
+              receiptReview={receiptReview}
+              onModeChange={handleInputModeChange}
               onFinish={addTransaction}
               onParseText={parseTextTransaction}
               onParseReceipt={parseReceiptTransaction}
@@ -926,8 +984,9 @@ export function FinanceDashboard() {
         <Suspense fallback={null}>
           <AssistantDialog
             open={assistantOpen}
-            summary={assistantSummary!}
+            summary={assistantSummary}
             onClose={() => setAssistantOpen(false)}
+            onAction={handleAssistantAction}
           />
         </Suspense>
       ) : null}

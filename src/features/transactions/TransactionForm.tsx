@@ -16,6 +16,7 @@ import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { getAccountName, getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
+import type { MessageKey } from "../../shared/i18n/i18nContext";
 import { CurrencySelect } from "../../shared/ui/FormSelects";
 import { isLiabilityAccount } from "../../shared/lib/accounts";
 import type {
@@ -25,7 +26,7 @@ import type {
   TransactionSource,
   TransactionType,
 } from "../../shared/types/finance";
-import type { ParsedExpenseItem } from "../receipts/expenseParser";
+import type { ParsedExpenseItem, ReceiptReview } from "../receipts/expenseParser";
 import { prepareReceiptImage } from "../receipts/receiptImage";
 
 const { Text } = Typography;
@@ -54,6 +55,7 @@ interface TransactionFormProps {
   baseCurrency: Currency;
   accounts: Account[];
   categories: Category[];
+  receiptReview: ReceiptReview | null;
   onModeChange: (mode: string) => void;
   onFinish: (values: TransactionFormValues) => void;
   onParseText: (values: { text: string; accountId: string }) => void | Promise<void>;
@@ -65,6 +67,19 @@ interface TransactionFormProps {
   }) => boolean | Promise<boolean>;
 }
 
+const receiptWarningKeys: Record<string, MessageKey> = {
+  cropped: "receipt.warning.cropped",
+  blurred: "receipt.warning.blurred",
+  low_contrast: "receipt.warning.lowContrast",
+  unreadable_rows: "receipt.warning.unreadableRows",
+  total_unclear: "receipt.warning.totalUnclear",
+  currency_unclear: "receipt.warning.currencyUnclear",
+  low_confidence: "receipt.warning.lowConfidence",
+  arithmetic_mismatch: "receipt.warning.arithmeticMismatch",
+  subtotal_mismatch: "receipt.warning.subtotalMismatch",
+  totals_mismatch: "receipt.warning.totalsMismatch",
+};
+
 export function TransactionForm({
   form,
   textParserForm,
@@ -72,6 +87,7 @@ export function TransactionForm({
   baseCurrency,
   accounts,
   categories,
+  receiptReview,
   onModeChange,
   onFinish,
   onParseText,
@@ -155,9 +171,9 @@ export function TransactionForm({
         block
         value={mode}
         options={[
-          { label: t("inputMode.manual"), value: "manual" },
           { label: t("inputMode.text"), value: "text" },
           { label: t("inputMode.receipt"), value: "receipt" },
+          { label: t("inputMode.manual"), value: "manual" },
         ]}
         onChange={(value) => onModeChange(String(value))}
         style={{ marginBottom: 18 }}
@@ -227,6 +243,32 @@ export function TransactionForm({
         }}
         style={{ display: mode === "manual" ? undefined : "none" }}
       >
+          {receiptReview ? (
+            <Alert
+              className="receipt-review-alert"
+              type={receiptReview.requiresReview ? "warning" : "success"}
+              showIcon
+              message={t(receiptReview.requiresReview ? "receipt.reviewRequired" : "receipt.reviewReady")}
+              description={(
+                <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                  <Text>{t("receipt.confidence", { value: Math.round(receiptReview.confidence * 100) })}</Text>
+                  {receiptReview.warnings.map((warning) => (
+                    <Text key={warning} className="receipt-review-warning">
+                      {t(receiptWarningKeys[warning] ?? "receipt.warning.checkFields")}
+                    </Text>
+                  ))}
+                  {receiptReview.rawRows.length > 0 ? (
+                    <details className="receipt-raw-rows">
+                      <summary>{t("receipt.rawRows")}</summary>
+                      <div>
+                        {receiptReview.rawRows.map((row, index) => <div key={`${index}-${row}`}>{row}</div>)}
+                      </div>
+                    </details>
+                  ) : null}
+                </Space>
+              )}
+            />
+          ) : null}
           <Form.Item name="accountId" label={t("form.account")} rules={[{ required: true }]}>
             <Select
               options={accountOptions}

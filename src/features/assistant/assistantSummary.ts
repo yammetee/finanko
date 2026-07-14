@@ -1,7 +1,19 @@
 import type { Account, Category, Currency, Timeframe, Transaction, TransactionItem } from "../../shared/types/finance";
 import { buildAnalytics, filterPeriodTransactions, getAccountBalanceInCurrency, getPeriod } from "../finance/selectors";
 import { isLiabilityAccount } from "../../shared/lib/accounts";
+import { convertMoney } from "../../shared/lib/currency";
 import dayjs from "dayjs";
+
+export interface SpendingOpportunity {
+  id: string;
+  name: string;
+  monthlyAverage: number;
+  annualSavings25: number;
+  annualSavings50: number;
+  currency: Currency;
+  occurrences: number;
+  observedMonths: number;
+}
 
 export interface AssistantSummary {
   timeframe: Timeframe;
@@ -24,6 +36,7 @@ export interface AssistantSummary {
   accounts: Array<{ name: string; type: Account["type"]; balance: number; annualInterestRate: number | null }>;
   interestAccountCount: number;
   highestInterestRate: number;
+  spendingOpportunities: SpendingOpportunity[];
   dataQuality: {
     hasIncome: boolean;
     hasExpenses: boolean;
@@ -36,25 +49,93 @@ export interface AssistantSummary {
   };
 }
 
-export interface AssistantRecommendation {
-  priority: number;
-  title: string;
-  action: string;
-  rationale: string;
-  target: string;
-  tone: "positive" | "warning" | "critical" | "neutral";
-}
+export type AssistantActionType = "add_transaction" | "review_transactions" | "none";
 
 export interface AssistantResponse {
-  verdict: string;
-  diagnosis: string;
-  recommendations: AssistantRecommendation[];
-  nextReview: string;
+  status: "stable" | "attention" | "critical" | "insufficient_data";
+  headline: string;
+  summary: string;
+  evidence: Array<{ label: string; value: string }>;
+  primaryAction: {
+    type: AssistantActionType;
+    title: string;
+    description: string;
+    buttonLabel: string | null;
+  };
+  scenario: {
+    opportunityId: string;
+    title: string;
+    suggestion: string;
+    reductionPercent: 25 | 50;
+  } | null;
+  confidence: number;
+  nextCheck: string;
   disclaimer: string;
 }
 
 function round(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+const genericItemNames = new Set([
+  "adjustment", "food", "item", "other", "product", "total",
+  "другое", "еда", "корректировка", "позиция", "продукт", "товар", "итого",
+]);
+
+function normalizeItemName(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/[\s_]+/g, " ").replace(/[^\p{L}\p{N} ]/gu, "");
+}
+
+function buildSpendingOpportunities(
+  transactions: Transaction[],
+  transactionItems: TransactionItem[],
+  currency: Currency,
+): SpendingOpportunity[] {
+  const now = dayjs();
+  const cutoff = now.subtract(90, "day").startOf("day");
+  const recentExpenses = new Map(transactions
+    .filter((transaction) => !transaction.deletedAt && transaction.type === "expense")
+    .filter((transaction) => {
+      const date = dayjs(transaction.occurredAt);
+      return date.isValid() && !date.isBefore(cutoff) && !date.isAfter(now);
+    })
+    .map((transaction) => [transaction.id, transaction]));
+  const expenseDates = [...recentExpenses.values()].map((transaction) => dayjs(transaction.occurredAt));
+  const earliestDate = expenseDates.sort((a, b) => a.valueOf() - b.valueOf())[0];
+  const historyDays = earliestDate ? now.startOf("day").diff(earliestDate.startOf("day"), "day") + 1 : 0;
+  if (historyDays < 45) return [];
+
+  const coverageMonths = Math.max(2, Math.min(3, historyDays / 30.44));
+  const groups = new Map<string, { name: string; total: number; occurrences: number; months: Set<string> }>();
+
+  transactionItems.forEach((item) => {
+    const transaction = recentExpenses.get(item.transactionId);
+    const key = normalizeItemName(item.name);
+    if (!transaction || !key || genericItemNames.has(key) || !Number.isFinite(item.amount) || item.amount <= 0) return;
+    const group = groups.get(key) ?? { name: item.name.trim(), total: 0, occurrences: 0, months: new Set<string>() };
+    group.total += convertMoney(item.amount, transaction.currency, currency, transaction.occurredAt);
+    group.occurrences += 1;
+    group.months.add(dayjs(transaction.occurredAt).format("YYYY-MM"));
+    groups.set(key, group);
+  });
+
+  return [...groups.entries()]
+    .filter(([, group]) => group.occurrences >= 3 && group.months.size >= 2)
+    .map(([id, group]) => {
+      const monthlyAverage = group.total / coverageMonths;
+      return {
+        id,
+        name: group.name,
+        monthlyAverage: round(monthlyAverage),
+        annualSavings25: round(monthlyAverage * 12 * 0.25),
+        annualSavings50: round(monthlyAverage * 12 * 0.5),
+        currency,
+        occurrences: group.occurrences,
+        observedMonths: group.months.size,
+      };
+    })
+    .sort((a, b) => b.annualSavings50 - a.annualSavings50)
+    .slice(0, 5);
 }
 
 export function buildAssistantSummary(
@@ -132,6 +213,7 @@ export function buildAssistantSummary(
     })),
     interestAccountCount: interestAccounts.length,
     highestInterestRate: Math.max(0, ...interestAccounts.map((account) => account.annualInterestRate ?? 0)),
+    spendingOpportunities: buildSpendingOpportunities(transactions, transactionItems, currency),
     dataQuality: {
       hasIncome: analytics.income > 0,
       hasExpenses: analytics.expenses > 0,

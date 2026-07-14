@@ -45,4 +45,37 @@ describe("assistant financial summary", () => {
     expect(summary.dataQuality.canProject).toBe(false);
     expect(summary.accounts.map(({ name }) => name)).toEqual(["Cash", "Debt"]);
   });
+
+  it("calculates a conservative annual what-if from repeated receipt items", () => {
+    const dates = [new Date(Date.now() - 70 * 86400000), new Date(Date.now() - 40 * 86400000), new Date(Date.now() - 10 * 86400000)];
+    const colaTransactions: Transaction[] = dates.map((date, index) => ({
+      id: `cola-${index}`,
+      portfolioId,
+      accountId: "cash",
+      type: "expense",
+      amount: 300,
+      currency: "USD",
+      categoryId: "food",
+      description: "Groceries",
+      occurredAt: date.toISOString(),
+      source: "receipt_ai",
+    }));
+    const colaItems: TransactionItem[] = colaTransactions.map((transaction, index) => ({
+      id: `cola-item-${index}`,
+      transactionId: transaction.id,
+      name: index === 1 ? "  Кола " : "Кола",
+      amount: 300,
+      categoryId: "food",
+      confidence: 1,
+    }));
+
+    const summary = buildAssistantSummary(accounts, categories, colaTransactions, "all", "USD", colaItems);
+    expect(summary.spendingOpportunities).toHaveLength(1);
+    expect(summary.spendingOpportunities[0]).toMatchObject({
+      id: "кола",
+      occurrences: 3,
+      observedMonths: 3,
+      annualSavings50: 2315.15,
+    });
+  });
 });

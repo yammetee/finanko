@@ -79,7 +79,7 @@ describe("normalizeParsedExpense", () => {
     expect(parsed?.items[2]).toMatchObject({ quantity: 0.336, unitPrice: 45.95, amount: 15.44 });
   });
 
-  it("rejects receipt totals without line items", () => {
+  it("creates a review draft when only the receipt total is readable", () => {
     expect(
       normalizeParsedExpense(
         {
@@ -95,7 +95,42 @@ describe("normalizeParsedExpense", () => {
           items: [],
         },
       ),
-    ).toBeNull();
+    ).toMatchObject({
+      total: 245.5,
+      items: [{ name: "Итого по чеку", amount: 245.5, confidence: 0.45 }],
+      receiptReview: {
+        requiresReview: true,
+        warnings: ["unreadable_rows"],
+      },
+    });
+  });
+
+  it("preserves OCR rows and review warnings for the manual confirmation step", () => {
+    const parsed = normalizeParsedExpense(
+      { fileName: "receipt.jpg", currency: "GEL", categories },
+      {
+        kind: "transaction",
+        description: "Молоко",
+        currency: "GEL",
+        total: 4.2,
+        items: [{ name: "Молоко", amount: 4.2, quantity: 1, unitPrice: 4.2, categoryId: "Food", confidence: 0.72 }],
+        receiptReview: {
+          confidence: 0.68,
+          requiresReview: true,
+          warnings: ["blurred"],
+          rawRows: ["MILK 1 x 4.20"],
+          totals: { subtotal: 4.2, discount: null, tax: null, total: 4.2 },
+        },
+      },
+    );
+
+    expect(parsed?.receiptReview).toEqual({
+      confidence: 0.68,
+      requiresReview: true,
+      warnings: ["blurred"],
+      rawRows: ["MILK 1 x 4.20"],
+      totals: { subtotal: 4.2, discount: undefined, tax: undefined, total: 4.2 },
+    });
   });
 
   it("uses receipt items rather than the largest AI number for total and description", () => {

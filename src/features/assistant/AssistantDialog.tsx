@@ -1,26 +1,28 @@
 import Alert from "antd/es/alert";
 import Button from "antd/es/button";
 import Flex from "antd/es/flex";
-import List from "antd/es/list";
 import Modal from "antd/es/modal";
 import Skeleton from "antd/es/skeleton";
 import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowRight, Calculator, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatMoney } from "../../shared/lib/format";
 import { useI18n } from "../../shared/i18n/i18nContext";
-import { type AssistantResponse, type AssistantSummary } from "./assistantSummary";
+import { type AssistantActionType, type AssistantResponse, type AssistantSummary } from "./assistantSummary";
 import { getAssistantResponse } from "./assistantAi";
 
 const { Paragraph, Text, Title } = Typography;
-const toneColors = { positive: "success", warning: "warning", critical: "error", neutral: "default" } as const;
+const statusColors = { stable: "success", attention: "warning", critical: "error", insufficient_data: "default" } as const;
 
 interface AssistantDialogProps {
   open: boolean;
   summary: AssistantSummary;
   onClose: () => void;
+  onAction: (action: AssistantActionType) => void;
 }
 
-export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps) {
+export function AssistantDialog({ open, summary, onClose, onAction }: AssistantDialogProps) {
   const { locale, t } = useI18n();
   const [response, setResponse] = useState<AssistantResponse | null>(null);
   const [error, setError] = useState(false);
@@ -42,63 +44,69 @@ export function AssistantDialog({ open, summary, onClose }: AssistantDialogProps
     return runAnalysis();
   }, [open, runAnalysis]);
 
+  const scenario = useMemo(() => {
+    if (!response?.scenario) return null;
+    const opportunity = summary.spendingOpportunities.find(({ id }) => id === response.scenario?.opportunityId);
+    if (!opportunity) return null;
+    const annualSavings = response.scenario.reductionPercent === 25
+      ? opportunity.annualSavings25
+      : opportunity.annualSavings50;
+    return { ...response.scenario, opportunity, annualSavings };
+  }, [response, summary.spendingOpportunities]);
+
   return (
-    <Modal
-      centered
-      className="assistant-modal"
-      destroyOnHidden
-      footer={null}
-      open={open}
-      title={t("nav.assistant")}
-      width={760}
-      onCancel={onClose}
-    >
-      <Flex className="assistant-content" vertical gap={20}>
-        {loading ? <Skeleton active paragraph={{ rows: 4 }} /> : error || !response ? (
-          <Alert
-            action={<Button onClick={runAnalysis}>{t("actions.retry")}</Button>}
-            message={t("assistant.requestFailed")}
-            showIcon
-            type="error"
-          />
+    <Modal centered className="assistant-modal" destroyOnHidden footer={null} open={open} title={t("nav.assistant")} width={680} onCancel={onClose}>
+      <Flex className="assistant-content" vertical gap={16}>
+        {loading ? <Skeleton active paragraph={{ rows: 5 }} /> : error || !response ? (
+          <Alert action={<Button onClick={runAnalysis}>{t("actions.retry")}</Button>} message={t("assistant.requestFailed")} showIcon type="error" />
         ) : (
           <>
-            <div className="assistant-verdict">
-              <Text className="assistant-eyebrow">{t("assistant.currentSituation")}</Text>
-              <Title level={3}>{response.verdict}</Title>
-              <Paragraph className="assistant-summary">{response.diagnosis}</Paragraph>
-            </div>
-
-            {response.recommendations.length ? (
-              <section>
-                <Title level={5}>{t("assistant.actionPlan")}</Title>
-              <List
-                className="assistant-plan"
-                dataSource={response.recommendations}
-                renderItem={(recommendation) => (
-                  <List.Item>
-                    <div className="assistant-plan-item">
-                      <span className="assistant-priority">{recommendation.priority}</span>
-                      <div>
-                        <Flex align="center" gap={8} wrap>
-                          <Text strong>{recommendation.title}</Text>
-                          <Tag color={toneColors[recommendation.tone]}>{recommendation.target}</Tag>
-                        </Flex>
-                        <Paragraph>{recommendation.action}</Paragraph>
-                        <Text type="secondary">{recommendation.rationale}</Text>
-                      </div>
+            <section className="assistant-overview">
+              <Tag color={statusColors[response.status]}>{t(`assistant.status.${response.status}`)}</Tag>
+              <Title level={3}>{response.headline}</Title>
+              <Paragraph>{response.summary}</Paragraph>
+              {response.evidence.length ? (
+                <div className="assistant-evidence">
+                  {response.evidence.map((item) => (
+                    <div key={`${item.label}-${item.value}`}>
+                      <Text type="secondary">{item.label}</Text>
+                      <Text strong>{item.value}</Text>
                     </div>
-                  </List.Item>
-                )}
-              />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="assistant-action">
+              <Text className="assistant-section-label">{t("assistant.nextAction")}</Text>
+              <Title level={5}>{response.primaryAction.title}</Title>
+              <Paragraph>{response.primaryAction.description}</Paragraph>
+              {response.primaryAction.type !== "none" && response.primaryAction.buttonLabel ? (
+                <Button type="primary" icon={<ArrowRight size={16} />} onClick={() => onAction(response.primaryAction.type)}>
+                  {response.primaryAction.buttonLabel}
+                </Button>
+              ) : null}
+            </section>
+
+            {scenario ? (
+              <section className="assistant-scenario">
+                <Calculator size={20} />
+                <div>
+                  <Text className="assistant-section-label">{t("assistant.whatIf")}</Text>
+                  <Title level={5}>{scenario.title}</Title>
+                  <Paragraph>{scenario.suggestion}</Paragraph>
+                  <div className="assistant-scenario-values">
+                    <div><Text type="secondary">{t("assistant.monthlyAverage")}</Text><Text strong>{formatMoney(scenario.opportunity.monthlyAverage, scenario.opportunity.currency)}</Text></div>
+                    <div><Text type="secondary">{t("assistant.annualSavings")}</Text><Text className="assistant-saving" strong>{formatMoney(scenario.annualSavings, scenario.opportunity.currency)}</Text></div>
+                  </div>
+                </div>
               </section>
             ) : null}
 
-            <Alert message={response.nextReview} type="info" showIcon />
-            <Flex align="center" justify="space-between" gap={12} wrap>
-              <Text className="assistant-disclaimer" type="secondary">{response.disclaimer}</Text>
-              <Button loading={loading} onClick={runAnalysis}>{t("assistant.refresh")}</Button>
-            </Flex>
+            <footer className="assistant-footer">
+              <div><Text type="secondary">{response.nextCheck}</Text><Text className="assistant-disclaimer" type="secondary">{response.disclaimer}</Text></div>
+              <Button aria-label={t("assistant.refresh")} icon={<RefreshCw size={16} />} loading={loading} onClick={runAnalysis} />
+            </footer>
           </>
         )}
       </Flex>
