@@ -106,6 +106,7 @@ export function AuthGate({ children }: AuthGateProps) {
           </div>
           <form className="auth-local-form" onSubmit={handleSubmit}>
             <input
+              aria-label={t("auth.emailPlaceholder")}
               autoComplete="email"
               className="auth-input"
               disabled={!isSupabaseConfigured || submitting}
@@ -117,6 +118,7 @@ export function AuthGate({ children }: AuthGateProps) {
               value={email}
             />
             <input
+              aria-label={t("auth.passwordPlaceholder")}
               autoComplete={authMode === "signIn" ? "current-password" : "new-password"}
               className="auth-input"
               disabled={!isSupabaseConfigured || submitting}

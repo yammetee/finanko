@@ -5,7 +5,6 @@
     "baseCurrency": "USD"
   },
   "categories": [
-    { "id": "cat-salary", "name": "Salary", "type": "income", "color": "#5fd38a" },
     { "id": "cat-food", "name": "Food", "type": "expense", "color": "#e8b94c" },
     { "id": "cat-home", "name": "Home", "type": "expense", "color": "#5a9feb" },
     { "id": "cat-transport", "name": "Transport", "type": "expense", "color": "#9b82e6" },
@@ -13,7 +12,5 @@
     { "id": "cat-travel", "name": "Travel", "type": "expense", "color": "#48c2cf" },
     { "id": "cat-subscriptions", "name": "Subscriptions", "type": "expense", "color": "#c078d8" },
     { "id": "cat-other", "name": "Other", "type": "expense", "color": "#7f93a6" }
-  ],
-  "accounts": [],
-  "recurringRules": []
+  ]
 }

@@ -98,6 +98,8 @@ create index if not exists recurring_rules_portfolio_active_idx on public.recurr
 create index if not exists recurring_rules_account_id_idx on public.recurring_rules(account_id);
 create index if not exists recurring_rules_category_id_idx on public.recurring_rules(category_id);
 create index if not exists transactions_portfolio_occurred_idx on public.transactions(portfolio_id, occurred_at desc) where deleted_at is null;
+create index if not exists transactions_active_expense_period_idx on public.transactions(portfolio_id, occurred_at desc)
+where deleted_at is null and type = 'expense';
 create index if not exists transactions_account_id_idx on public.transactions(account_id);
 create index if not exists transactions_category_id_idx on public.transactions(category_id);
 create index if not exists transactions_linked_account_id_idx on public.transactions(linked_account_id);

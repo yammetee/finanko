@@ -59,9 +59,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         emailRedirectTo: window.location.origin,
         data: {
           terms_accepted_at: legalAcceptedAt,
-          terms_version: "2026-07-11",
+          terms_version: "2026-08-04",
           privacy_acknowledged_at: legalAcceptedAt,
-          privacy_version: "2026-07-11",
+          privacy_version: "2026-08-04",
         },
       },
     });

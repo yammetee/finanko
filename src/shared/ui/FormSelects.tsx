@@ -1,8 +1,7 @@
 import Select from "antd/es/select";
 import type { SelectProps } from "antd/es/select";
-import { ACCOUNT_TYPES, CURRENCIES } from "../constants/finance";
-import { useI18n } from "../i18n/i18nContext";
-import type { AccountType, Currency } from "../types/finance";
+import { CURRENCIES } from "../constants/finance";
+import type { Currency } from "../types/finance";
 import { CurrencyIcon } from "./CurrencyIcon";
 
 export function CurrencySelect(props: SelectProps<Currency>) {
@@ -12,22 +11,6 @@ export function CurrencySelect(props: SelectProps<Currency>) {
       options={CURRENCIES.map((currency) => ({
         value: currency,
         label: <span className="currency-option"><CurrencyIcon currency={currency} />{currency}</span>,
-      }))}
-    />
-  );
-}
-
-type AccountTypeSelectProps = SelectProps<AccountType>;
-
-export function AccountTypeSelect(props: AccountTypeSelectProps) {
-  const { t } = useI18n();
-
-  return (
-    <Select
-      {...props}
-      options={ACCOUNT_TYPES.map((type) => ({
-        value: type,
-        label: t(`accountType.${type}`),
       }))}
     />
   );

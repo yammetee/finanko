@@ -27,8 +27,8 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
           colorTextTertiary: "#8195a2",
           borderRadius: 10,
           borderRadiusLG: 12,
-          controlHeight: 36,
-          controlHeightSM: 30,
+          controlHeight: 44,
+          controlHeightSM: 36,
           boxShadowSecondary: "0 18px 48px rgba(0, 0, 0, 0.38)",
           fontFamily: appFontFamily,
         },
@@ -49,24 +49,10 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
           Input: {
             activeShadow: "0 0 0 2px rgba(56, 182, 240, 0.12)",
           },
-          Layout: {
-            bodyBg: "#04080c",
-            siderBg: "#081119",
-          },
-          Menu: {
-            itemSelectedBg: "#103b52",
-            itemSelectedColor: "#f2fbff",
-            itemHoverBg: "#102633",
-            itemBorderRadius: 8,
-          },
           Segmented: {
             trackBg: "#081119",
             itemSelectedBg: "#10405a",
             itemHoverBg: "#102b3b",
-          },
-          Table: {
-            headerBg: "#0f1b25",
-            rowHoverBg: "#0e1d27",
           },
           Select: {
             optionSelectedBg: "#103b52",

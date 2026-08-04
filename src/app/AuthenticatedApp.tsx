@@ -1,10 +1,10 @@
 import { AppThemeProvider } from "./providers/AppThemeProvider";
-import { FinanceDashboard } from "../features/dashboard/FinanceDashboard";
+import { ExpenseDashboard } from "../features/expenses/ExpenseDashboard";
 
 export function AuthenticatedApp() {
   return (
     <AppThemeProvider>
-      <FinanceDashboard />
+      <ExpenseDashboard />
     </AppThemeProvider>
   );
 }

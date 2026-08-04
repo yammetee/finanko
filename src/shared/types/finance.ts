@@ -19,7 +19,6 @@ export type TransactionType =
   | "interest_accrual"
   | "adjustment";
 export type TransactionSource = "manual" | "text_ai" | "receipt_ai" | "recurring" | "system";
-export type Timeframe = "week" | "month" | "year" | "all";
 export type InterestFrequency = "daily" | "monthly";
 
 export interface Portfolio {
@@ -81,19 +80,4 @@ export interface TransactionItem {
   unitPrice?: number;
   categoryId: string;
   confidence: number;
-}
-
-export interface RecurringRule {
-  id: string;
-  portfolioId: string;
-  accountId: string;
-  type: "income" | "expense";
-  amount: number;
-  currency: Currency;
-  categoryId: string;
-  description: string;
-  dayOfMonth: number;
-  startsAt: string;
-  endsAt?: string;
-  isActive: boolean;
 }

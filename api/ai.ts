@@ -1,7 +1,7 @@
 interface ApiRequest {
   method?: string;
   headers: { authorization?: string };
-  body?: { kind?: "parse" | "assistant"; payload?: Record<string, unknown> };
+  body?: { kind?: "parse"; payload?: Record<string, unknown> };
 }
 
 interface ApiResponse {
@@ -142,103 +142,6 @@ const receiptOcrFormat = {
   },
 };
 
-const assistantFormat = {
-  type: "json_schema",
-  name: "finanko_actionable_insight",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["status", "headline", "summary", "evidence", "primaryAction", "scenario", "confidence", "nextCheck", "disclaimer"],
-    properties: {
-      status: { type: "string", enum: ["stable", "attention", "critical", "insufficient_data"] },
-      headline: { type: "string" },
-      summary: { type: "string" },
-      evidence: { type: "array", maxItems: 2, items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["label", "value"],
-        properties: { label: { type: "string" }, value: { type: "string" } },
-      } },
-      primaryAction: {
-        type: "object",
-        additionalProperties: false,
-        required: ["type", "title", "description", "buttonLabel"],
-        properties: {
-          type: { type: "string", enum: ["add_transaction", "review_transactions", "none"] },
-          title: { type: "string" },
-          description: { type: "string" },
-          buttonLabel: { type: ["string", "null"] },
-        },
-      },
-      scenario: {
-        anyOf: [
-          {
-            type: "object",
-            additionalProperties: false,
-            required: ["opportunityId", "title", "suggestion", "reductionPercent"],
-            properties: {
-              opportunityId: { type: "string" },
-              title: { type: "string" },
-              suggestion: { type: "string" },
-              reductionPercent: { type: "integer", enum: [25, 50] },
-            },
-          },
-          { type: "null" },
-        ],
-      },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
-      nextCheck: { type: "string" },
-      disclaimer: { type: "string" },
-    },
-  },
-};
-
-const assistantChatFormat = {
-  type: "json_schema",
-  name: "finanko_assistant_chat",
-  strict: true,
-  schema: {
-    type: "object", additionalProperties: false,
-    required: ["answer", "evidence", "suggestedQuestions", "disclaimer"],
-    properties: {
-      answer: { type: "string" },
-      evidence: { type: "array", maxItems: 3, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string" }, value: { type: "string" } } } },
-      suggestedQuestions: { type: "array", minItems: 2, maxItems: 3, items: { type: "string" } },
-      disclaimer: { type: "string" },
-    },
-  },
-};
-
-const assistantInsightFormat = {
-  type: "json_schema",
-  name: "finanko_context_insight",
-  strict: true,
-  schema: {
-    type: "object", additionalProperties: false,
-    required: ["headline", "explanation", "factors", "confidence"],
-    properties: {
-      headline: { type: "string" }, explanation: { type: "string" },
-      factors: { type: "array", maxItems: 3, items: { type: "string" } },
-      confidence: { type: "number", minimum: 0, maximum: 1 },
-    },
-  },
-};
-
-const assistantRecapFormat = {
-  type: "json_schema",
-  name: "finanko_weekly_recap",
-  strict: true,
-  schema: {
-    type: "object", additionalProperties: false,
-    required: ["headline", "summary", "highlights", "focus", "disclaimer"],
-    properties: {
-      headline: { type: "string" }, summary: { type: "string" }, focus: { type: "string" }, disclaimer: { type: "string" },
-      highlights: { type: "array", minItems: 1, maxItems: 3, items: { type: "object", additionalProperties: false, required: ["label", "value", "tone"], properties: { label: { type: "string" }, value: { type: "string" }, tone: { type: "string", enum: ["positive", "warning", "neutral"] } } } },
-    },
-  },
-};
-
 function parserSystem(mode: unknown) {
   const shared = "Return only data matching the supplied JSON schema. Currency aliases are strict: бат/baht/THB/฿/บาท = THB; руб/RUB/₽ = RUB; лари/GEL/₾/ლარი = GEL; доллар/USD/$ = USD. fallbackCurrency is only a last resort when the source contains no currency evidence. Any currency visible in text or image overrides fallbackCurrency. categoryId must be one of the supplied category names, never an invented database id. Numbers must be JSON numbers, not strings.";
   if (mode !== "receipt") {
@@ -248,35 +151,6 @@ function parserSystem(mode: unknown) {
 }
 
 const receiptOcrSystem = "Read the receipt image as a document before interpreting it. Transcribe every visible row from top to bottom exactly enough to preserve names and numbers, classify each row, and keep product rows separate from subtotal, tax, total, payment, cash and change. Do not translate or invent missing text. Use null for unreadable numbers. For discounts, preserve the printed amount and classify the row as discount. Identify the final payable total rather than cash tendered, change, savings or subtotal. Thai receipts use THB and Georgian receipts use GEL when script or merchant context makes that clear. Report image-quality warnings and calibrated confidence. Return only the supplied JSON schema.";
-
-const assistantSystem = [
-  "You are Finanko's concise personal-finance copilot. Return one useful insight, one next action, and at most one optional what-if scenario. Never produce an essay or repeat the dashboard.",
-  "Keep headline under 12 words, summary under 35 words, action description under 30 words, and each evidence value short. Use calm, direct language without alarmism or praise.",
-  "Identify the highest-leverage action from supplied facts. If required data is missing, ask for one concrete transaction or a history review using only the supported action types.",
-  "Never call debt principal repayment an expense. Missing recorded income is not proof of no income. Accounts, savings, and debts are current balances, not monthly behavior. Never extrapolate sparse or all-time totals into a monthly or annual run rate.",
-  "spendingOpportunities are conservative calculations made by Finanko from repeated item-level transactions. If that list is non-empty, scenario must select one supplied opportunityId and use 25 or 50 percent. Never calculate or change the money values yourself. If empty, scenario must be null.",
-  "A scenario is optional and non-judgmental: explain what happens if the user reduces a repeated purchase, and suggest an obvious cheaper substitute only when useful. Do not label ordinary preferences as bad spending.",
-  "When dataQuality.canProject=false, do not project categories or cash flow. A supplied spendingOpportunity is still valid because it has its own history threshold.",
-  "Use account names and rates only when they clarify priority. Never expose internal field names.",
-  "Write in the requested locale. Do not provide regulated investment, tax, legal, or individualized credit-product advice.",
-].join(" ");
-
-const assistantChatSystem = [
-  "You are Finanko's conversational financial copilot. Answer the user's exact question from supplied aggregates and the short conversation only.",
-  "Start with the direct answer, keep it under 110 words, and include at most three short evidence points. Never invent transactions, benchmarks, projections, or missing household facts.",
-  "If data is insufficient, say what is missing and suggest a useful follow-up. Distinguish balances from cash flow and recorded income from actual income.",
-  "Suggested questions must be relevant follow-ups. Write in the requested locale. Do not provide regulated investment, tax, legal, or individualized credit-product advice.",
-].join(" ");
-
-const assistantInsightSystem = [
-  "Explain one financial surface using only its supplied context and aggregates. Headline under 9 words, explanation under 45 words, and at most three concrete factors.",
-  "Explain what changed or matters and why. Do not give a broad portfolio review, generic advice, or unsupported projections. Be calm and write in the requested locale.",
-].join(" ");
-
-const assistantRecapSystem = [
-  "Create a compact weekly financial recap from supplied aggregates. Summarize spending, income, cash flow, net worth, recurring activity, and major drivers only when supported.",
-  "Headline under 10 words, summary under 45 words, at most three highlights, and one gentle focus for next week. Never extrapolate sparse data or shame spending. Write in the requested locale.",
-].join(" ");
 
 function extractOutputText(result: { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> }) {
   return result.output_text ?? result.output?.flatMap((item) => item.content ?? []).find((item) => item.text)?.text;
@@ -437,7 +311,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
 
     const kind = request.body?.kind;
     const payload = request.body?.payload ?? {};
-    if (kind !== "parse" && kind !== "assistant") {
+    if (kind !== "parse") {
       response.status(400).json({ error: "Invalid request kind" });
       return;
     }
@@ -484,21 +358,13 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       return;
     }
 
-    const assistantMode = payload.assistantMode;
-    const assistantConfig = assistantMode === "chat"
-      ? { system: assistantChatSystem, format: assistantChatFormat }
-      : assistantMode === "insight"
-        ? { system: assistantInsightSystem, format: assistantInsightFormat }
-        : assistantMode === "weekly_recap"
-          ? { system: assistantRecapSystem, format: assistantRecapFormat }
-          : { system: assistantSystem, format: assistantFormat };
     const parsed = await requestStructuredOutput(
       apiKey,
-      kind === "parse" ? parserSystem(payload.mode) : assistantConfig.system,
-      kind === "parse" ? parserContent(payload) : JSON.stringify(payload),
-      kind === "parse" ? parserFormat : assistantConfig.format,
+      parserSystem(payload.mode),
+      parserContent(payload),
+      parserFormat,
     );
-    response.status(200).json(kind === "parse" ? parsed : { analysis: parsed });
+    response.status(200).json(parsed);
   } catch (error) {
     console.error("Finanko AI request failed", error);
     response.status(500).json({ error: "AI request failed" });

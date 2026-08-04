@@ -4,74 +4,80 @@ Guidance for coding agents working on Finanko.
 
 ## Product
 
-Finanko is a minimal personal finance dashboard for tracking portfolios, accounts, income, expenses, savings, recurring payments, debts, receipts, and lightweight AI-assisted analysis.
+Finanko is a minimal, mobile-first tracker for actual personal expenses. Its primary flow is `Receipt / Text / Manual → editable draft → save → filtered spending total`.
 
-The product should feel calm, thin, elegant, and practical. It is a financial cockpit, not a marketing site.
+The product should feel calm, thin, elegant, and practical. It is not an accounting cockpit, portfolio manager, or marketing site.
 
-## Stack Direction
+## Stack
 
 - Use Vite, React, and TypeScript.
-- Use Ant Design for default UI components.
-- Use Supabase for authentication, database, storage, and future edge functions.
-- Keep the app web-first, but avoid browser-only assumptions where possible so it can later be wrapped with Tauri.
-- Prefer small, local abstractions over framework-heavy architecture.
+- Use Ant Design first and customize lightly through tokens/CSS.
+- Use Supabase for authentication and relational persistence.
+- Use Zustand only as an in-memory cache after confirmed database writes.
+- Keep browser assumptions isolated so a later Tauri wrapper remains possible.
 
 ## Architecture
-
-Organize features by domain:
 
 ```txt
 src/
   app/
   features/
     auth/
-    portfolios/
-    accounts/
-    transactions/
-    recurring/
-    analytics/
+    expenses/
+    finance/
     receipts/
-    assistant/
   shared/
     api/
-    ui/
+    data/
+    i18n/
     lib/
     types/
+    ui/
 ```
 
-Portfolios are the root business entity. Most records should belong to a `portfolio_id`.
+- `expenses` owns the active product UI and spending calculations.
+- `finance` is a compatibility persistence layer for existing Supabase rows.
+- `receipts` is the protected receipt/text analyzer boundary.
+- Do not recreate ledger, balance, portfolio, account, debt, recurring, interest, or assistant UI.
 
-Transactions are the source of financial history. Do not update balances in a way that loses the underlying event trail.
+## Protected behavior
+
+- Do not change the current receipt recognition algorithm, prompts, image preparation, normalization, or response contract unless explicitly requested.
+- Do not change the current text recognition algorithm or fallback unless explicitly requested.
+- Analyzer output fills an editable draft and never blocks saving because of confidence or arithmetic mismatch.
+- The current form values are the source of truth when saving.
+
+## Data safety
+
+- Existing expenses are real data. Never rewrite, normalize, recreate, reset, truncate, or mass-delete them.
+- Preserve IDs, amounts, currencies, categories, dates, descriptions, sources, and receipt items.
+- Keep legacy `portfolios` and `accounts` tables while real transactions reference them.
+- Hide legacy portfolio/account relations from the UI and treat them only as storage compatibility fields.
+- Prefer soft deletion for expenses.
+- Destructive actions require explicit user confirmation.
+- Keep owner-scoped RLS on every exposed financial table.
 
 ## Design
 
 - Dark theme is the default.
-- Use Ant Design components first and customize lightly through tokens.
-- Keep visual noise low: subtle borders, compact spacing, restrained accent colors.
-- Desktop should use sidebar-style navigation where appropriate.
-- Mobile should favor bottom navigation, drawers, and compact forms.
-- Do not build landing pages unless explicitly requested. The first screen should be the actual app experience.
+- Mobile is the primary view; desktop preserves the same interaction model.
+- Receipt, Text, and Manual actions must be visible immediately after authentication.
+- Avoid sidebars, dense toolbars, nested navigation, and unnecessary confirmation steps.
+- Use compact spacing, subtle borders, restrained color, clear labels, and 44×44 px touch targets.
+- Filters for period and category must update totals, analytics, and history together.
+- Do not build a landing page unless explicitly requested.
 
-## Data And AI
+## AI and privacy
 
-- AI calls must be minimal and scoped.
-- Receipt parsing should send only the receipt image or OCR text plus needed category context.
-- Text expense parsing should send only the user text and relevant category list.
-- Portfolio assistant requests should use local summaries and aggregates instead of raw multi-year transaction history.
-- During early MVP development, use mock AI responses behind the same interface planned for real AI calls.
-
-## Safety
-
-- Treat financial data as sensitive.
-- Prefer soft deletion for financial records where practical.
-- Destructive actions must require user confirmation.
-- Portfolio deletion should require explicit confirmation, ideally by typing the portfolio name.
-- The assistant must not provide regulated financial advice. It may describe observations, scenarios, tradeoffs, and approximate outcomes.
+- Send only the selected receipt image or expense text plus required category/currency context.
+- AI suggestions are not financial advice and do not make automated decisions.
+- Keep AI credentials server-side.
 
 ## Development
 
 - Read existing code before changing patterns.
-- Keep changes scoped to the requested behavior.
-- Prefer `rg` for searching.
-- Add tests when changing shared logic, calculations, analytics, or data transformations.
-- Before finishing, run the relevant typecheck, lint, and tests when available.
+- Prefer reuse of the current auth, repository, parsers, formatting, and i18n primitives.
+- Keep changes scoped to actual-expense tracking.
+- Use `rg` for searches.
+- Add tests for shared calculations, filters, normalization boundaries, and data transformations.
+- Run `npm test`, `npm run build`, and `npm run lint` before finishing.
