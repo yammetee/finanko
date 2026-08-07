@@ -1,10 +1,10 @@
 import { AppThemeProvider } from "./providers/AppThemeProvider";
-import { ExpenseWorkspace } from "../features/expenses/ExpenseWorkspace";
+import { ExpensesPage } from "../features/expenses/ExpensesPage";
 
 export function AuthenticatedApp() {
   return (
     <AppThemeProvider>
-      <ExpenseWorkspace />
+      <ExpensesPage />
     </AppThemeProvider>
   );
 }
