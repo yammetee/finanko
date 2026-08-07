@@ -36,7 +36,6 @@ export interface FinanceSnapshot {
 }
 
 export interface FinanceState extends FinanceSnapshot {
-  addCategory: (input: Pick<Category, "name" | "type" | "color">) => Promise<void>;
   addTransaction: (input: NewExpenseInput) => Promise<void>;
   updateTransaction: (id: string, input: NewExpenseInput) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;

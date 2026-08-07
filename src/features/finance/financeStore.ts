@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Account, Category, Transaction, TransactionItem } from "../../shared/types/finance";
+import type { Account, Transaction, TransactionItem } from "../../shared/types/finance";
 import { createDefaultCategories, createSeedSnapshot } from "./seedData";
 import type { FinanceSnapshot, FinanceState, NewExpenseInput } from "./financeTypes";
 import {
@@ -73,16 +73,17 @@ async function ensureExpenseContext(snapshot: FinanceSnapshot): Promise<FinanceS
   }
 
   let categories = snapshot.categories;
-  const hasExpenseCategory = categories.some(
-    (category) => category.portfolioId === portfolio.id && category.type === "expense",
+  const existingCategoryNames = new Set(
+    categories
+      .filter((category) => category.portfolioId === portfolio.id && category.type === "expense")
+      .map((category) => category.name.trim().toLocaleLowerCase()),
   );
-  if (!hasExpenseCategory) {
-    const defaults = createDefaultCategories(portfolio.id).map((category) => ({
-      ...category,
-      id: uid("cat"),
-    }));
-    await saveCategories(defaults);
-    categories = [...categories, ...defaults];
+  const missingDefaults = createDefaultCategories(portfolio.id)
+    .filter((category) => !existingCategoryNames.has(category.name.toLocaleLowerCase()))
+    .map((category) => ({ ...category, id: uid("cat") }));
+  if (missingDefaults.length > 0) {
+    await saveCategories(missingDefaults);
+    categories = [...categories, ...missingDefaults];
   }
 
   return {
@@ -133,18 +134,6 @@ function buildExpense(
 
 export const useFinanceStore = create<FinanceState>()((set, get) => ({
   ...createSeedSnapshot(),
-  addCategory: async (input) => {
-    const state = get();
-    const portfolio = getPrimaryPortfolio(state);
-    if (!portfolio) throw new Error("Expense portfolio is unavailable");
-    const category: Category = {
-      id: uid("cat"),
-      portfolioId: portfolio.id,
-      ...input,
-    };
-    await saveCategories([category]);
-    set((current) => ({ categories: [...current.categories, category] }));
-  },
   addTransaction: async (input) => {
     const state = get();
     const portfolio = getPrimaryPortfolio(state);

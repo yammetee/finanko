@@ -49,11 +49,6 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
           Input: {
             activeShadow: "0 0 0 2px rgba(56, 182, 240, 0.12)",
           },
-          Segmented: {
-            trackBg: "#081119",
-            itemSelectedBg: "#10405a",
-            itemHoverBg: "#102b3b",
-          },
           Select: {
             optionSelectedBg: "#103b52",
           },

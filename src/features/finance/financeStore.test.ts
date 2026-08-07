@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Category } from "../../shared/types/finance";
 import type { FinanceSnapshot } from "./financeTypes";
 
 const repository = vi.hoisted(() => ({
@@ -11,7 +12,7 @@ const repository = vi.hoisted(() => ({
 
 vi.mock("./financeRepository", () => repository);
 
-import { useFinanceStore } from "./financeStore";
+import { initializeFinanceData, useFinanceStore } from "./financeStore";
 
 const snapshot: FinanceSnapshot = {
   activePortfolioId: "portfolio",
@@ -138,5 +139,28 @@ describe("expense persistence store", () => {
       amount: 40,
       description: "Old value",
     });
+  });
+
+  it("adds only missing fixed categories without changing existing expenses", async () => {
+    repository.loadFinanceData.mockResolvedValueOnce(snapshot);
+
+    await initializeFinanceData("owner", "Personal");
+
+    const savedCategories = repository.saveCategories.mock.calls[0][0] as Category[];
+    expect(savedCategories.map((category) => category.name)).toEqual([
+      "Home",
+      "Transport",
+      "Health",
+      "Shopping",
+      "Entertainment",
+      "Bills",
+      "Travel",
+      "Subscriptions",
+      "Education",
+      "Other",
+    ]);
+    expect(useFinanceStore.getState().categories).toHaveLength(11);
+    expect(useFinanceStore.getState().transactions).toEqual(snapshot.transactions);
+    expect(useFinanceStore.getState().transactionItems).toEqual(snapshot.transactionItems);
   });
 });

@@ -38,6 +38,7 @@ export interface ExpenseTrendBucket {
   end: string;
   value: number;
   transactionCount: number;
+  unit: "hour" | "day" | "month" | "year";
 }
 
 interface ExpenseViewInput {
@@ -116,10 +117,7 @@ function trendRange(
 ): PeriodRange | null {
   const selectedRange = getExpensePeriodRange(filters, now);
   if (selectedRange) {
-    return {
-      start: selectedRange.start,
-      end: selectedRange.end.isAfter(now) ? now.endOf("day") : selectedRange.end,
-    };
+    return selectedRange;
   }
   if (history.length === 0) return null;
 
@@ -141,24 +139,22 @@ export function buildExpenseTrendBuckets(
   if (!range || range.end.isBefore(range.start)) return [];
 
   const dayCount = range.end.startOf("day").diff(range.start.startOf("day"), "day") + 1;
-  const unit = filters.period === "today"
+  const unit: ExpenseTrendBucket["unit"] = filters.period === "today"
     ? "hour"
-    : dayCount <= 14
+    : filters.period === "week" || filters.period === "month"
       ? "day"
-      : dayCount <= 93
-        ? "week"
-        : dayCount <= 730
-          ? "month"
-          : "year";
+      : filters.period === "year" || filters.period === "all"
+        ? "month"
+        : dayCount <= 62
+          ? "day"
+          : dayCount <= 730
+            ? "month"
+            : "year";
   const buckets: Array<{ start: Dayjs; end: Dayjs }> = [];
   let cursor = unit === "day" ? range.start.startOf("day") : range.start.startOf(unit);
 
   while (!cursor.isAfter(range.end)) {
-    const bucketEnd = unit === "hour"
-      ? cursor.add(3, "hour").endOf("hour")
-      : unit === "week"
-        ? cursor.add(6, "day").endOf("day")
-        : cursor.endOf(unit);
+    const bucketEnd = cursor.endOf(unit);
     buckets.push({
       start: cursor.isBefore(range.start) ? range.start : cursor,
       end: bucketEnd.isAfter(range.end) ? range.end : bucketEnd,
@@ -177,6 +173,7 @@ export function buildExpenseTrendBuckets(
       end: bucket.end.toISOString(),
       value: entries.reduce((sum, entry) => sum + entry.contribution, 0),
       transactionCount: entries.length,
+      unit,
     };
   });
 }

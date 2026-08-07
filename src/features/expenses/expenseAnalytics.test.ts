@@ -161,7 +161,7 @@ describe("expense analytics", () => {
       .toBe("2026-07-08 23:59");
   });
 
-  it("fills the selected period with calendar buckets instead of sparse transaction days", () => {
+  it("creates one point for every day of the selected month", () => {
     const result = view([
       expense({ id: "first", amount: 30, occurredAt: "2026-08-01T12:00:00.000Z" }),
       expense({ id: "second", amount: 70, occurredAt: "2026-08-04T12:00:00.000Z" }),
@@ -172,12 +172,12 @@ describe("expense analytics", () => {
       dayjs("2026-08-04T18:00:00.000Z"),
     );
 
-    expect(buckets).toHaveLength(4);
-    expect(buckets.map((bucket) => bucket.value)).toEqual([30, 0, 0, 70]);
+    expect(buckets).toHaveLength(31);
+    expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([30, 0, 0, 70]);
     expect(buckets.reduce((sum, bucket) => sum + bucket.value, 0)).toBe(result.total);
   });
 
-  it("splits today into useful four-hour buckets", () => {
+  it("splits today into 24 hourly points", () => {
     const history = [{ transaction: expense(), contribution: 100 }];
     const buckets = buildExpenseTrendBuckets(
       history,
@@ -185,11 +185,22 @@ describe("expense analytics", () => {
       dayjs("2026-08-04T18:00:00.000Z"),
     );
 
-    expect(buckets).toHaveLength(6);
+    expect(buckets).toHaveLength(24);
     expect(buckets.reduce((sum, bucket) => sum + bucket.value, 0)).toBe(100);
   });
 
-  it("uses monthly buckets for long periods and preserves transaction counts", () => {
+  it("always creates seven daily points for a week", () => {
+    const buckets = buildExpenseTrendBuckets(
+      [{ transaction: expense(), contribution: 100 }],
+      { period: "week", categoryKeys: [] },
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+
+    expect(buckets).toHaveLength(7);
+    expect(buckets.every((bucket) => bucket.unit === "day")).toBe(true);
+  });
+
+  it("creates twelve monthly points for a year and preserves transaction counts", () => {
     const history = [
       {
         transaction: expense({ id: "january", amount: 20, occurredAt: "2026-01-10T12:00:00.000Z" }),
@@ -206,7 +217,7 @@ describe("expense analytics", () => {
       dayjs("2026-08-04T18:00:00.000Z"),
     );
 
-    expect(buckets).toHaveLength(8);
+    expect(buckets).toHaveLength(12);
     expect(buckets[0]).toEqual(expect.objectContaining({ value: 20, transactionCount: 1 }));
     expect(buckets[7]).toEqual(expect.objectContaining({ value: 80, transactionCount: 1 }));
   });

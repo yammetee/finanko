@@ -2,23 +2,22 @@ import AntApp from "antd/es/app";
 import Button from "antd/es/button";
 import Card from "antd/es/card";
 import DatePicker from "antd/es/date-picker";
-import Drawer from "antd/es/drawer";
-import Form from "antd/es/form";
-import Input from "antd/es/input";
-import Segmented from "antd/es/segmented";
+import Tooltip from "antd/es/tooltip";
 import Typography from "antd/es/typography";
 import {
   Camera,
   FileText,
   LogOut,
   PenLine,
-  Plus,
-  Settings,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthStore } from "../auth/authStore";
 import { useFinanceStore } from "../finance/financeStore";
+import {
+  isDefaultExpenseCategory,
+  sortDefaultExpenseCategories,
+} from "../finance/seedData";
 import {
   detectAmountInText,
   detectCurrencyInText,
@@ -34,6 +33,7 @@ import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
 import { formatMoney } from "../../shared/lib/format";
 import { isValidMoneyDecimal } from "../../shared/lib/money";
 import { confirmDanger } from "../../shared/ui/confirmations";
+import { CurrencyIcon, NativeCurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import type { Currency, Transaction } from "../../shared/types/finance";
 import {
   ExpenseComposer,
@@ -47,10 +47,12 @@ import {
 } from "./expenseDraft";
 import { ExpenseHistory } from "./ExpenseHistory";
 import { ExpenseDetail } from "./ExpenseDetail";
+import { ExpenseTrendChart } from "./ExpenseTrendChart";
 import {
   buildExpenseCategoryGroups,
   buildExpenseTrendBuckets,
   buildExpenseView,
+  categoryGroupKey,
   UNALLOCATED_CATEGORY_KEY,
   type ExpenseFilters,
   type ExpensePeriod,
@@ -60,9 +62,8 @@ const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
 
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
-const DEFAULT_CATEGORY_COLOR = "#7f93a6";
-const CATEGORY_COLORS = ["#f4bd45", "#59a9f7", "#9b7bea", "#f07f8b", "#4ec7d8", "#c277d9", "#7f93a6", "#48c98a"];
 const MONEY_SYMBOLS = ["$", "€", "₾", "₽", "฿", "¥", "£", "₿", "₩", "¢", "₹", "₺", "$", "₾", "€", "₽"];
+type CurrencyDisplayMode = Currency | "native";
 
 function MoneyBackdrop() {
   return (
@@ -94,11 +95,8 @@ export function ExpenseDashboard() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [categoryForm] = Form.useForm<{ name: string; color: string }>();
-  const categoryColor = Form.useWatch("color", categoryForm) ?? DEFAULT_CATEGORY_COLOR;
   const [ratesVersion, setRatesVersion] = useState(0);
-  const [selectedDisplayCurrency, setSelectedDisplayCurrency] = useState<Currency | null>(null);
+  const [currencyDisplay, setCurrencyDisplay] = useState<CurrencyDisplayMode>("native");
   const [filters, setFilters] = useState<ExpenseFilters>({
     period: "month",
     categoryKeys: [],
@@ -135,7 +133,10 @@ export function ExpenseDashboard() {
     [activePortfolioIds, state.categories],
   );
   const primaryCategories = useMemo(
-    () => expenseCategories.filter((category) => category.portfolioId === primaryPortfolio?.id),
+    () => sortDefaultExpenseCategories(expenseCategories.filter(
+      (category) =>
+        category.portfolioId === primaryPortfolio?.id && isDefaultExpenseCategory(category),
+    )),
     [expenseCategories, primaryPortfolio?.id],
   );
   const editorCategories = useMemo(
@@ -145,17 +146,35 @@ export function ExpenseDashboard() {
     [editingExpense, expenseCategories, primaryCategories],
   );
   const baseCurrency = primaryPortfolio?.baseCurrency ?? "USD";
-  const displayCurrency = selectedDisplayCurrency ?? baseCurrency;
+  const displayCurrency = currencyDisplay === "native" ? baseCurrency : currencyDisplay;
+  const currencyModes: CurrencyDisplayMode[] = ["native", ...CURRENCIES];
+  const currentCurrencyIndex = currencyModes.indexOf(currencyDisplay);
+  const nextCurrencyMode = currencyModes[(currentCurrencyIndex + 1) % currencyModes.length];
+  const currentCurrencyLabel = currencyDisplay === "native" ? t("currency.native") : currencyDisplay;
+  const nextCurrencyLabel = nextCurrencyMode === "native" ? t("currency.native") : nextCurrencyMode;
+  const otherCategory = primaryCategories.find(
+    (category) => category.name.trim().toLocaleLowerCase() === "other",
+  );
+  const analyticsCategories = useMemo(
+    () => expenseCategories.map((category) => isDefaultExpenseCategory(category)
+      ? category
+      : {
+          ...category,
+          name: "Other",
+          color: otherCategory?.color ?? "#7f93a6",
+        }),
+    [expenseCategories, otherCategory?.color],
+  );
   const categoryGroups = useMemo(
-    () => buildExpenseCategoryGroups(expenseCategories, (category) => getCategoryName(category, t)),
-    [expenseCategories, t],
+    () => buildExpenseCategoryGroups(analyticsCategories, (category) => getCategoryName(category, t)),
+    [analyticsCategories, t],
   );
   const expenseView = useMemo(() => {
     void ratesVersion;
     return buildExpenseView({
       transactions: state.transactions,
       transactionItems: state.transactionItems,
-      categories: expenseCategories,
+      categories: analyticsCategories,
       portfolioIds: activePortfolioIds,
       filters,
       displayCurrency,
@@ -163,7 +182,7 @@ export function ExpenseDashboard() {
   }, [
     activePortfolioIds,
     displayCurrency,
-    expenseCategories,
+    analyticsCategories,
     filters,
     ratesVersion,
     state.transactionItems,
@@ -173,17 +192,28 @@ export function ExpenseDashboard() {
     () => new Map(categoryGroups.map((group) => [group.key, group.name])),
     [categoryGroups],
   );
-  const localizedCategoryBreakdown = expenseView.byCategory.map((item) => ({
-    ...item,
-    name: item.key === UNALLOCATED_CATEGORY_KEY
-      ? t("expense.unallocated")
-      : categoryNameByKey.get(item.key) ?? item.name,
-  }));
+  const otherCategoryKey = categoryGroupKey("Other");
+  const localizedCategoryBreakdown = expenseView.byCategory.reduce<
+    Array<(typeof expenseView.byCategory)[number]>
+  >((items, item) => {
+    const key = item.key === UNALLOCATED_CATEGORY_KEY ? otherCategoryKey : item.key;
+    const existing = items.find((candidate) => candidate.key === key);
+    if (existing) {
+      existing.value += item.value;
+      return items;
+    }
+    items.push({
+      ...item,
+      key,
+      color: key === otherCategoryKey ? otherCategory?.color ?? "#7f93a6" : item.color,
+      name: categoryNameByKey.get(key) ?? (key === otherCategoryKey ? t("category.other") : item.name),
+    });
+    return items;
+  }, []).sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
   const trendBuckets = useMemo(
     () => buildExpenseTrendBuckets(expenseView.history, filters),
     [expenseView.history, filters],
   );
-  const maxTrend = Math.max(1, ...trendBuckets.map((point) => Math.abs(point.value)));
   const averageExpense = expenseView.history.length > 0
     ? expenseView.total / expenseView.history.length
     : 0;
@@ -192,26 +222,8 @@ export function ExpenseDashboard() {
     0,
   );
 
-  function trendLabel(start: string, end: string) {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    const durationHours = (endDate.getTime() - startDate.getTime()) / (60 * 60 * 1000);
-    if (durationHours < 6 && startDate.toDateString() === endDate.toDateString()) {
-      const hourFormatter = new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      return hourFormatter.format(startDate);
-    }
-    const formatter = new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
-      day: "numeric",
-      month: "short",
-    });
-    const startLabel = formatter.format(startDate).replace(" г.", "");
-    const endLabel = formatter.format(endDate).replace(" г.", "");
-    return startDate.toDateString() === endDate.toDateString()
-      ? startLabel
-      : `${startLabel}–${endLabel}`;
+  function cycleDisplayCurrency() {
+    setCurrencyDisplay(nextCurrencyMode);
   }
 
   function closeComposer() {
@@ -405,23 +417,21 @@ export function ExpenseDashboard() {
     });
   }
 
-  async function addCategory(values: { name: string; color: string }) {
-    try {
-      await state.addCategory({ name: values.name.trim(), color: values.color, type: "expense" });
-      categoryForm.resetFields();
-      categoryForm.setFieldValue("color", DEFAULT_CATEGORY_COLOR);
-      message.success(t("feedback.categoryAdded"));
-    } catch {
-      message.error(t("feedback.saveFailed"));
-    }
+  function categoryFilterKeys(key: string) {
+    return key === otherCategoryKey ? [otherCategoryKey, UNALLOCATED_CATEGORY_KEY] : [key];
+  }
+
+  function isCategorySelected(key: string) {
+    return categoryFilterKeys(key).every((candidate) => filters.categoryKeys.includes(candidate));
   }
 
   function toggleCategory(key: string) {
+    const keys = categoryFilterKeys(key);
     setFilters((current) => ({
       ...current,
-      categoryKeys: current.categoryKeys.includes(key)
-        ? current.categoryKeys.filter((candidate) => candidate !== key)
-        : [...current.categoryKeys, key],
+      categoryKeys: keys.every((candidate) => current.categoryKeys.includes(candidate))
+        ? current.categoryKeys.filter((candidate) => !keys.includes(candidate))
+        : [...new Set([...current.categoryKeys, ...keys])],
     }));
   }
 
@@ -445,12 +455,32 @@ export function ExpenseDashboard() {
           <span className="brand-mark">F</span>
           <span>Finanko</span>
         </div>
-        <Button
-          aria-label={t("expense.settings")}
-          icon={<Settings size={19} />}
-          type="text"
-          onClick={() => setSettingsOpen(true)}
-        />
+        <div className="expense-header-actions">
+          <Tooltip title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })}>
+            <Button
+              aria-label={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })}
+              icon={currencyDisplay === "native"
+                ? <NativeCurrencyIcon size={18} />
+                : <CurrencyIcon currency={currencyDisplay} size={18} />}
+              type="text"
+              onClick={cycleDisplayCurrency}
+            />
+          </Tooltip>
+          <Button
+            aria-label={t("expense.switchLanguage")}
+            className="expense-language-button"
+            type="text"
+            onClick={() => setLocale(locale === "ru" ? "en" : "ru")}
+          >
+            {locale.toUpperCase()}
+          </Button>
+          <Button
+            aria-label={t("actions.signOut")}
+            icon={<LogOut size={18} />}
+            type="text"
+            onClick={() => void signOut()}
+          />
+        </div>
       </header>
 
       <main className="expense-app-main">
@@ -475,31 +505,10 @@ export function ExpenseDashboard() {
         </section>
 
         <Card className="expense-summary-card">
-          <div className="expense-summary-heading">
-            <div>
-              <Text className="expense-eyebrow">{t("expense.spent")}</Text>
-              <Title className="expense-total" level={1}>
-                {formatMoney(expenseView.total, displayCurrency)}
-              </Title>
-            </div>
-            <div
-              className="expense-currency-switch"
-              role="group"
-              aria-label={t("expense.displayCurrency")}
-            >
-              {CURRENCIES.map((currency) => (
-                <button
-                  aria-pressed={displayCurrency === currency}
-                  className={displayCurrency === currency ? "is-active" : ""}
-                  key={currency}
-                  type="button"
-                  onClick={() => setSelectedDisplayCurrency(currency)}
-                >
-                  {currency}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Text className="expense-eyebrow">{t("expense.spent")}</Text>
+          <Title className="expense-total" level={1}>
+            {formatMoney(expenseView.total, displayCurrency)}
+          </Title>
 
           <div className="expense-filter-section">
             <Text className="expense-filter-label">{t("expense.period")}</Text>
@@ -557,8 +566,8 @@ export function ExpenseDashboard() {
               </button>
               {categoryGroups.map((group) => (
                 <button
-                  aria-pressed={filters.categoryKeys.includes(group.key)}
-                  className={`expense-filter-chip${filters.categoryKeys.includes(group.key) ? " is-active" : ""}`}
+                  aria-pressed={isCategorySelected(group.key)}
+                  className={`expense-filter-chip${isCategorySelected(group.key) ? " is-active" : ""}`}
                   key={group.key}
                   type="button"
                   onClick={() => toggleCategory(group.key)}
@@ -567,15 +576,6 @@ export function ExpenseDashboard() {
                   {group.name}
                 </button>
               ))}
-              <button
-                aria-pressed={filters.categoryKeys.includes(UNALLOCATED_CATEGORY_KEY)}
-                className={`expense-filter-chip${filters.categoryKeys.includes(UNALLOCATED_CATEGORY_KEY) ? " is-active" : ""}`}
-                type="button"
-                onClick={() => toggleCategory(UNALLOCATED_CATEGORY_KEY)}
-              >
-                <span className="expense-category-dot expense-category-dot-muted" />
-                {t("expense.unallocated")}
-              </button>
             </div>
           </div>
 
@@ -598,30 +598,12 @@ export function ExpenseDashboard() {
                   <span>{t("expense.transactionCount", { count: expenseView.history.length })}</span>
                   <span>{t("expense.averageExpense")}: <strong>{formatMoney(averageExpense, displayCurrency)}</strong></span>
                 </div>
-                <div
-                  className="expense-trend"
-                  role="img"
-                  aria-label={`${t("expense.trend")}: ${trendBuckets
-                    .map((point) => `${trendLabel(point.start, point.end)} ${formatMoney(point.value, displayCurrency)}`)
-                    .join(", ")}`}
-                >
-                  {trendBuckets.map((point) => (
-                    <div
-                      className="expense-trend-column"
-                      key={point.key}
-                      title={`${trendLabel(point.start, point.end)}: ${formatMoney(point.value, displayCurrency)}`}
-                    >
-                      <span className="expense-trend-value">
-                        {point.value ? formatMoney(point.value, displayCurrency) : "—"}
-                      </span>
-                      <div
-                        className={`expense-trend-bar${point.value === 0 ? " is-empty" : ""}${point.value < 0 ? " is-negative" : ""}`}
-                        style={{ height: `${point.value === 0 ? 2 : Math.max(8, (Math.abs(point.value) / maxTrend) * 100)}%` }}
-                      />
-                      <span className="expense-trend-label">{trendLabel(point.start, point.end)}</span>
-                    </div>
-                  ))}
-                </div>
+                <ExpenseTrendChart
+                  buckets={trendBuckets}
+                  currency={displayCurrency}
+                  label={t("expense.trend")}
+                  locale={locale}
+                />
               </>
             ) : <Text className="muted">{t("empty.noExpenses")}</Text>}
           </Card>
@@ -630,7 +612,7 @@ export function ExpenseDashboard() {
             {localizedCategoryBreakdown.length > 0 ? (
               <div className="expense-category-list">
                 {localizedCategoryBreakdown.map((category) => {
-                  const active = filters.categoryKeys.includes(category.key);
+                  const active = isCategorySelected(category.key);
                   const share = categoryMagnitude > 0
                     ? Math.round((Math.abs(category.value) / categoryMagnitude) * 100)
                     : 0;
@@ -692,90 +674,12 @@ export function ExpenseDashboard() {
         items={selectedExpense
           ? state.transactionItems.filter((item) => item.transactionId === selectedExpense.id)
           : []}
-        categories={expenseCategories}
+        categories={analyticsCategories}
         onClose={() => setSelectedExpense(null)}
         onEdit={openEdit}
         onDelete={deleteExpense}
       />
 
-      <Drawer
-        className="expense-settings"
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        title={t("expense.settings")}
-        width={420}
-      >
-        <div className="expense-settings-content">
-          <section className="expense-settings-section">
-            <div className="expense-settings-section-heading">
-              <Text className="expense-section-title">{t("expense.language")}</Text>
-              <Text className="muted">{t("expense.languageHint")}</Text>
-            </div>
-            <Segmented
-              block
-              value={locale}
-              options={[{ label: "RU", value: "ru" }, { label: "EN", value: "en" }]}
-              onChange={(value) => setLocale(value as "ru" | "en")}
-            />
-          </section>
-          <section className="expense-settings-section">
-            <div className="expense-settings-section-heading">
-              <Text className="expense-section-title">{t("expense.categories")}</Text>
-              <Text className="muted">{t("expense.categoriesHint")}</Text>
-            </div>
-            <div className="expense-settings-categories">
-              {primaryCategories.map((category) => (
-                <div className="expense-settings-category" key={category.id}>
-                  <span style={{ background: category.color }} />
-                  {getCategoryName(category, t)}
-                </div>
-              ))}
-            </div>
-            <Form
-              form={categoryForm}
-              initialValues={{ color: DEFAULT_CATEGORY_COLOR }}
-              layout="vertical"
-              onFinish={addCategory}
-              className="expense-category-form"
-            >
-              <Form.Item name="name" label={t("expense.newCategory")} rules={[{ required: true, whitespace: true }]}>
-                <Input placeholder={t("expense.categoryPlaceholder")} />
-              </Form.Item>
-              <Form.Item name="color" hidden rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-              <div className="expense-color-field">
-                <Text>{t("form.color")}</Text>
-                <div className="expense-color-swatches" role="group" aria-label={t("form.color")}>
-                  {CATEGORY_COLORS.map((color) => (
-                    <button
-                      aria-label={t("expense.chooseColor", { color })}
-                      aria-pressed={categoryColor === color}
-                      className={categoryColor === color ? "is-active" : ""}
-                      key={color}
-                      style={{ background: color }}
-                      type="button"
-                      onClick={() => categoryForm.setFieldValue("color", color)}
-                    />
-                  ))}
-                </div>
-              </div>
-              <Button block htmlType="submit" icon={<Plus size={16} />} type="primary">
-                {t("actions.category")}
-              </Button>
-            </Form>
-          </section>
-          <div className="expense-settings-footer">
-            <Button block icon={<LogOut size={17} />} onClick={() => void signOut()}>
-              {t("actions.signOut")}
-            </Button>
-            <div className="legal-links">
-              <a href="/privacy.html" target="_blank">{t("legal.privacy")}</a>
-              <a href="/terms.html" target="_blank">{t("legal.terms")}</a>
-            </div>
-          </div>
-        </div>
-      </Drawer>
     </div>
   );
 }

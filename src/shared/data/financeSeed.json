@@ -9,8 +9,12 @@
     { "id": "cat-home", "name": "Home", "type": "expense", "color": "#5a9feb" },
     { "id": "cat-transport", "name": "Transport", "type": "expense", "color": "#9b82e6" },
     { "id": "cat-health", "name": "Health", "type": "expense", "color": "#f07f86" },
+    { "id": "cat-shopping", "name": "Shopping", "type": "expense", "color": "#e58aa8" },
+    { "id": "cat-entertainment", "name": "Entertainment", "type": "expense", "color": "#ad7ee8" },
+    { "id": "cat-bills", "name": "Bills", "type": "expense", "color": "#62a9a0" },
     { "id": "cat-travel", "name": "Travel", "type": "expense", "color": "#48c2cf" },
     { "id": "cat-subscriptions", "name": "Subscriptions", "type": "expense", "color": "#c078d8" },
+    { "id": "cat-education", "name": "Education", "type": "expense", "color": "#75a978" },
     { "id": "cat-other", "name": "Other", "type": "expense", "color": "#7f93a6" }
   ]
 }
