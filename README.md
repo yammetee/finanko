@@ -39,7 +39,7 @@ The current project can be rebuilt without creating another Supabase project:
 
 The reset does not target Supabase-managed `auth`, `storage`, `extensions`, `realtime`, `vault`, GraphQL, Functions, or migration schemas. It is intentionally review-only in this repository and is never run by application code.
 
-For an existing Finanko database that still contains `expense_items`, review and run [supabase/migrate-expense-items-to-expenses.sql](./supabase/migrate-expense-items-to-expenses.sql) once before applying [supabase/schema.sql](./supabase/schema.sql). The migration preserves every old item as an independent expense and removes its duplicated parent transaction and the obsolete item table.
+For an existing Finanko database where both `expenses` and `expense_items` still exist, review and run [supabase/migrate-expense-items-to-expenses.sql](./supabase/migrate-expense-items-to-expenses.sql) once before applying [supabase/schema.sql](./supabase/schema.sql). The migration preserves every old item as an independent expense and removes its duplicated parent transaction and the obsolete item table. If the reset already removed those tables, skip the migration and apply `schema.sql` directly; the migration also detects this state and exits without changing the database.
 
 ## Analyzer boundary
 

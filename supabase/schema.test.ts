@@ -53,6 +53,8 @@ describe("minimal Finanko schema", () => {
   });
 
   it("promotes legacy item rows before removing parent/item persistence", () => {
+    expect(itemMigration).toContain("to_regclass('public.expenses') is null");
+    expect(itemMigration).toContain("to_regclass('public.expense_items') is null");
     expect(itemMigration).toContain("insert into public.expenses");
     expect(itemMigration).toContain("from public.expense_items as item");
     expect(itemMigration).toContain("delete from public.expenses as parent");
