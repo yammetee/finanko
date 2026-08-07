@@ -32,6 +32,14 @@ export interface ExpenseHistoryEntry {
   contribution: number;
 }
 
+export interface ExpenseTrendBucket {
+  key: string;
+  start: string;
+  end: string;
+  value: number;
+  transactionCount: number;
+}
+
 interface ExpenseViewInput {
   transactions: Transaction[];
   transactionItems: TransactionItem[];
@@ -99,6 +107,78 @@ export function getExpensePeriodRange(
     };
   }
   return { start: now.startOf("month"), end: now.endOf("month") };
+}
+
+function trendRange(
+  history: ExpenseHistoryEntry[],
+  filters: ExpenseFilters,
+  now: Dayjs,
+): PeriodRange | null {
+  const selectedRange = getExpensePeriodRange(filters, now);
+  if (selectedRange) {
+    return {
+      start: selectedRange.start,
+      end: selectedRange.end.isAfter(now) ? now.endOf("day") : selectedRange.end,
+    };
+  }
+  if (history.length === 0) return null;
+
+  const timestamps = history.map((entry) => dayjs(entry.transaction.occurredAt));
+  return {
+    start: timestamps.reduce((earliest, value) => value.isBefore(earliest) ? value : earliest)
+      .startOf("month"),
+    end: timestamps.reduce((latest, value) => value.isAfter(latest) ? value : latest)
+      .endOf("month"),
+  };
+}
+
+export function buildExpenseTrendBuckets(
+  history: ExpenseHistoryEntry[],
+  filters: ExpenseFilters,
+  now = dayjs(),
+): ExpenseTrendBucket[] {
+  const range = trendRange(history, filters, now);
+  if (!range || range.end.isBefore(range.start)) return [];
+
+  const dayCount = range.end.startOf("day").diff(range.start.startOf("day"), "day") + 1;
+  const unit = filters.period === "today"
+    ? "hour"
+    : dayCount <= 14
+      ? "day"
+      : dayCount <= 93
+        ? "week"
+        : dayCount <= 730
+          ? "month"
+          : "year";
+  const buckets: Array<{ start: Dayjs; end: Dayjs }> = [];
+  let cursor = unit === "day" ? range.start.startOf("day") : range.start.startOf(unit);
+
+  while (!cursor.isAfter(range.end)) {
+    const bucketEnd = unit === "hour"
+      ? cursor.add(3, "hour").endOf("hour")
+      : unit === "week"
+        ? cursor.add(6, "day").endOf("day")
+        : cursor.endOf(unit);
+    buckets.push({
+      start: cursor.isBefore(range.start) ? range.start : cursor,
+      end: bucketEnd.isAfter(range.end) ? range.end : bucketEnd,
+    });
+    cursor = bucketEnd.add(1, "millisecond");
+  }
+
+  return buckets.map((bucket) => {
+    const entries = history.filter((entry) => {
+      const occurredAt = dayjs(entry.transaction.occurredAt);
+      return !occurredAt.isBefore(bucket.start) && !occurredAt.isAfter(bucket.end);
+    });
+    return {
+      key: `${bucket.start.toISOString()}-${bucket.end.toISOString()}`,
+      start: bucket.start.toISOString(),
+      end: bucket.end.toISOString(),
+      value: entries.reduce((sum, entry) => sum + entry.contribution, 0),
+      transactionCount: entries.length,
+    };
+  });
 }
 
 function isInsidePeriod(transaction: Transaction, range: PeriodRange | null) {
@@ -233,19 +313,10 @@ export function buildExpenseView({
     }))
     .sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
 
-  const trendMap = new Map<string, number>();
-  history.forEach((entry) => {
-    const key = dayjs(entry.transaction.occurredAt).format("YYYY-MM-DD");
-    trendMap.set(key, (trendMap.get(key) ?? 0) + entry.contribution);
-  });
-
   return {
     total: history.reduce((sum, entry) => sum + entry.contribution, 0),
     history,
     byCategory,
-    trend: [...trendMap.entries()]
-      .map(([date, value]) => ({ date, value }))
-      .sort((left, right) => left.date.localeCompare(right.date)),
     periodExpenses,
   };
 }

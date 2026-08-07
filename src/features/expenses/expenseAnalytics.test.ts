@@ -4,6 +4,7 @@ import type { Category, Transaction, TransactionItem } from "../../shared/types/
 import { setLiveExchangeRates } from "../../shared/lib/currency";
 import {
   buildExpenseBaseline,
+  buildExpenseTrendBuckets,
   buildExpenseView,
   getExpensePeriodRange,
   UNALLOCATED_CATEGORY_KEY,
@@ -158,6 +159,56 @@ describe("expense analytics", () => {
       customRange: ["2026-07-02T14:00:00.000Z", "2026-07-08T14:00:00.000Z"],
     }, now)?.end.format("YYYY-MM-DD HH:mm"))
       .toBe("2026-07-08 23:59");
+  });
+
+  it("fills the selected period with calendar buckets instead of sparse transaction days", () => {
+    const result = view([
+      expense({ id: "first", amount: 30, occurredAt: "2026-08-01T12:00:00.000Z" }),
+      expense({ id: "second", amount: 70, occurredAt: "2026-08-04T12:00:00.000Z" }),
+    ]);
+    const buckets = buildExpenseTrendBuckets(
+      result.history,
+      { period: "month", categoryKeys: [] },
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+
+    expect(buckets).toHaveLength(4);
+    expect(buckets.map((bucket) => bucket.value)).toEqual([30, 0, 0, 70]);
+    expect(buckets.reduce((sum, bucket) => sum + bucket.value, 0)).toBe(result.total);
+  });
+
+  it("splits today into useful four-hour buckets", () => {
+    const history = [{ transaction: expense(), contribution: 100 }];
+    const buckets = buildExpenseTrendBuckets(
+      history,
+      { period: "today", categoryKeys: [] },
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+
+    expect(buckets).toHaveLength(6);
+    expect(buckets.reduce((sum, bucket) => sum + bucket.value, 0)).toBe(100);
+  });
+
+  it("uses monthly buckets for long periods and preserves transaction counts", () => {
+    const history = [
+      {
+        transaction: expense({ id: "january", amount: 20, occurredAt: "2026-01-10T12:00:00.000Z" }),
+        contribution: 20,
+      },
+      {
+        transaction: expense({ id: "august", amount: 80, occurredAt: "2026-08-04T12:00:00.000Z" }),
+        contribution: 80,
+      },
+    ];
+    const buckets = buildExpenseTrendBuckets(
+      history,
+      { period: "year", categoryKeys: [] },
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+
+    expect(buckets).toHaveLength(8);
+    expect(buckets[0]).toEqual(expect.objectContaining({ value: 20, transactionCount: 1 }));
+    expect(buckets[7]).toEqual(expect.objectContaining({ value: 80, transactionCount: 1 }));
   });
 
   it("builds a stable read-only baseline", () => {

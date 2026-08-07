@@ -11,6 +11,7 @@ interface ExpenseHistoryProps {
   entries: ExpenseHistoryEntry[];
   displayCurrency: Currency;
   categoryFiltered: boolean;
+  onOpen: (transaction: Transaction) => void;
   onEdit: (transaction: Transaction) => void;
   onDelete: (transaction: Transaction) => void;
 }
@@ -19,6 +20,7 @@ export function ExpenseHistory({
   entries,
   displayCurrency,
   categoryFiltered,
+  onOpen,
   onEdit,
   onDelete,
 }: ExpenseHistoryProps) {
@@ -32,34 +34,42 @@ export function ExpenseHistory({
     <div className="expense-history-list">
       {entries.map(({ transaction, contribution }) => (
         <article className="expense-history-row" key={transaction.id}>
-          <div className="expense-history-main">
-            <div className="expense-history-description">
-              {transaction.description || t("expense.untitled")}
+          <button
+            className="expense-history-open"
+            type="button"
+            onClick={() => onOpen(transaction)}
+          >
+            <div className="expense-history-main">
+              <div className="expense-history-description">
+                {transaction.description || t("expense.untitled")}
+              </div>
+              <div className="expense-history-meta">
+                <time dateTime={transaction.occurredAt}>
+                  {new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  }).format(new Date(transaction.occurredAt)).replace(" г.", "")}
+                </time>
+                {transaction.source === "receipt_ai" ? (
+                  <Tag bordered={false}>{t("source.receipt_ai")}</Tag>
+                ) : transaction.source === "text_ai" ? (
+                  <Tag bordered={false}>{t("source.text_ai")}</Tag>
+                ) : null}
+              </div>
             </div>
-            <div className="expense-history-meta">
-              <time dateTime={transaction.occurredAt}>
-                {new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                }).format(new Date(transaction.occurredAt)).replace(" г.", "")}
-              </time>
-              {transaction.source === "receipt_ai" ? (
-                <Tag bordered={false}>{t("source.receipt_ai")}</Tag>
-              ) : transaction.source === "text_ai" ? (
-                <Tag bordered={false}>{t("source.text_ai")}</Tag>
+            <div className="expense-history-value">
+              <div className="expense-history-amount">
+                {categoryFiltered
+                  ? formatMoney(contribution, displayCurrency)
+                  : formatMoney(transaction.amount, transaction.currency)}
+              </div>
+              {categoryFiltered ? (
+                <div className="expense-history-contribution">{t("expense.filteredContribution")}</div>
               ) : null}
             </div>
-          </div>
+          </button>
           <div className="expense-history-side">
-            <div className="expense-history-amount">
-              {categoryFiltered
-                ? formatMoney(contribution, displayCurrency)
-                : formatMoney(transaction.amount, transaction.currency)}
-            </div>
-            {categoryFiltered ? (
-              <div className="expense-history-contribution">{t("expense.filteredContribution")}</div>
-            ) : null}
             <div className="expense-history-actions">
               <Button
                 aria-label={t("actions.edit")}
