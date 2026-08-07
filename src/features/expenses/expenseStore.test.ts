@@ -5,7 +5,7 @@ import type { ExpenseSnapshot } from "./expenseTypes";
 const repository = vi.hoisted(() => ({
   loadExpenseData: vi.fn(),
   saveCategories: vi.fn(),
-  saveExpense: vi.fn(),
+  saveExpenses: vi.fn(),
 }));
 
 vi.mock("./expenseRepository", () => repository);
@@ -23,14 +23,6 @@ const snapshot: ExpenseSnapshot = {
     occurredAt: "2026-08-04T12:00:00.000Z",
     source: "receipt_ai",
   }],
-  expenseItems: [{
-    id: "existing-item",
-    expenseId: "expense",
-    name: "Original item",
-    amount: 100,
-    categoryId: "food",
-    confidence: 0.8,
-  }],
 };
 
 describe("expense store", () => {
@@ -39,7 +31,7 @@ describe("expense store", () => {
     useExpenseStore.setState(snapshot);
   });
 
-  it("persists edited values and preserves existing item IDs", async () => {
+  it("persists edited independent expenses", async () => {
     await useExpenseStore.getState().updateExpense("expense", {
       amount: 125,
       currency: "GEL",
@@ -47,32 +39,35 @@ describe("expense store", () => {
       description: "Edited",
       occurredAt: "2026-08-05T12:00:00.000Z",
       source: "receipt_ai",
-      items: [{
-        id: "existing-item",
-        name: "Edited item",
-        amount: 90,
-        categoryId: "food",
-        confidence: 0.9,
-      }],
     });
 
-    expect(repository.saveExpense).toHaveBeenCalledWith(
+    expect(repository.saveExpenses).toHaveBeenCalledWith([
       expect.objectContaining({ id: "expense", amount: 125, description: "Edited" }),
-      [expect.objectContaining({ id: "existing-item", expenseId: "expense", amount: 90 })],
-    );
-    expect(useExpenseStore.getState().expenseItems[0].id).toBe("existing-item");
+    ]);
+  });
+
+  it("saves a receipt draft as separate expense entities in one batch", async () => {
+    await useExpenseStore.getState().addExpenses([
+      { amount: 10, currency: "USD", categoryId: "food", description: "Coffee", occurredAt: "2026-08-05T12:00:00.000Z", source: "receipt_ai" },
+      { amount: 20, currency: "GEL", categoryId: "food", description: "Bread", occurredAt: "2026-08-05T12:00:00.000Z", source: "receipt_ai" },
+    ]);
+
+    expect(repository.saveExpenses).toHaveBeenCalledWith([
+      expect.objectContaining({ amount: 10, currency: "USD", description: "Coffee" }),
+      expect.objectContaining({ amount: 20, currency: "GEL", description: "Bread" }),
+    ]);
+    expect(useExpenseStore.getState().expenses).toHaveLength(3);
   });
 
   it("soft-deletes in Postgres and removes the expense from the active cache", async () => {
     await useExpenseStore.getState().deleteExpense("expense");
 
-    expect(repository.saveExpense.mock.calls[0][0].deletedAt).toEqual(expect.any(String));
+    expect(repository.saveExpenses.mock.calls[0][0][0].deletedAt).toEqual(expect.any(String));
     expect(useExpenseStore.getState().expenses).toEqual([]);
-    expect(useExpenseStore.getState().expenseItems).toEqual([]);
   });
 
   it("does not mutate the cache when persistence fails", async () => {
-    repository.saveExpense.mockRejectedValueOnce(new Error("offline"));
+    repository.saveExpenses.mockRejectedValueOnce(new Error("offline"));
 
     await expect(useExpenseStore.getState().updateExpense("expense", {
       amount: 50,
@@ -92,8 +87,8 @@ describe("expense store", () => {
       color: "#000",
     }));
     repository.loadExpenseData
-      .mockResolvedValueOnce({ categories: [], expenses: [], expenseItems: [] })
-      .mockResolvedValueOnce({ categories: completeCategories, expenses: [], expenseItems: [] });
+      .mockResolvedValueOnce({ categories: [], expenses: [] })
+      .mockResolvedValueOnce({ categories: completeCategories, expenses: [] });
 
     await initializeExpenseData("user-id");
 

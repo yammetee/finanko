@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Category, Expense, ExpenseItem } from "../../shared/types/expense";
+import type { Category, Expense } from "../../shared/types/expense";
 import { setLiveExchangeRates } from "../../shared/lib/currency";
 import {
   buildExpenseTrendBuckets,
@@ -8,7 +8,6 @@ import {
   calculateAverageDailyExpense,
   getExpenseTrackingStart,
   getExpensePeriodRange,
-  UNALLOCATED_CATEGORY_KEY,
   type ExpenseFilters,
 } from "./expenseAnalytics";
 
@@ -34,12 +33,10 @@ function expense(overrides: Partial<Expense> = {}): Expense {
 
 function view(
   expenses: Expense[],
-  items: ExpenseItem[] = [],
   categoryKeys: string[] = [],
 ) {
   return buildExpenseView({
     expenses,
-    expenseItems: items,
     categories,
     filters: { period: "month", categoryKeys },
     displayCurrency: "USD",
@@ -48,56 +45,9 @@ function view(
 }
 
 describe("expense analytics", () => {
-  it("uses the saved expense total when item arithmetic does not match", () => {
-    const result = view([expense()], [
-      { id: "item", expenseId: "expense", name: "Food", amount: 70, categoryId: "food", confidence: 1 },
-    ]);
-
-    expect(result.total).toBe(100);
-    expect(result.byCategory).toEqual([
-      expect.objectContaining({ key: "food", value: 70 }),
-      expect.objectContaining({ key: UNALLOCATED_CATEGORY_KEY, value: 30 }),
-    ]);
-  });
-
-  it("filters a mixed receipt by item category without blocking on its total", () => {
-    const result = view(
-      [expense()],
-      [
-        { id: "food-item", expenseId: "expense", name: "Food", amount: 60, categoryId: "food", confidence: 1 },
-        { id: "home-item", expenseId: "expense", name: "Soap", amount: 30, categoryId: "home", confidence: 1 },
-      ],
-      ["home"],
-    );
-
-    expect(result.total).toBe(30);
-    expect(result.history[0].contribution).toBe(30);
-  });
-
-  it("exposes the receipt difference through the unallocated filter", () => {
-    const result = view(
-      [expense()],
-      [{ id: "item", expenseId: "expense", name: "Food", amount: 75, categoryId: "food", confidence: 1 }],
-      [UNALLOCATED_CATEGORY_KEY],
-    );
-
-    expect(result.total).toBe(25);
-  });
-
-  it("keeps a negative receipt difference as an unallocated correction", () => {
-    const result = view(
-      [expense()],
-      [{ id: "item", expenseId: "expense", name: "Food", amount: 125, categoryId: "food", confidence: 1 }],
-      [UNALLOCATED_CATEGORY_KEY],
-    );
-
-    expect(result.total).toBe(-25);
-    expect(result.byCategory[0]).toEqual(expect.objectContaining({ value: -25 }));
-  });
-
-  it("uses the main category for expenses without line items", () => {
-    expect(view([expense()], [], ["food"]).total).toBe(100);
-    expect(view([expense()], [], ["home"]).total).toBe(0);
+  it("filters independent expenses by their own category", () => {
+    expect(view([expense()], ["food"]).total).toBe(100);
+    expect(view([expense()], ["home"]).total).toBe(0);
   });
 
   it("filters deleted and out-of-period records", () => {
@@ -114,7 +64,7 @@ describe("expense analytics", () => {
     const result = view([
       expense({ id: "food-expense", amount: 40, categoryId: "food" }),
       expense({ id: "home-expense", amount: 60, categoryId: "home" }),
-    ], [], ["food", "home"]);
+    ], ["food", "home"]);
 
     expect(result.total).toBe(100);
     expect(result.history.reduce((sum, entry) => sum + entry.contribution, 0)).toBe(result.total);

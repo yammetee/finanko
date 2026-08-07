@@ -19,6 +19,11 @@ const categories: Category[] = [
     name: "Bills",
     color: "#4d96ff",
   },
+  {
+    id: "cat-transport",
+    name: "Transport",
+    color: "#9b5de5",
+  },
 ];
 
 describe("normalizeParsedExpense", () => {
@@ -503,6 +508,27 @@ describe("normalizeParsedExpense", () => {
       total: 25,
       items: [{ name: "Обед", amount: 25, categoryId: "cat-food" }],
     });
+  });
+
+  it("preserves a separate currency for every recognized text item", () => {
+    const parsed = normalizeParsedExpense(
+      { text: "coffee 5 USD, taxi 20 GEL", currency: "USD", categories },
+      {
+        kind: "transaction",
+        description: "Кофе, такси",
+        currency: "USD",
+        total: 15,
+        items: [
+          { name: "Кофе", amount: 5, currency: "USD", categoryId: "Food", confidence: 0.9 },
+          { name: "Такси", amount: 20, currency: "GEL", categoryId: "Transport", confidence: 0.9 },
+        ],
+      },
+    );
+
+    expect(parsed?.items).toMatchObject([
+      { amount: 5, currency: "USD", categoryId: "cat-food" },
+      { amount: 20, currency: "GEL", categoryId: "cat-transport" },
+    ]);
   });
 
   it("keeps every recognized product separate and corrects drinking water to Food", () => {

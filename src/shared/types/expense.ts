@@ -18,14 +18,3 @@ export interface Expense {
   source: ExpenseSource;
   deletedAt?: string;
 }
-
-export interface ExpenseItem {
-  id: string;
-  expenseId: string;
-  name: string;
-  amount: number;
-  quantity?: number;
-  unitPrice?: number;
-  categoryId: string;
-  confidence: number;
-}

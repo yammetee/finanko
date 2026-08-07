@@ -83,8 +83,10 @@
   "form.currency": "Валюта",
   "form.date": "Дата",
   "form.expenseText": "Текст расхода",
+  "form.itemCurrency": "Валюта позиции",
   "form.name": "Название",
   "form.price": "Цена",
+  "form.totalCurrency": "Валюта итога",
   "inputMode.manual": "Вручную",
   "inputMode.receipt": "Чек",
   "inputMode.text": "Текст",
@@ -114,7 +116,6 @@
   "receipt.warning.unreadableRows": "Не все товарные строки удалось прочитать.",
   "section.expensesByCategory": "Расходы по категориям",
   "section.parsedItems": "Позиции",
-  "section.receiptItems": "Позиции чека",
   "source.manual": "вручную",
   "source.receipt_ai": "чек",
   "source.text_ai": "текст"

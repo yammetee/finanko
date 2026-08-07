@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import type { Expense, ExpenseItem } from "../../shared/types/expense";
+import type { Expense } from "../../shared/types/expense";
 import { createDefaultCategories } from "./categoryData";
-import { loadExpenseData, saveCategories, saveExpense } from "./expenseRepository";
+import { loadExpenseData, saveCategories, saveExpenses } from "./expenseRepository";
 import type { ExpenseState, NewExpenseInput } from "./expenseTypes";
 
 function uid(prefix: string) {
@@ -23,8 +23,8 @@ export async function initializeExpenseData(ownerId: string) {
   useExpenseStore.setState(snapshot);
 }
 
-function buildExpense(input: NewExpenseInput, existing?: Expense) {
-  const expense: Expense = {
+function buildExpense(input: NewExpenseInput, existing?: Expense): Expense {
+  return {
     id: existing?.id ?? uid("expense"),
     amount: input.amount,
     currency: input.currency,
@@ -33,39 +33,27 @@ function buildExpense(input: NewExpenseInput, existing?: Expense) {
     occurredAt: input.occurredAt,
     source: input.source ?? existing?.source ?? "manual",
   };
-  const items: ExpenseItem[] = (input.items ?? []).map((item) => ({
-    ...item,
-    id: item.id ?? uid("item"),
-    expenseId: expense.id,
-  }));
-  return { expense, items };
 }
 
 export const useExpenseStore = create<ExpenseState>()((set, get) => ({
   categories: [],
   expenses: [],
-  expenseItems: [],
-  addExpense: async (input) => {
-    const built = buildExpense(input);
-    await saveExpense(built.expense, built.items);
+  addExpenses: async (inputs) => {
+    const expenses = inputs.map((input) => buildExpense(input));
+    await saveExpenses(expenses);
     set((current) => ({
-      expenses: [...current.expenses, built.expense],
-      expenseItems: [...current.expenseItems, ...built.items],
+      expenses: [...current.expenses, ...expenses],
     }));
   },
   updateExpense: async (id, input) => {
     const existing = get().expenses.find((expense) => expense.id === id);
     if (!existing) throw new Error("Expense not found");
-    const built = buildExpense(input, existing);
-    await saveExpense(built.expense, built.items);
+    const updated = buildExpense(input, existing);
+    await saveExpenses([updated]);
     set((current) => ({
       expenses: current.expenses.map((expense) =>
-        expense.id === id ? built.expense : expense,
+        expense.id === id ? updated : expense,
       ),
-      expenseItems: [
-        ...current.expenseItems.filter((item) => item.expenseId !== id),
-        ...built.items,
-      ],
     }));
   },
   deleteExpense: async (id) => {
@@ -73,13 +61,9 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
     const existing = state.expenses.find((expense) => expense.id === id);
     if (!existing) throw new Error("Expense not found");
     const deleted = { ...existing, deletedAt: new Date().toISOString() };
-    await saveExpense(
-      deleted,
-      state.expenseItems.filter((item) => item.expenseId === id),
-    );
+    await saveExpenses([deleted]);
     set((current) => ({
       expenses: current.expenses.filter((expense) => expense.id !== id),
-      expenseItems: current.expenseItems.filter((item) => item.expenseId !== id),
     }));
   },
 }));

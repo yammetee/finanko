@@ -6,7 +6,7 @@ Finanko is a minimal, mobile-first expense tracker. It is designed for one fast 
 
 - Receipt input opens the camera or image picker immediately.
 - Text input focuses the expense field immediately.
-- Manual input asks only for amount, category, description, date, and currency.
+- Every input mode produces editable positions with their own amount, currency, and category.
 - Receipt and text analyzers prepare suggestions; warnings never block saving.
 - The editable draft is the source of truth when an expense is saved.
 - Period and category filters drive the total, category breakdown, trend, and history together.
@@ -24,7 +24,7 @@ Finanko tracks actual spending only. Unrelated financial product areas are outsi
 
 ## Data model
 
-The runtime uses three browser-accessible tables: `categories`, `expenses`, and `expense_items`. Every row carries its authenticated owner directly, and Postgres RLS enforces that ownership. Zustand is only an in-memory cache after confirmed database writes.
+The runtime uses two browser-accessible tables: `categories` and `expenses`. Every reviewed position is saved as its own expense row with its own amount, currency, and category. The multi-position total exists only as a converted preview and is never persisted. Every row carries its authenticated owner directly, and Postgres RLS enforces that ownership. Zustand is only an in-memory cache after confirmed database writes.
 
 AI administrator roles and daily usage counters live in the non-exposed `finanko_private` schema. The authenticated quota RPC is the only browser-role entry point to that data.
 
@@ -39,6 +39,8 @@ The current project can be rebuilt without creating another Supabase project:
 
 The reset does not target Supabase-managed `auth`, `storage`, `extensions`, `realtime`, `vault`, GraphQL, Functions, or migration schemas. It is intentionally review-only in this repository and is never run by application code.
 
+For an existing Finanko database that still contains `expense_items`, review and run [supabase/migrate-expense-items-to-expenses.sql](./supabase/migrate-expense-items-to-expenses.sql) once before applying [supabase/schema.sql](./supabase/schema.sql). The migration preserves every old item as an independent expense and removes its duplicated parent transaction and the obsolete item table.
+
 ## Analyzer boundary
 
 The receipt and text recognition algorithms are intentionally isolated in `src/features/receipts` and the parse branch of `api/ai.ts`.
@@ -46,7 +48,7 @@ The receipt and text recognition algorithms are intentionally isolated in `src/f
 - Do not change their prompts, OCR/image processing, normalization, or response contracts as part of UI work.
 - A parser result only fills a draft.
 - Arithmetic mismatches, low confidence, and review warnings are informational.
-- The values visible in the editor at save time are persisted, even when they differ from analyzer output.
+- The values visible in each position at save time are persisted as independent expenses, even when they differ from analyzer output.
 
 ## AI access policy
 

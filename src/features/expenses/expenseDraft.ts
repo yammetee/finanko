@@ -3,13 +3,16 @@ import type {
   Currency,
   ExpenseSource,
 } from "../../shared/types/expense";
+import { convertMoney } from "../../shared/lib/currency";
 import type { NewExpenseInput } from "./expenseTypes";
-import type { ParsedExpenseItem, ReceiptReview } from "../receipts/expenseParser";
+import type { ReceiptReview } from "../receipts/expenseParser";
 
-export type ExpenseDraftItem = Omit<ParsedExpenseItem, "amount"> & {
-  id?: string;
+export interface ExpenseDraftItem {
+  name: string;
   amount?: number;
-};
+  currency: Currency;
+  categoryId: string;
+}
 
 export interface ExpenseDraft {
   currency: Currency;
@@ -38,35 +41,32 @@ export function createEmptyExpenseDraft(
     items: [{
       name: item.name,
       amount: item.amount,
+      currency,
       categoryId: categoryId ?? "",
-      confidence: 1,
     }],
   };
 }
 
 export function calculateExpenseItemsTotal(
-  items: Array<Pick<ExpenseDraftItem, "amount">>,
+  items: Array<Pick<ExpenseDraftItem, "amount" | "currency">>,
+  displayCurrency: Currency,
+  occurredAt?: string,
 ) {
   return Math.round(items.reduce((sum, item) => {
     const amount = Number(item.amount);
-    return sum + (Number.isFinite(amount) ? amount : 0);
+    return sum + (Number.isFinite(amount)
+      ? convertMoney(amount, item.currency, displayCurrency, occurredAt)
+      : 0);
   }, 0) * 100) / 100;
 }
 
-export function expenseFormToInput(values: ExpenseFormValues): NewExpenseInput {
-  const items = (values.items ?? []).map((item) => ({
-    ...item,
+export function expenseFormToInputs(values: ExpenseFormValues): NewExpenseInput[] {
+  return (values.items ?? []).map((item) => ({
     amount: item.amount ?? 0,
-  }));
-  const description = items.map((item) => item.name.trim()).filter(Boolean).join(", ").slice(0, 2000);
-
-  return {
-    amount: calculateExpenseItemsTotal(items),
-    currency: values.currency,
-    categoryId: items[0]?.categoryId ?? "",
-    description,
+    currency: item.currency,
+    categoryId: item.categoryId,
+    description: item.name.trim().slice(0, 2000),
     occurredAt: values.occurredAt.toISOString(),
     source: values.source,
-    items,
-  };
+  }));
 }

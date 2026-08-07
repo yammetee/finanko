@@ -181,9 +181,10 @@ const parserFormat = {
       total: { type: ["number", "null"] },
       items: { type: "array", items: {
         type: "object", additionalProperties: false,
-        required: ["name", "amount", "quantity", "unitPrice", "categoryId", "confidence"],
+        required: ["name", "amount", "currency", "quantity", "unitPrice", "categoryId", "confidence"],
         properties: {
           name: { type: "string" }, amount: { type: "number" }, quantity: { type: ["number", "null"] },
+          currency: { type: "string", enum: ["USD", "GEL", "RUB", "THB"] },
           unitPrice: { type: ["number", "null"] }, categoryId: { type: "string" },
           confidence: { type: "number", minimum: 0, maximum: 1 },
         },
@@ -235,7 +236,7 @@ const receiptOcrFormat = {
 };
 
 function parserSystem(mode: unknown) {
-  const shared = "Return only data matching the supplied JSON schema. Currency aliases are strict: бат/baht/THB/฿/บาท = THB; руб/RUB/₽ = RUB; лари/GEL/₾/ლარი = GEL; доллар/USD/$ = USD. fallbackCurrency is only a last resort when the source contains no currency evidence. Any currency visible in text or image overrides fallbackCurrency. Keep every explicitly priced product as a separate item and classify every item independently. Drinking water and other grocery beverages belong to Food, not Health. categoryId must be one of the supplied category names, never an invented database id. Numbers must be JSON numbers, not strings.";
+  const shared = "Return only data matching the supplied JSON schema. Currency aliases are strict: бат/baht/THB/฿/บาท = THB; руб/RUB/₽ = RUB; лари/GEL/₾/ლარი = GEL; доллар/USD/$ = USD. fallbackCurrency is only a last resort when the source contains no currency evidence. Any currency visible in text or image overrides fallbackCurrency. Keep every explicitly priced product as a separate item, assign each item its own currency, and classify every item independently. Drinking water and other grocery beverages belong to Food, not Health. categoryId must be one of the supplied category names, never an invented database id. Numbers must be JSON numbers, not strings.";
   if (mode !== "receipt") {
     return `${shared} Parse only a concrete personal expense. Return kind=transaction and type=expense. Preserve concrete Russian wording when the input is Russian. Split multiple explicitly priced purchases into separate items. Do not interpret income, account creation, loans, advice, instructions, or unrelated questions as other product entities. Do not invent amounts. Never provide advice.`;
   }
@@ -320,6 +321,7 @@ function fallbackReceipt(ocr: ReceiptOcrResult, payload: Record<string, unknown>
     .map((row) => ({
       name: row.rawText,
       amount: row.rowType === "discount" ? -Math.abs(row.amount as number) : Math.abs(row.amount as number),
+      currency: ocr.currency === "UNKNOWN" ? payload.fallbackCurrency : ocr.currency,
       quantity: row.quantity,
       unitPrice: row.unitPrice,
       categoryId,

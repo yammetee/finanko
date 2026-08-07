@@ -5,12 +5,9 @@ import type {
   Category,
   Currency,
   Expense,
-  ExpenseItem,
 } from "../../shared/types/expense";
 
 dayjs.extend(isoWeek);
-
-export const UNALLOCATED_CATEGORY_KEY = "__unallocated__";
 
 export type ExpensePeriod = "today" | "week" | "month" | "year" | "all" | "custom";
 
@@ -53,7 +50,6 @@ interface ExpenseNativeCategoryTotal {
 
 interface ExpenseViewInput {
   expenses: Expense[];
-  expenseItems: ExpenseItem[];
   categories: Category[];
   filters: ExpenseFilters;
   displayCurrency: Currency;
@@ -226,34 +222,8 @@ function isInsidePeriod(expense: Expense, range: PeriodRange | null) {
   return !occurredAt.isBefore(range.start) && !occurredAt.isAfter(range.end);
 }
 
-function contributionForExpense(
-  expense: Expense,
-  items: ExpenseItem[],
-  selectedKeys: Set<string>,
-  categoryKeyById: Map<string, string>,
-) {
-  if (selectedKeys.size === 0) return expense.amount;
-
-  if (items.length === 0) {
-    const key = categoryKeyById.get(expense.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
-    return selectedKeys.has(key) ? expense.amount : 0;
-  }
-
-  const itemTotal = items.reduce((sum, item) => sum + item.amount, 0);
-  const itemContribution = items.reduce((sum, item) => {
-    const key = categoryKeyById.get(item.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
-    return selectedKeys.has(key) ? sum + item.amount : sum;
-  }, 0);
-  const unallocated = expense.amount - itemTotal;
-
-  return selectedKeys.has(UNALLOCATED_CATEGORY_KEY)
-    ? itemContribution + unallocated
-    : itemContribution;
-}
-
 export function buildExpenseView({
   expenses,
-  expenseItems,
   categories,
   filters,
   displayCurrency,
@@ -263,14 +233,6 @@ export function buildExpenseView({
   const categoryKeyById = new Map(
     categoryGroups.flatMap((group) => group.categoryIds.map((id) => [id, group.key] as const)),
   );
-  const itemsByExpense = new Map<string, ExpenseItem[]>();
-  expenseItems.forEach((item) => {
-    itemsByExpense.set(item.expenseId, [
-      ...(itemsByExpense.get(item.expenseId) ?? []),
-      item,
-    ]);
-  });
-
   const range = getExpensePeriodRange(filters, now);
   const periodExpenses = expenses.filter(
     (expense) =>
@@ -278,14 +240,13 @@ export function buildExpenseView({
       isInsidePeriod(expense, range),
   );
   const selectedKeys = new Set(filters.categoryKeys);
-  const history: ExpenseHistoryEntry[] = periodExpenses
+  const visibleExpenses = periodExpenses.filter((expense) => {
+    const key = categoryKeyById.get(expense.categoryId);
+    return selectedKeys.size === 0 || (key ? selectedKeys.has(key) : false);
+  });
+  const history: ExpenseHistoryEntry[] = visibleExpenses
     .map((expense) => {
-      const nativeContribution = contributionForExpense(
-        expense,
-        itemsByExpense.get(expense.id) ?? [],
-        selectedKeys,
-        categoryKeyById,
-      );
+      const nativeContribution = expense.amount;
       return {
         expense,
         nativeContribution,
@@ -310,9 +271,9 @@ export function buildExpenseView({
     value: number;
     convertedValue: number;
   }>();
-  const addCategoryAmount = (key: string, amount: number, expense: Expense) => {
+  const addCategoryAmount = (key: string, expense: Expense) => {
     const convertedAmount = convertMoney(
-      amount,
+      expense.amount,
       expense.currency,
       displayCurrency,
       expense.occurredAt,
@@ -324,29 +285,14 @@ export function buildExpenseView({
     nativeCategoryTotals.set(nativeKey, {
       key,
       currency: expense.currency,
-      value: (current?.value ?? 0) + amount,
+      value: (current?.value ?? 0) + expense.amount,
       convertedValue: (current?.convertedValue ?? 0) + convertedAmount,
     });
   };
 
-  periodExpenses.forEach((expense) => {
-    const items = itemsByExpense.get(expense.id) ?? [];
-    if (items.length === 0) {
-      const key = categoryKeyById.get(expense.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
-      addCategoryAmount(key, expense.amount, expense);
-      return;
-    }
-
-    const itemTotal = items.reduce((sum, item) => sum + item.amount, 0);
-    items.forEach((item) => {
-      const key = categoryKeyById.get(item.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
-      addCategoryAmount(key, item.amount, expense);
-    });
-
-    const unallocated = expense.amount - itemTotal;
-    if (Math.abs(unallocated) >= 0.005) {
-      addCategoryAmount(UNALLOCATED_CATEGORY_KEY, unallocated, expense);
-    }
+  visibleExpenses.forEach((expense) => {
+    const key = categoryKeyById.get(expense.categoryId);
+    if (key) addCategoryAmount(key, expense);
   });
 
   const categoryMeta = new Map(categoryGroups.map((group) => [group.key, group]));
@@ -380,6 +326,5 @@ export function buildExpenseView({
     history,
     byCategory,
     nativeByCategory,
-    periodExpenses,
   };
 }

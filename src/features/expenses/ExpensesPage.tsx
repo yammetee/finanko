@@ -27,11 +27,10 @@ import {
   calculateAverageDailyExpense,
   categoryGroupKey,
   getExpenseTrackingStart,
-  UNALLOCATED_CATEGORY_KEY,
   type ExpenseFilters,
   type ExpensePeriod,
 } from "./expenseAnalytics";
-import { createEmptyExpenseDraft, expenseFormToInput, type ExpenseDraft, type ExpenseFormValues } from "./expenseDraft";
+import { createEmptyExpenseDraft, expenseFormToInputs, type ExpenseDraft, type ExpenseFormValues } from "./expenseDraft";
 import { useExpenseStore } from "./expenseStore";
 
 const { RangePicker } = DatePicker;
@@ -96,8 +95,8 @@ export function ExpensesPage() {
   const displayCurrency = requestedDisplayCurrency;
   const expenseView = useMemo(() => {
     void ratesVersion;
-    return buildExpenseView({ expenses: expenseState.expenses, expenseItems: expenseState.expenseItems, categories: analyticsCategories, filters, displayCurrency });
-  }, [analyticsCategories, displayCurrency, expenseState.expenseItems, expenseState.expenses, filters, ratesVersion]);
+    return buildExpenseView({ expenses: expenseState.expenses, categories: analyticsCategories, filters, displayCurrency });
+  }, [analyticsCategories, displayCurrency, expenseState.expenses, filters, ratesVersion]);
   const categoryNames = useMemo(() => new Map(categoryGroups.map((group) => [group.key, group.name])), [categoryGroups]);
   const otherKey = categoryGroupKey("Other");
   const categoryAmounts = currencyMode === "native"
@@ -108,7 +107,7 @@ export function ExpensesPage() {
       convertedValue: item.value,
     }));
   const breakdown = categoryAmounts.reduce<Array<(typeof categoryAmounts)[number]>>((items, item) => {
-    const key = item.key === UNALLOCATED_CATEGORY_KEY ? otherKey : item.key;
+    const key = item.key;
     const existing = items.find((candidate) => candidate.key === key && candidate.currency === item.currency);
     if (existing) {
       existing.value += item.value;
@@ -134,8 +133,7 @@ export function ExpensesPage() {
   const averageLabel = formatMoney(average, displayCurrency);
   const trend = useMemo(() => buildExpenseTrendBuckets(expenseView.history, filters), [expenseView.history, filters]);
   const selectedCategory = categoryGroups.find((group) => {
-    const keys = group.key === otherKey ? [otherKey, UNALLOCATED_CATEGORY_KEY] : [group.key];
-    return keys.every((key) => filters.categoryKeys.includes(key));
+    return filters.categoryKeys.includes(group.key);
   })?.key ?? "";
   const visibleHistory = showAllHistory ? expenseView.history : expenseView.history.slice(0, HISTORY_LIMIT);
   const hiddenHistoryCount = Math.max(0, expenseView.history.length - HISTORY_LIMIT);
@@ -148,8 +146,9 @@ export function ExpensesPage() {
     setEditing(null); setFormMode("receipt"); setDraft(null); setParseError(null); setParsing(true);
     try {
       const parsed = await parseReceiptInput({ fileName: file.name, fileType: "image/jpeg", fileDataUrl: await prepareReceiptImage(file), currency: baseCurrency, categories: primaryCategories });
+      const items = parsed.items.map((item) => ({ ...item, currency: item.currency ?? parsed.currency }));
       setDraft(parsed.items.length > 0
-        ? { currency: parsed.currency, occurredAt: dayjs(), source: "receipt_ai", items: parsed.items, receiptReview: parsed.receiptReview }
+        ? { currency: parsed.currency, occurredAt: dayjs(), source: "receipt_ai", items, receiptReview: parsed.receiptReview }
         : { ...createEmptyExpenseDraft(parsed.currency, primaryCategories[0]?.id, { name: parsed.description }), source: "receipt_ai", receiptReview: parsed.receiptReview });
     } catch (error) {
       setParseError(t(receiptErrorKey(error)));
@@ -164,8 +163,9 @@ export function ExpensesPage() {
       const parsed = await parseTextInput(input).catch(() => parseTextInputLocally(input));
       const expense = parsed as ParsedExpense;
       const categoryId = expense.items[0]?.categoryId ?? primaryCategories[0]?.id;
+      const items = expense.items.map((item) => ({ ...item, currency: item.currency ?? expense.currency }));
       setDraft(expense.items.length > 0
-        ? { currency: expense.currency, occurredAt: dayjs(), source: "text_ai", items: expense.items, receiptReview: expense.receiptReview }
+        ? { currency: expense.currency, occurredAt: dayjs(), source: "text_ai", items, receiptReview: expense.receiptReview }
         : { ...createEmptyExpenseDraft(expense.currency, categoryId, { name: expense.description || text, amount: expense.total || undefined }), source: "text_ai", receiptReview: expense.receiptReview });
     } catch {
       setParseError(t("expense.parserSuggestionOnly"));
@@ -174,20 +174,18 @@ export function ExpensesPage() {
   }
 
   function openEdit(expense: Expense) {
-    const savedItems = expenseState.expenseItems.filter((item) => item.expenseId === expense.id).map(({ id, name, amount, quantity, unitPrice, categoryId, confidence }) => ({ id, name, amount, quantity, unitPrice, categoryId, confidence }));
-    const items = savedItems.length > 0 ? savedItems : [{ name: expense.description || t("expense.untitled"), amount: expense.amount, categoryId: expense.categoryId, confidence: 1 }];
     setEditing(expense); setSelected(null); setFormMode("edit"); setParseError(null);
-    setDraft({ currency: expense.currency, occurredAt: dayjs(expense.occurredAt), source: expense.source, items });
+    setDraft({ currency: expense.currency, occurredAt: dayjs(expense.occurredAt), source: expense.source, items: [{ name: expense.description || t("expense.untitled"), amount: expense.amount, currency: expense.currency, categoryId: expense.categoryId }] });
   }
 
   async function saveExpense(values: ExpenseFormValues) {
     if (formCategories.length === 0) { message.error(t("expense.contextUnavailable")); return; }
-    const input = expenseFormToInput(values);
-    if (!isValidMoneyDecimal(input.amount, input.currency) || input.amount <= 0) { message.error(t("feedback.invalidMoneyAmount")); return; }
+    const inputs = expenseFormToInputs(values);
+    if (inputs.length === 0 || inputs.some((input) => !isValidMoneyDecimal(input.amount, input.currency) || input.amount === 0)) { message.error(t("feedback.invalidMoneyAmount")); return; }
     setSaving(true);
     try {
-      if (editing) { await expenseState.updateExpense(editing.id, input); message.success(t("expense.updated")); }
-      else { await expenseState.addExpense(input); message.success(t("expense.saved")); }
+      if (editing) { await expenseState.updateExpense(editing.id, inputs[0]); message.success(t("expense.updated")); }
+      else { await expenseState.addExpenses(inputs); message.success(t("expense.saved")); }
       closeForm();
     } catch { message.error(t("feedback.saveFailed")); }
     finally { setSaving(false); }
@@ -199,7 +197,7 @@ export function ExpensesPage() {
   }
 
   function chooseCategory(key: string) {
-    setFilters((current) => ({ ...current, categoryKeys: key === otherKey ? [otherKey, UNALLOCATED_CATEGORY_KEY] : key ? [key] : [] }));
+    setFilters((current) => ({ ...current, categoryKeys: key ? [key] : [] }));
   }
 
   const home = (
@@ -243,7 +241,7 @@ export function ExpensesPage() {
       <input ref={receiptInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
       <header className="app-header"><div className="brand"><span>F</span>Finanko</div><div className="header-actions"><button className="currency-button" type="button" title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })} onClick={() => setCurrencyMode(nextCurrency)}>{currencyMode === "native" ? <NativeCurrencyIcon size={15} /> : <CurrencyIcon currency={currencyMode} size={15} />}{currentCurrencyLabel}</button><button type="button" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>{locale.toUpperCase()}</button><button type="button" aria-label={t("actions.signOut")} onClick={() => void signOut()}><LogOut size={17} /></button></div></header>
       <main className="main-content">
-        {formMode ? <ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /> : selected ? <ExpenseDetailsPage expense={selected} items={expenseState.expenseItems.filter((item) => item.expenseId === selected.id)} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
+        {formMode ? <ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /> : selected ? <ExpenseDetailsPage expense={selected} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
       </main>
     </div>
   );

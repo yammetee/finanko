@@ -83,8 +83,10 @@
   "form.currency": "Currency",
   "form.date": "Date",
   "form.expenseText": "Expense text",
+  "form.itemCurrency": "Item currency",
   "form.name": "Name",
   "form.price": "Price",
+  "form.totalCurrency": "Total currency",
   "inputMode.manual": "Manual",
   "inputMode.receipt": "Receipt",
   "inputMode.text": "Text",
@@ -114,7 +116,6 @@
   "receipt.warning.unreadableRows": "Not every product row could be read.",
   "section.expensesByCategory": "Expenses by category",
   "section.parsedItems": "Items",
-  "section.receiptItems": "Receipt items",
   "source.manual": "manual",
   "source.receipt_ai": "receipt",
   "source.text_ai": "text"

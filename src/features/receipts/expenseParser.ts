@@ -3,6 +3,7 @@ import type { Category, Currency } from "../../shared/types/expense";
 export interface ParsedExpenseItem {
   name: string;
   amount: number;
+  currency?: Currency;
   quantity?: number;
   unitPrice?: number;
   categoryId: string;
@@ -253,6 +254,7 @@ export function normalizeParsedExpense(
           const rawItem = item as {
             name?: unknown;
             amount?: unknown;
+            currency?: unknown;
             quantity?: unknown;
             unitPrice?: unknown;
             categoryId?: unknown;
@@ -302,6 +304,9 @@ export function normalizeParsedExpense(
           return {
             name: translatedName,
             amount,
+            currency: isCurrency(rawItem.currency)
+              ? rawItem.currency
+              : isCurrency(payload.currency) ? payload.currency : input.currency,
             quantity,
             unitPrice: unitPrice === undefined ? undefined : roundMoney(unitPrice),
             categoryId: resolveItemCategoryId(input.categories, translatedName, rawItem.categoryId),
@@ -349,6 +354,7 @@ export function normalizeParsedExpense(
       items.push({
         name: adjustment < 0 ? "Скидка/корректировка" : "Корректировка итога",
         amount: adjustment,
+        currency: isCurrency(payload.currency) ? payload.currency : input.currency,
         quantity: 1,
         unitPrice: adjustment,
         categoryId,
@@ -381,6 +387,7 @@ export function normalizeParsedExpense(
           {
             name: "Итого по чеку",
             amount: total,
+            currency: isCurrency(payload.currency) ? payload.currency : input.currency,
             quantity: 1,
             unitPrice: total,
             categoryId,
@@ -415,6 +422,7 @@ function parseExpenseText({
       return {
         name: normalizeItemName(match[1].trim() || "Расход"),
         amount: roundMoney(amount),
+        currency: detectCurrencyInText(match[0]) ?? detectCurrencyInText(text) ?? currency,
         quantity: 1,
         unitPrice: roundMoney(amount),
         categoryId,
@@ -428,6 +436,7 @@ function parseExpenseText({
     items.push({
       name: text.trim() || "Расход",
       amount: roundMoney(amount),
+      currency: detectCurrencyInText(text) ?? currency,
       quantity: 1,
       unitPrice: roundMoney(amount),
       categoryId,

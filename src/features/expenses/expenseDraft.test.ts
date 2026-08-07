@@ -1,26 +1,29 @@
 import dayjs from "dayjs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { setLiveExchangeRates } from "../../shared/lib/currency";
 import {
   calculateExpenseItemsTotal,
   createEmptyExpenseDraft,
-  expenseFormToInput,
+  expenseFormToInputs,
   type ExpenseDraft,
   type ExpenseFormValues,
 } from "./expenseDraft";
 
 describe("expense draft persistence", () => {
-  it("calculates the editable item total once for display and persistence", () => {
+  afterEach(() => setLiveExchangeRates(null));
+
+  it("converts each independent item only for the displayed total", () => {
+    setLiveExchangeRates({ date: "2026-08-04", USD: 1, GEL: 2, RUB: 100, THB: 40 });
     expect(calculateExpenseItemsTotal([
-      { amount: 40 },
-      { amount: 50 },
-      { amount: 100 },
-    ])).toBe(190);
+      { amount: 10, currency: "USD" },
+      { amount: 20, currency: "GEL" },
+    ], "USD", "2026-08-04T12:00:00.000Z")).toBe(20);
   });
 
   it("creates a manual draft with an editable item instead of aggregate fields", () => {
     expect(createEmptyExpenseDraft("GEL", "food")).toMatchObject({
       currency: "GEL",
-      items: [{ name: "", categoryId: "food", confidence: 1 }],
+      items: [{ name: "", currency: "GEL", categoryId: "food" }],
     });
   });
 
@@ -29,36 +32,30 @@ describe("expense draft persistence", () => {
       currency: "GEL",
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
       source: "manual",
-      items: [{ name: "  Исправленный расход  ", amount: 125, categoryId: "food", confidence: 1 }],
+      items: [{ name: "  Исправленный расход  ", amount: 125, currency: "GEL", categoryId: "food" }],
     };
-    const input = expenseFormToInput(values);
+    const [input] = expenseFormToInputs(values);
 
     expect(input.amount).toBe(125);
+    expect(input.currency).toBe("GEL");
     expect(input.description).toBe("Исправленный расход");
-    expect(expenseFormToInput({ ...values, currency: "USD" }).amount).toBe(125);
   });
 
-  it("derives aggregate fields from manually or automatically created items", () => {
-    const input = expenseFormToInput({
-      currency: "GEL",
+  it("turns every draft item into an independent expense", () => {
+    const inputs = expenseFormToInputs({
+      currency: "USD",
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
       source: "text_ai",
       items: [
-        { name: "Кофе", amount: 5, categoryId: "food", confidence: 0.9 },
-        { name: "Продукты", amount: 40, categoryId: "home", confidence: 0.8 },
+        { name: "Кофе", amount: 5, currency: "USD", categoryId: "food" },
+        { name: "Продукты", amount: 40, currency: "GEL", categoryId: "home" },
       ],
     });
 
-    expect(input).toMatchObject({
-      amount: 45,
-      currency: "GEL",
-      categoryId: "food",
-      description: "Кофе, Продукты",
-      items: [
-        { amount: 5, categoryId: "food" },
-        { amount: 40, categoryId: "home" },
-      ],
-    });
+    expect(inputs).toEqual([
+      expect.objectContaining({ amount: 5, currency: "USD", categoryId: "food", description: "Кофе" }),
+      expect.objectContaining({ amount: 40, currency: "GEL", categoryId: "home", description: "Продукты" }),
+    ]);
   });
 
   it("treats analyzer review warnings as informational", () => {
@@ -67,7 +64,7 @@ describe("expense draft persistence", () => {
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
       source: "receipt_ai",
       items: [
-        { name: "Coffee", amount: 43, categoryId: "food", confidence: 0.2 },
+        { name: "Coffee", amount: 43, currency: "THB", categoryId: "food" },
       ],
       receiptReview: {
         confidence: 0.2,
@@ -78,10 +75,8 @@ describe("expense draft persistence", () => {
       },
     };
 
-    expect(expenseFormToInput(values)).toMatchObject({
-      amount: 43,
-      description: "Coffee",
-      items: [{ amount: 43 }],
-    });
+    expect(expenseFormToInputs(values)).toEqual([
+      expect.objectContaining({ amount: 43, currency: "THB", description: "Coffee" }),
+    ]);
   });
 });

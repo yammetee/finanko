@@ -42,7 +42,9 @@ export function ExpenseFormPage({ mode, draft, categories, parsing, saving, pars
   const [textForm] = Form.useForm<{ text: string }>();
   const items = Form.useWatch("items", { form: draftForm, preserve: true }) ?? [];
   const currency = Form.useWatch("currency", { form: draftForm, preserve: true }) as Currency | undefined;
-  const itemsTotal = calculateExpenseItemsTotal(items);
+  const occurredAt = Form.useWatch("occurredAt", { form: draftForm, preserve: true });
+  const totalCurrency = currency ?? draft?.currency ?? "USD";
+  const itemsTotal = calculateExpenseItemsTotal(items, totalCurrency, occurredAt?.toISOString?.());
 
   useEffect(() => { if (draft) draftForm.setFieldsValue(draft as ExpenseFormValues); }, [draft, draftForm]);
 
@@ -63,21 +65,20 @@ export function ExpenseFormPage({ mode, draft, categories, parsing, saving, pars
         <Form className="expense-form" form={draftForm} layout="vertical" onFinish={onSave}>
           {parseError ? <Alert className="form-alert" message={parseError} type="warning" showIcon /> : null}
           {draft.receiptReview ? <Alert className="form-alert" type={draft.receiptReview.requiresReview ? "warning" : "success"} showIcon message={t(draft.receiptReview.requiresReview ? "receipt.reviewRequired" : "receipt.reviewReady")} description={<div className="review-list"><span>{t("receipt.confidence", { value: Math.round(draft.receiptReview.confidence * 100) })}</span>{draft.receiptReview.warnings.map((warning) => <span key={warning}>{t(warningKeys[warning] ?? "receipt.warning.checkFields")}</span>)}</div>} /> : null}
-          <div className="draft-total"><span>{t("expense.total")}</span><strong>{formatMoney(itemsTotal, currency ?? draft.currency)}</strong></div>
-          <Form.Item name="currency" noStyle rules={[{ required: true }]}><ChoiceGroup label={t("form.currency")} options={CURRENCIES.map((currency) => ({ value: currency, label: <><CurrencyIcon currency={currency} size={12} />{currency}</> }))} /></Form.Item>
+          <div className="draft-total"><span>{t("expense.total")}</span><strong>{formatMoney(itemsTotal, totalCurrency)}</strong></div>
+          <Form.Item name="currency" noStyle rules={[{ required: true }]}><ChoiceGroup label={t("form.totalCurrency")} options={CURRENCIES.map((currency) => ({ value: currency, label: <><CurrencyIcon currency={currency} size={12} />{currency}</> }))} /></Form.Item>
           <Form.List name="items" rules={[{ validator: async (_, value) => value?.length ? undefined : Promise.reject(new Error(t("expense.itemRequired"))) }]}>{(fields, { add, remove }, { errors }) => (
             <>
               {fields.length > 0 ? <section className="parsed-items"><h2>{t("section.parsedItems")}</h2>{fields.map((field) => (
                 <div className="parsed-item" key={field.key}>
-                  <Form.Item name={[field.name, "id"]} hidden><Input /></Form.Item>
                   <div className="parsed-name"><Form.Item name={[field.name, "name"]} rules={[{ required: true }]}><Input autoFocus={mode === "manual" && field.name === 0} placeholder={t("form.name")} /></Form.Item><button type="button" onClick={() => remove(field.name)} aria-label={t("actions.delete")}><Trash2 size={15} /></button></div>
                   <Form.Item name={[field.name, "amount"]} label={t("form.price")} rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}><InputNumber min={0.01} step={0.01} /></Form.Item>
+                  <Form.Item name={[field.name, "currency"]} noStyle rules={[{ required: true }]}><ChoiceGroup label={t("form.itemCurrency")} options={CURRENCIES.map((itemCurrency) => ({ value: itemCurrency, label: <><CurrencyIcon currency={itemCurrency} size={12} />{itemCurrency}</> }))} /></Form.Item>
                   <Form.Item name={[field.name, "categoryId"]} noStyle rules={[{ required: true }]}><ChoiceGroup label={t("expense.category")} options={categories.map((category) => ({ value: category.id, label: category.name }))} /></Form.Item>
-                  <Form.Item name={[field.name, "quantity"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "unitPrice"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "confidence"]} hidden><InputNumber /></Form.Item>
                 </div>
               ))}</section> : null}
               <Form.ErrorList errors={errors} />
-              <button className="add-item-button" type="button" onClick={() => add({ name: "", categoryId: categories[0]?.id, confidence: 1 })}><Plus size={15} />{t("actions.addItem")}</button>
+              {mode !== "edit" ? <button className="add-item-button" type="button" onClick={() => add({ name: "", currency: totalCurrency, categoryId: categories[0]?.id })}><Plus size={15} />{t("actions.addItem")}</button> : null}
             </>
           )}</Form.List>
           <Form.Item name="occurredAt" label={t("form.date")} rules={[{ required: true }]}><DatePicker allowClear={false} /></Form.Item>
