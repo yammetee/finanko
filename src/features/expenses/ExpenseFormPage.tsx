@@ -40,6 +40,7 @@ export function ExpenseFormPage({ mode, draft, categories, parsing, saving, pars
   const [draftForm] = Form.useForm<ExpenseFormValues>();
   const [textForm] = Form.useForm<{ text: string }>();
   const items = Form.useWatch("items", { form: draftForm, preserve: true }) ?? [];
+  const hasItems = items.length > 0;
 
   useEffect(() => { if (draft) draftForm.setFieldsValue(draft as ExpenseFormValues); }, [draft, draftForm]);
 
@@ -60,26 +61,29 @@ export function ExpenseFormPage({ mode, draft, categories, parsing, saving, pars
         <Form className="expense-form" form={draftForm} layout="vertical" onFinish={onSave}>
           {parseError ? <Alert className="form-alert" message={parseError} type="warning" showIcon /> : null}
           {draft.receiptReview ? <Alert className="form-alert" type={draft.receiptReview.requiresReview ? "warning" : "success"} showIcon message={t(draft.receiptReview.requiresReview ? "receipt.reviewRequired" : "receipt.reviewReady")} description={<div className="review-list"><span>{t("receipt.confidence", { value: Math.round(draft.receiptReview.confidence * 100) })}</span>{draft.receiptReview.warnings.map((warning) => <span key={warning}>{t(warningKeys[warning] ?? "receipt.warning.checkFields")}</span>)}</div>} /> : null}
-          <Form.Item name="amount" label={t("form.amount")} rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}><InputNumber autoFocus={mode === "manual"} min={0.01} step={0.01} /></Form.Item>
+          {hasItems
+            ? <Form.Item name="amount" hidden><InputNumber /></Form.Item>
+            : <Form.Item name="amount" label={t("form.amount")} rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}><InputNumber autoFocus={mode === "manual"} min={0.01} step={0.01} /></Form.Item>}
           <Form.Item name="currency" hidden rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item noStyle shouldUpdate={(before, after) => before.currency !== after.currency}>{({ getFieldValue, setFieldValue }) => <ChoiceGroup label={t("form.currency")} value={getFieldValue("currency")} options={CURRENCIES.map((currency) => ({ value: currency, label: <><CurrencyIcon currency={currency} size={12} />{currency}</> }))} onChange={(value) => setFieldValue("currency", value)} />}</Form.Item>
           <Form.Item name="categoryId" hidden rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item noStyle shouldUpdate={(before, after) => before.categoryId !== after.categoryId}>{({ getFieldValue, setFieldValue }) => <ChoiceGroup label={t("expense.category")} value={getFieldValue("categoryId")} options={categories.map((category) => ({ value: category.id, label: category.name }))} onChange={(value) => setFieldValue("categoryId", value)} />}</Form.Item>
-          <Form.Item name="description" label={t("form.description")}><Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} /></Form.Item>
-          <Form.Item name="occurredAt" label={t("form.date")} rules={[{ required: true }]}><DatePicker allowClear={false} /></Form.Item>
-          <Form.Item name="source" hidden><Input /></Form.Item>
-          {items.length > 0 ? (
+          {!hasItems ? <Form.Item noStyle shouldUpdate={(before, after) => before.categoryId !== after.categoryId}>{({ getFieldValue, setFieldValue }) => <ChoiceGroup label={t("expense.category")} value={getFieldValue("categoryId")} options={categories.map((category) => ({ value: category.id, label: category.name }))} onChange={(value) => setFieldValue("categoryId", value)} />}</Form.Item> : null}
+          {hasItems
+            ? <Form.Item name="description" hidden><Input /></Form.Item>
+            : <Form.Item name="description" label={t("form.description")}><Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} /></Form.Item>}
+          {hasItems ? (
             <section className="parsed-items"><h2>{t("section.parsedItems")}</h2><Form.List name="items">{(fields, { remove }) => fields.map((field) => (
               <div className="parsed-item" key={field.key}>
                 <Form.Item name={[field.name, "id"]} hidden><Input /></Form.Item>
                 <div className="parsed-name"><Form.Item name={[field.name, "name"]} rules={[{ required: true }]}><Input placeholder={t("form.name")} /></Form.Item><button type="button" onClick={() => remove(field.name)} aria-label={t("actions.delete")}><Trash2 size={15} /></button></div>
-                <Form.Item name={[field.name, "amount"]} label={t("form.amount")} rules={[{ required: true }]}><InputNumber step={0.01} /></Form.Item>
+                <Form.Item name={[field.name, "amount"]} label={t("form.price")} rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}><InputNumber min={0.01} step={0.01} /></Form.Item>
                 <Form.Item name={[field.name, "categoryId"]} hidden rules={[{ required: true }]}><Input /></Form.Item>
-                <Form.Item noStyle shouldUpdate>{() => <ChoiceGroup label={t("expense.category")} value={draftForm.getFieldValue(["items", field.name, "categoryId"])} options={categories.map((category) => ({ value: category.id, label: category.name }))} onChange={(value) => draftForm.setFieldValue(["items", field.name, "categoryId"], value)} />}</Form.Item>
                 <Form.Item name={[field.name, "quantity"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "unitPrice"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "confidence"]} hidden><InputNumber /></Form.Item>
               </div>
             ))}</Form.List></section>
           ) : null}
+          <Form.Item name="occurredAt" label={t("form.date")} rules={[{ required: true }]}><DatePicker allowClear={false} /></Form.Item>
+          <Form.Item name="source" hidden><Input /></Form.Item>
           <button className="primary-action" disabled={saving} type="submit">{t(mode === "edit" ? "expense.saveChanges" : "expense.save")}</button>
         </Form>
       ) : null}

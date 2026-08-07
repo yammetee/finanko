@@ -14,29 +14,34 @@ describe("expense draft persistence", () => {
       categoryId: "food",
       description: "  Исправленный расход  ",
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
-      source: "text_ai",
-      items: [
-        { id: "existing-item", name: "Кофе", amount: 90, categoryId: "food", confidence: 0.7 },
-      ],
+      source: "manual",
     });
 
     expect(input.amount).toBe(125);
     expect(input.description).toBe("Исправленный расход");
-    expect(input.items?.[0].id).toBe("existing-item");
-    expect(input.items?.[0].amount).toBe(90);
   });
 
-  it("does not require item arithmetic to match the saved total", () => {
-    expect(() => expenseFormToInput({
-      amount: 100,
-      currency: "USD",
-      categoryId: "food",
+  it("derives aggregate fields from recognized items", () => {
+    const input = expenseFormToInput({
+      amount: 999,
+      currency: "GEL",
+      categoryId: "other",
+      description: "duplicate summary",
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
-      source: "receipt_ai",
+      source: "text_ai",
       items: [
-        { name: "Food", amount: 73, categoryId: "food", confidence: 0.6 },
+        { name: "Кофе", amount: 5, categoryId: "food", confidence: 0.9 },
+        { name: "Продукты", amount: 40, categoryId: "home", confidence: 0.8 },
       ],
-    })).not.toThrow();
+    });
+
+    expect(input).toMatchObject({
+      amount: 45,
+      currency: "GEL",
+      categoryId: "food",
+      description: "Кофе, Продукты",
+      items: [{ amount: 5 }, { amount: 40 }],
+    });
   });
 
   it("treats analyzer review warnings as informational", () => {
@@ -60,8 +65,8 @@ describe("expense draft persistence", () => {
     };
 
     expect(expenseFormToInput(values)).toMatchObject({
-      amount: 48,
-      description: "Edited after review",
+      amount: 43,
+      description: "Coffee",
       items: [{ amount: 43 }],
     });
   });

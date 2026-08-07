@@ -85,18 +85,33 @@ export function ExpensesPage() {
   );
   const formCategories = primaryCategories;
   const baseCurrency = DEFAULT_CURRENCY;
-  const displayCurrency = currencyMode === "native" ? baseCurrency : currencyMode;
   const currencyModes: DisplayCurrency[] = ["native", ...CURRENCIES];
   const nextCurrency = currencyModes[(currencyModes.indexOf(currencyMode) + 1) % currencyModes.length];
-  const currentCurrencyLabel = currencyMode === "native" ? baseCurrency : currencyMode;
-  const nextCurrencyLabel = nextCurrency === "native" ? baseCurrency : nextCurrency;
+  const currentCurrencyLabel = currencyMode === "native" ? t("currency.native") : currencyMode;
+  const nextCurrencyLabel = nextCurrency === "native" ? t("currency.native") : nextCurrency;
   const otherCategory = primaryCategories.find((category) => category.name.trim().toLocaleLowerCase() === "other");
   const analyticsCategories = useMemo(() => expenseCategories.map((category) => isDefaultExpenseCategory(category) ? category : { ...category, name: "Other", color: otherCategory?.color ?? "#8c8c8c" }), [expenseCategories, otherCategory?.color]);
   const categoryGroups = useMemo(() => buildExpenseCategoryGroups(analyticsCategories, (category) => getCategoryName(category, t)), [analyticsCategories, t]);
-  const expenseView = useMemo(() => {
+  const requestedDisplayCurrency = currencyMode === "native" ? baseCurrency : currencyMode;
+  const initialExpenseView = useMemo(() => {
     void ratesVersion;
-    return buildExpenseView({ expenses: expenseState.expenses, expenseItems: expenseState.expenseItems, categories: analyticsCategories, filters, displayCurrency });
-  }, [analyticsCategories, displayCurrency, expenseState.expenseItems, expenseState.expenses, filters, ratesVersion]);
+    return buildExpenseView({ expenses: expenseState.expenses, expenseItems: expenseState.expenseItems, categories: analyticsCategories, filters, displayCurrency: requestedDisplayCurrency });
+  }, [analyticsCategories, requestedDisplayCurrency, expenseState.expenseItems, expenseState.expenses, filters, ratesVersion]);
+  const nativeCurrencies = [...new Set(initialExpenseView.history.map((entry) => entry.expense.currency))];
+  const displayCurrency = currencyMode === "native" && nativeCurrencies.length === 1
+    ? nativeCurrencies[0]
+    : requestedDisplayCurrency;
+  const expenseView = useMemo(() => displayCurrency === requestedDisplayCurrency
+    ? initialExpenseView
+    : buildExpenseView({ expenses: expenseState.expenses, expenseItems: expenseState.expenseItems, categories: analyticsCategories, filters, displayCurrency }),
+  [analyticsCategories, displayCurrency, expenseState.expenseItems, expenseState.expenses, filters, initialExpenseView, requestedDisplayCurrency]);
+  const hasMixedNativeCurrencies = currencyMode === "native" && nativeCurrencies.length > 1;
+  const nativeTotals = CURRENCIES.map((currency) => ({
+    currency,
+    amount: expenseView.history.reduce((sum, entry) => entry.expense.currency === currency
+      ? sum + (entry.nativeContribution ?? entry.expense.amount)
+      : sum, 0),
+  })).filter(({ amount }) => Math.abs(amount) >= 0.005);
   const categoryNames = useMemo(() => new Map(categoryGroups.map((group) => [group.key, group.name])), [categoryGroups]);
   const otherKey = categoryGroupKey("Other");
   const breakdown = expenseView.byCategory.reduce<Array<(typeof expenseView.byCategory)[number]>>((items, item) => {
@@ -118,6 +133,18 @@ export function ExpensesPage() {
     dayjs(),
     trackingStartedAt,
   );
+  const totalLabel = currencyMode === "native"
+    ? nativeTotals.map(({ amount, currency }) => formatMoney(amount, currency)).join(" · ") || "0"
+    : formatMoney(expenseView.total, displayCurrency);
+  const averageLabel = currencyMode === "native"
+    ? nativeTotals.map(({ amount, currency }) => formatMoney(calculateAverageDailyExpense(
+      expenseView.history,
+      filters,
+      amount,
+      dayjs(),
+      trackingStartedAt,
+    ), currency)).join(" · ") || "0"
+    : formatMoney(average, displayCurrency);
   const trend = useMemo(() => buildExpenseTrendBuckets(expenseView.history, filters), [expenseView.history, filters]);
   const selectedCategory = categoryGroups.find((group) => {
     const keys = group.key === otherKey ? [otherKey, UNALLOCATED_CATEGORY_KEY] : [group.key];
@@ -147,7 +174,9 @@ export function ExpensesPage() {
     try {
       const parsed = await parseTextInput(input).catch(() => parseTextInputLocally(input));
       const expense = parsed as ParsedExpense;
-      setDraft({ amount: expense.total, currency: expense.currency, categoryId: expense.items[0]?.categoryId ?? primaryCategories[0]?.id, description: expense.description || text, occurredAt: dayjs(), source: "text_ai", items: expense.items, receiptReview: expense.receiptReview });
+      const categoryId = expense.items[0]?.categoryId ?? primaryCategories[0]?.id;
+      const description = expense.description || text;
+      setDraft({ amount: expense.total, currency: expense.currency, categoryId, description, occurredAt: dayjs(), source: "text_ai", items: expense.items, receiptReview: expense.receiptReview });
     } catch {
       setParseError(t("expense.parserSuggestionOnly"));
       setDraft({ ...createEmptyExpenseDraft(detectCurrencyInText(text) ?? baseCurrency, primaryCategories[0]?.id), amount: detectAmountInText(text) ?? undefined, description: text, source: "text_ai" });
@@ -162,10 +191,10 @@ export function ExpensesPage() {
 
   async function saveExpense(values: ExpenseFormValues) {
     if (formCategories.length === 0) { message.error(t("expense.contextUnavailable")); return; }
-    if (!isValidMoneyDecimal(values.amount, values.currency) || values.amount <= 0) { message.error(t("feedback.invalidMoneyAmount")); return; }
+    const input = expenseFormToInput(values);
+    if (!isValidMoneyDecimal(input.amount, input.currency) || input.amount <= 0) { message.error(t("feedback.invalidMoneyAmount")); return; }
     setSaving(true);
     try {
-      const input = expenseFormToInput(values);
       if (editing) { await expenseState.updateExpense(editing.id, input); message.success(t("expense.updated")); }
       else { await expenseState.addExpense(input); message.success(t("expense.saved")); }
       closeForm();
@@ -185,7 +214,7 @@ export function ExpensesPage() {
   const home = (
     <>
       <section className="summary-header">
-        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{formatMoney(expenseView.total, displayCurrency)}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {formatMoney(average, displayCurrency)}</span></small></div>
+        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>
@@ -203,16 +232,17 @@ export function ExpensesPage() {
         {filters.period === "custom" ? <RangePicker className="date-range" allowClear={false} value={filters.customRange ? [dayjs(filters.customRange[0]), dayjs(filters.customRange[1])] : undefined} onChange={(range) => { if (range?.[0] && range[1]) setFilters((current) => ({ ...current, customRange: [range[0]!.toISOString(), range[1]!.toISOString()] })); }} /> : null}
       </section>
 
-      {expenseView.history.length > 0 ? (
+      {expenseView.history.length > 0 && !hasMixedNativeCurrencies ? (
         <div className="analytics-grid">
           <section className="panel chart-panel"><h2>{t("expense.trend")}</h2><SpendingChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></section>
           <section className="panel category-panel"><h2>{t("section.expensesByCategory")}</h2>{breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.value) / breakdownTotal * 100) : 0; return <button type="button" key={item.key} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, displayCurrency)}</strong><small>{share}%</small></button>; })}</section>
         </div>
       ) : null}
+      {expenseView.history.length > 0 && hasMixedNativeCurrencies ? <p className="empty-state">{t("expense.chooseCurrencyForAnalytics")}</p> : null}
 
       <section className="history-section">
         <div className="section-heading"><h2>{t("expense.history")}</h2><span>{expenseView.history.length}</span></div>
-        <ExpenseRows entries={visibleHistory} displayCurrency={displayCurrency} onSelect={setSelected} />
+        <ExpenseRows entries={visibleHistory} displayCurrency={currencyMode === "native" ? "native" : displayCurrency} onSelect={setSelected} />
         {hiddenHistoryCount > 0 ? <button className="history-toggle" type="button" aria-expanded={showAllHistory} onClick={() => setShowAllHistory((value) => !value)}>{showAllHistory ? t("actions.collapse") : t("actions.showMore", { count: hiddenHistoryCount })}</button> : null}
       </section>
     </>

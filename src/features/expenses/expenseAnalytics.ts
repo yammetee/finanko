@@ -30,6 +30,7 @@ export interface ExpenseCategoryGroup {
 export interface ExpenseHistoryEntry {
   expense: Expense;
   contribution: number;
+  nativeContribution?: number;
 }
 
 export interface ExpenseTrendBucket {
@@ -278,6 +279,7 @@ export function buildExpenseView({
       );
       return {
         expense,
+        nativeContribution,
         contribution: convertMoney(
           nativeContribution,
           expense.currency,

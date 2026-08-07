@@ -84,6 +84,12 @@ function resolveCategoryId(categories: Category[], value: unknown, fallbackName:
   );
 }
 
+function resolveItemCategoryId(categories: Category[], name: string, value: unknown) {
+  const drinkingWater = /(?:^|[\s,.;:()/-])(?:вод(?:а|ы|у|ой|е)|water|წყალ(?:ი)?)(?=$|[\s,.;:()/-])/iu;
+  if (drinkingWater.test(name)) return findCategoryId(categories, "food");
+  return resolveCategoryId(categories, value, "food");
+}
+
 function isCurrency(value: unknown): value is Currency {
   return value === "USD" || value === "RUB" || value === "GEL" || value === "THB";
 }
@@ -298,7 +304,7 @@ export function normalizeParsedExpense(
             amount,
             quantity,
             unitPrice: unitPrice === undefined ? undefined : roundMoney(unitPrice),
-            categoryId: resolveCategoryId(input.categories, rawItem.categoryId, "food"),
+            categoryId: resolveItemCategoryId(input.categories, translatedName, rawItem.categoryId),
             confidence:
               typeof rawItem.confidence === "number" && Number.isFinite(rawItem.confidence)
                 ? Math.max(0, Math.min(1, rawItem.confidence))

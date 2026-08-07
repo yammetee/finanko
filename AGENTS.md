@@ -37,7 +37,10 @@ Continue from the existing uncommitted worktree. The user must not have to resta
 - The user reports that `supabase/reset-public-schema.sql` and then `supabase/schema.sql` were successfully executed in the current Supabase project. Do not repeat the destructive reset unless separately and explicitly requested.
 - Supabase sign-up now consumes an immediately returned session when email confirmation is disabled, or prompts the user to confirm email and then sign in when confirmation is required. Authentication errors are localized from stable error codes instead of exposing provider messages.
 - Russian user-facing instructions and errors consistently use the formal `Вы` form.
-- `npm test` (73 tests), `npm run build`, `npm run lint`, and `git diff --check` passed after the authentication and localization changes.
+- Recognized text and receipts remain itemized. Their review UI shows shared currency and date plus editable item names and prices, while duplicate parent amount, category, and description controls stay hidden and are derived from the items on save.
+- Every explicitly priced product remains a separate categorized item; drinking water is normalized to Food even if AI labels it Health.
+- Native currency mode keeps source currencies in totals and history instead of presenting them as USD; single-currency analytics stay available, while mixed-currency charts require choosing one conversion currency.
+- `npm test` (74 tests), `npm run build`, `npm run lint`, and `git diff --check` pass after the item-review, water-category, and native-currency fixes.
 
 ## Working rules
 

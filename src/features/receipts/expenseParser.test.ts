@@ -9,6 +9,16 @@ const categories: Category[] = [
     name: "Food",
     color: "#70c1b3",
   },
+  {
+    id: "cat-health",
+    name: "Health",
+    color: "#ff6b6b",
+  },
+  {
+    id: "cat-bills",
+    name: "Bills",
+    color: "#4d96ff",
+  },
 ];
 
 describe("normalizeParsedExpense", () => {
@@ -493,6 +503,33 @@ describe("normalizeParsedExpense", () => {
       total: 25,
       items: [{ name: "Обед", amount: 25, categoryId: "cat-food" }],
     });
+  });
+
+  it("keeps every recognized product separate and corrects drinking water to Food", () => {
+    const parsed = normalizeParsedExpense(
+      {
+        text: "еда 20, интернет 5, вода 4 руб",
+        currency: "USD",
+        categories,
+      },
+      {
+        kind: "transaction",
+        description: "еда, интернет, вода",
+        currency: "RUB",
+        total: 29,
+        items: [
+          { name: "еда", amount: 20, categoryId: "Food", confidence: 0.9 },
+          { name: "интернет", amount: 5, categoryId: "Bills", confidence: 0.9 },
+          { name: "вода", amount: 4, categoryId: "Health", confidence: 0.9 },
+        ],
+      },
+    );
+
+    expect(parsed?.items).toMatchObject([
+      { name: "еда", amount: 20, categoryId: "cat-food" },
+      { name: "интернет", amount: 5, categoryId: "cat-bills" },
+      { name: "вода", amount: 4, categoryId: "cat-food" },
+    ]);
   });
 
   it("parses a credit payment as an expense in Georgian lari", () => {

@@ -42,13 +42,20 @@ export function createEmptyExpenseDraft(
 }
 
 export function expenseFormToInput(values: ExpenseFormValues): NewExpenseInput {
+  const items = values.items ?? [];
+  const description = items.length > 0
+    ? items.map((item) => item.name.trim()).filter(Boolean).join(", ").slice(0, 2000)
+    : values.description?.trim() ?? "";
+
   return {
-    amount: values.amount,
+    amount: items.length > 0
+      ? Math.round(items.reduce((sum, item) => sum + item.amount, 0) * 100) / 100
+      : values.amount,
     currency: values.currency,
-    categoryId: values.categoryId,
-    description: values.description?.trim() ?? "",
+    categoryId: items[0]?.categoryId ?? values.categoryId,
+    description,
     occurredAt: values.occurredAt.toISOString(),
     source: values.source,
-    items: values.items ?? [],
+    items,
   };
 }

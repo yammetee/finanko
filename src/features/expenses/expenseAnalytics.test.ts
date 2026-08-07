@@ -133,6 +133,8 @@ describe("expense analytics", () => {
     const result = view([usdExpense, gelExpense]);
 
     expect(result.total).toBe(20);
+    expect(result.history.map(({ expense: current, nativeContribution }) => [current.currency, nativeContribution]))
+      .toEqual([["USD", 10], ["GEL", 20]]);
     expect(usdExpense).toEqual(expect.objectContaining({ amount: 10, currency: "USD" }));
     expect(gelExpense).toEqual(expect.objectContaining({ amount: 20, currency: "GEL" }));
   });
