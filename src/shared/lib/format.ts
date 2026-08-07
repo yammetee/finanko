@@ -1,4 +1,4 @@
-import type { Currency } from "../types/finance";
+import type { Currency } from "../types/expense";
 
 export function formatMoney(amount: number, currency: Currency) {
   return new Intl.NumberFormat("en-US", {

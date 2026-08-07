@@ -4,9 +4,9 @@ import { convertMoney } from "../../shared/lib/currency";
 import type {
   Category,
   Currency,
-  Transaction,
-  TransactionItem,
-} from "../../shared/types/finance";
+  Expense,
+  ExpenseItem,
+} from "../../shared/types/expense";
 
 dayjs.extend(isoWeek);
 
@@ -28,7 +28,7 @@ export interface ExpenseCategoryGroup {
 }
 
 export interface ExpenseHistoryEntry {
-  transaction: Transaction;
+  expense: Expense;
   contribution: number;
 }
 
@@ -37,15 +37,14 @@ export interface ExpenseTrendBucket {
   start: string;
   end: string;
   value: number;
-  transactionCount: number;
+  expenseCount: number;
   unit: "hour" | "day" | "month" | "year";
 }
 
 interface ExpenseViewInput {
-  transactions: Transaction[];
-  transactionItems: TransactionItem[];
+  expenses: Expense[];
+  expenseItems: ExpenseItem[];
   categories: Category[];
-  portfolioIds: string[];
   filters: ExpenseFilters;
   displayCurrency: Currency;
   now?: Dayjs;
@@ -67,7 +66,6 @@ export function buildExpenseCategoryGroups(
   const groups = new Map<string, ExpenseCategoryGroup>();
 
   categories
-    .filter((category) => category.type === "expense")
     .forEach((category) => {
       const key = categoryGroupKey(category.name);
       const current = groups.get(key);
@@ -115,7 +113,7 @@ function trendRange(history: ExpenseHistoryEntry[], filters: ExpenseFilters, now
   if (selectedRange) return selectedRange;
   if (history.length === 0) return null;
 
-  const timestamps = history.map((entry) => dayjs(entry.transaction.occurredAt));
+  const timestamps = history.map((entry) => dayjs(entry.expense.occurredAt));
   return {
     start: timestamps.reduce((earliest, value) => value.isBefore(earliest) ? value : earliest).startOf("month"),
     end: timestamps.reduce((latest, value) => value.isAfter(latest) ? value : latest).endOf("month"),
@@ -153,7 +151,7 @@ export function buildExpenseTrendBuckets(
   let cumulativeValue = 0;
   return buckets.map((bucket) => {
     const entries = history.filter((entry) => {
-      const occurredAt = dayjs(entry.transaction.occurredAt);
+      const occurredAt = dayjs(entry.expense.occurredAt);
       return !occurredAt.isBefore(bucket.start) && !occurredAt.isAfter(bucket.end);
     });
     cumulativeValue += entries.reduce((sum, entry) => sum + entry.contribution, 0);
@@ -162,7 +160,7 @@ export function buildExpenseTrendBuckets(
       start: bucket.start.toISOString(),
       end: bucket.end.toISOString(),
       value: cumulativeValue,
-      transactionCount: entries.length,
+      expenseCount: entries.length,
       unit,
     };
   });
@@ -173,19 +171,22 @@ export function calculateAverageDailyExpense(
   filters: ExpenseFilters,
   total: number,
   now = dayjs(),
+  trackingStartedAt?: string,
 ) {
   if (history.length === 0) return 0;
 
   const selectedRange = getExpensePeriodRange(filters, now);
-  const start = selectedRange?.start ?? history.reduce((earliest, entry) => {
-    const occurredAt = dayjs(entry.transaction.occurredAt);
+  const periodStart = selectedRange?.start ?? history.reduce((earliest, entry) => {
+    const occurredAt = dayjs(entry.expense.occurredAt);
     return occurredAt.isBefore(earliest) ? occurredAt : earliest;
-  }, dayjs(history[0].transaction.occurredAt));
+  }, dayjs(history[0].expense.occurredAt));
+  const trackingStart = trackingStartedAt ? dayjs(trackingStartedAt).startOf("day") : null;
+  const start = trackingStart?.isAfter(periodStart) ? trackingStart : periodStart;
   const selectedEnd = selectedRange?.end ?? now;
   const latestExpense = history.reduce((latest, entry) => {
-    const occurredAt = dayjs(entry.transaction.occurredAt);
+    const occurredAt = dayjs(entry.expense.occurredAt);
     return occurredAt.isAfter(latest) ? occurredAt : latest;
-  }, dayjs(history[0].transaction.occurredAt));
+  }, dayjs(history[0].expense.occurredAt));
   const end = selectedRange
     ? (selectedEnd.isAfter(now) ? now : selectedEnd)
     : (latestExpense.isAfter(now) ? latestExpense : now);
@@ -194,23 +195,38 @@ export function calculateAverageDailyExpense(
   return total / dayCount;
 }
 
-function isInsidePeriod(transaction: Transaction, range: PeriodRange | null) {
+export function getExpenseTrackingStart(
+  expenses: Expense[],
+) {
+  const firstExpense = expenses
+    .filter((expense) => !expense.deletedAt)
+    .reduce<Expense | null>((earliest, expense) => {
+      if (!earliest) return expense;
+      return new Date(expense.occurredAt) < new Date(earliest.occurredAt)
+        ? expense
+        : earliest;
+    }, null);
+
+  return firstExpense?.occurredAt;
+}
+
+function isInsidePeriod(expense: Expense, range: PeriodRange | null) {
   if (!range) return true;
-  const occurredAt = dayjs(transaction.occurredAt);
+  const occurredAt = dayjs(expense.occurredAt);
   return !occurredAt.isBefore(range.start) && !occurredAt.isAfter(range.end);
 }
 
-function contributionForTransaction(
-  transaction: Transaction,
-  items: TransactionItem[],
+function contributionForExpense(
+  expense: Expense,
+  items: ExpenseItem[],
   selectedKeys: Set<string>,
   categoryKeyById: Map<string, string>,
 ) {
-  if (selectedKeys.size === 0) return transaction.amount;
+  if (selectedKeys.size === 0) return expense.amount;
 
   if (items.length === 0) {
-    const key = categoryKeyById.get(transaction.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
-    return selectedKeys.has(key) ? transaction.amount : 0;
+    const key = categoryKeyById.get(expense.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
+    return selectedKeys.has(key) ? expense.amount : 0;
   }
 
   const itemTotal = items.reduce((sum, item) => sum + item.amount, 0);
@@ -218,7 +234,7 @@ function contributionForTransaction(
     const key = categoryKeyById.get(item.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
     return selectedKeys.has(key) ? sum + item.amount : sum;
   }, 0);
-  const unallocated = transaction.amount - itemTotal;
+  const unallocated = expense.amount - itemTotal;
 
   return selectedKeys.has(UNALLOCATED_CATEGORY_KEY)
     ? itemContribution + unallocated
@@ -226,69 +242,65 @@ function contributionForTransaction(
 }
 
 export function buildExpenseView({
-  transactions,
-  transactionItems,
+  expenses,
+  expenseItems,
   categories,
-  portfolioIds,
   filters,
   displayCurrency,
   now = dayjs(),
 }: ExpenseViewInput) {
-  const portfolioIdSet = new Set(portfolioIds);
   const categoryGroups = buildExpenseCategoryGroups(categories);
   const categoryKeyById = new Map(
     categoryGroups.flatMap((group) => group.categoryIds.map((id) => [id, group.key] as const)),
   );
-  const itemsByTransaction = new Map<string, TransactionItem[]>();
-  transactionItems.forEach((item) => {
-    itemsByTransaction.set(item.transactionId, [
-      ...(itemsByTransaction.get(item.transactionId) ?? []),
+  const itemsByExpense = new Map<string, ExpenseItem[]>();
+  expenseItems.forEach((item) => {
+    itemsByExpense.set(item.expenseId, [
+      ...(itemsByExpense.get(item.expenseId) ?? []),
       item,
     ]);
   });
 
   const range = getExpensePeriodRange(filters, now);
-  const periodExpenses = transactions.filter(
-    (transaction) =>
-      transaction.type === "expense" &&
-      !transaction.deletedAt &&
-      portfolioIdSet.has(transaction.portfolioId) &&
-      isInsidePeriod(transaction, range),
+  const periodExpenses = expenses.filter(
+    (expense) =>
+      !expense.deletedAt &&
+      isInsidePeriod(expense, range),
   );
   const selectedKeys = new Set(filters.categoryKeys);
   const history: ExpenseHistoryEntry[] = periodExpenses
-    .map((transaction) => {
-      const nativeContribution = contributionForTransaction(
-        transaction,
-        itemsByTransaction.get(transaction.id) ?? [],
+    .map((expense) => {
+      const nativeContribution = contributionForExpense(
+        expense,
+        itemsByExpense.get(expense.id) ?? [],
         selectedKeys,
         categoryKeyById,
       );
       return {
-        transaction,
+        expense,
         contribution: convertMoney(
           nativeContribution,
-          transaction.currency,
+          expense.currency,
           displayCurrency,
-          transaction.occurredAt,
+          expense.occurredAt,
         ),
       };
     })
     .filter((entry) => Math.abs(entry.contribution) >= 0.005)
     .sort(
       (left, right) =>
-        +new Date(right.transaction.occurredAt) - +new Date(left.transaction.occurredAt),
+        +new Date(right.expense.occurredAt) - +new Date(left.expense.occurredAt),
     );
 
   const categoryTotals = new Map<string, number>();
-  periodExpenses.forEach((transaction) => {
-    const items = itemsByTransaction.get(transaction.id) ?? [];
+  periodExpenses.forEach((expense) => {
+    const items = itemsByExpense.get(expense.id) ?? [];
     if (items.length === 0) {
-      const key = categoryKeyById.get(transaction.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
+      const key = categoryKeyById.get(expense.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
       categoryTotals.set(
         key,
         (categoryTotals.get(key) ?? 0) +
-          convertMoney(transaction.amount, transaction.currency, displayCurrency, transaction.occurredAt),
+          convertMoney(expense.amount, expense.currency, displayCurrency, expense.occurredAt),
       );
       return;
     }
@@ -299,16 +311,16 @@ export function buildExpenseView({
       categoryTotals.set(
         key,
         (categoryTotals.get(key) ?? 0) +
-          convertMoney(item.amount, transaction.currency, displayCurrency, transaction.occurredAt),
+          convertMoney(item.amount, expense.currency, displayCurrency, expense.occurredAt),
       );
     });
 
-    const unallocated = transaction.amount - itemTotal;
+    const unallocated = expense.amount - itemTotal;
     if (Math.abs(unallocated) >= 0.005) {
       categoryTotals.set(
         UNALLOCATED_CATEGORY_KEY,
         (categoryTotals.get(UNALLOCATED_CATEGORY_KEY) ?? 0) +
-          convertMoney(unallocated, transaction.currency, displayCurrency, transaction.occurredAt),
+          convertMoney(unallocated, expense.currency, displayCurrency, expense.occurredAt),
       );
     }
   });
@@ -331,35 +343,5 @@ export function buildExpenseView({
     history,
     byCategory,
     periodExpenses,
-  };
-}
-
-export function buildExpenseBaseline(input: {
-  transactions: Transaction[];
-  transactionItems: TransactionItem[];
-}) {
-  const expenses = input.transactions.filter(
-    (transaction) => transaction.type === "expense" && !transaction.deletedAt,
-  );
-  const totalsByCurrency = expenses.reduce<Partial<Record<Currency, number>>>((totals, expense) => {
-    totals[expense.currency] = (totals[expense.currency] ?? 0) + expense.amount;
-    return totals;
-  }, {});
-  const countsByCategoryId = expenses.reduce<Record<string, number>>((counts, expense) => {
-    const key = expense.categoryId || UNALLOCATED_CATEGORY_KEY;
-    counts[key] = (counts[key] ?? 0) + 1;
-    return counts;
-  }, {});
-  const timestamps = expenses.map((expense) => +new Date(expense.occurredAt));
-  const expenseIds = new Set(expenses.map((expense) => expense.id));
-
-  return {
-    expenseCount: expenses.length,
-    itemCount: input.transactionItems.filter((item) => expenseIds.has(item.transactionId)).length,
-    totalsByCurrency,
-    countsByCategoryId,
-    firstOccurredAt: timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : null,
-    lastOccurredAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : null,
-    expenseIds: expenses.map((expense) => expense.id).sort(),
   };
 }

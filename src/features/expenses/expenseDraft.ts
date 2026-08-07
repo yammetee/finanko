@@ -1,9 +1,9 @@
 import dayjs, { type Dayjs } from "dayjs";
 import type {
   Currency,
-  TransactionSource,
-} from "../../shared/types/finance";
-import type { NewExpenseInput } from "../finance/financeTypes";
+  ExpenseSource,
+} from "../../shared/types/expense";
+import type { NewExpenseInput } from "./expenseTypes";
 import type { ParsedExpenseItem, ReceiptReview } from "../receipts/expenseParser";
 
 export interface ExpenseDraft {
@@ -12,7 +12,7 @@ export interface ExpenseDraft {
   categoryId?: string;
   description: string;
   occurredAt: Dayjs;
-  source: TransactionSource;
+  source: ExpenseSource;
   items: Array<ParsedExpenseItem & { id?: string }>;
   receiptReview?: ReceiptReview;
 }
@@ -23,7 +23,7 @@ export interface ExpenseFormValues {
   categoryId: string;
   description?: string;
   occurredAt: Dayjs;
-  source: TransactionSource;
+  source: ExpenseSource;
   items?: Array<ParsedExpenseItem & { id?: string }>;
 }
 

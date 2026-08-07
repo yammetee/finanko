@@ -6,10 +6,10 @@ import InputNumber from "antd/es/input-number";
 import Spin from "antd/es/spin";
 import { ArrowLeft, Sparkles, Trash2 } from "lucide-react";
 import { useEffect } from "react";
-import { CURRENCIES } from "../../shared/constants/finance";
+import { CURRENCIES } from "../../shared/constants/expenses";
 import type { MessageKey } from "../../shared/i18n/i18nContext";
 import { useI18n } from "../../shared/i18n/i18nContext";
-import type { Category } from "../../shared/types/finance";
+import type { Category } from "../../shared/types/expense";
 import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import type { ExpenseDraft, ExpenseFormValues } from "./expenseDraft";
 

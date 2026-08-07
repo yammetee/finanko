@@ -1,4 +1,4 @@
-import type { Category } from "../types/finance";
+import type { Category } from "../types/expense";
 import type { MessageKey } from "./i18nContext";
 
 type Translator = (key: MessageKey, values?: Record<string, string | number>) => string;

@@ -1,4 +1,4 @@
-import type { Currency } from "../types/finance";
+import type { Currency } from "../types/expense";
 
 const FRACTION_DIGITS: Record<Currency, number> = {
   USD: 2,

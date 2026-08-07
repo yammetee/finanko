@@ -2,36 +2,73 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
-const baseline = readFileSync(new URL("./expense-baseline.sql", import.meta.url), "utf8");
+const reset = readFileSync(new URL("./reset-public-schema.sql", import.meta.url), "utf8");
 
-describe("expense data safety", () => {
-  it("keeps owner-scoped RLS enabled on every exposed financial table", () => {
-    for (const table of [
-      "portfolios",
-      "accounts",
-      "categories",
-      "recurring_rules",
-      "transactions",
-      "transaction_items",
-    ]) {
+function executableSql(value: string) {
+  return value.replace(/^--.*$/gm, "");
+}
+
+describe("minimal Finanko schema", () => {
+  it("contains only the public expense tables required by the runtime", () => {
+    const publicTables = [...schema.matchAll(/create table if not exists public\.([a-z_]+)/g)]
+      .map((match) => match[1]);
+
+    expect(publicTables).toEqual(["categories", "expenses", "expense_items"]);
+    expect(schema).not.toMatch(/public\.(portfolios|accounts|transactions|recurring_rules)/);
+    expect(schema).not.toMatch(/\b(income|debt|interest|mortgage|loan)\b/i);
+  });
+
+  it("enforces direct owner-scoped RLS on every exposed table", () => {
+    for (const table of ["categories", "expenses", "expense_items"]) {
       expect(schema).toContain(`alter table public.${table} enable row level security;`);
+      expect(schema).toContain(`create policy owner_access on public.${table}`);
     }
-    expect(schema).toContain("create policy portfolios_owner on public.portfolios");
-    expect(schema).toContain("create policy owner_access on public.transaction_items");
-    expect(schema).toContain("public.owns_portfolio(t.portfolio_id)");
+    expect(schema.match(/owner_id = \(select auth\.uid\(\)\)/g)).toHaveLength(6);
+    expect(schema).toContain("expenses_owner_occurred_active_idx");
+    expect(schema).toContain("where deleted_at is null");
   });
 
-  it("keeps the baseline script strictly read-only", () => {
-    const executableSql = baseline.replace(/^--.*$/gm, "");
-    expect(executableSql).not.toMatch(/\b(insert|update|delete|truncate|drop|alter|create)\b/i);
-    expect(executableSql).toContain("where t.type = 'expense'");
-    expect(executableSql).toContain("and t.deleted_at is null");
+  it("saves one expense and its line items atomically without compatibility fields", () => {
+    expect(schema).toContain("create or replace function public.save_expense(expense_data jsonb, item_rows jsonb)");
+    expect(schema).toContain("security invoker");
+    expect(schema).toContain("requester_id uuid := (select auth.uid())");
+    expect(schema).toContain("delete from public.expense_items");
+    expect(schema).toContain("from jsonb_array_elements(item_rows)");
+    expect(schema).not.toMatch(/linked_account|principal_amount|interest_amount|recurring_rule/);
   });
 
-  it("retains legacy tables and adds an expense-period index without destructive DDL", () => {
-    expect(schema).toContain("create table if not exists public.portfolios");
-    expect(schema).toContain("create table if not exists public.accounts");
-    expect(schema).toContain("transactions_active_expense_period_idx");
-    expect(schema).not.toMatch(/\b(drop table|truncate table)\b/i);
+  it("keeps AI roles and usage private behind the atomic authenticated RPC", () => {
+    for (const table of ["user_roles", "ai_usage_daily"]) {
+      expect(schema).toContain(`create table if not exists finanko_private.${table}`);
+      expect(schema).toContain(`alter table finanko_private.${table} enable row level security;`);
+    }
+    expect(schema).toContain("primary key (user_id, usage_date)");
+    expect(schema).toContain("check (request_count between 0 and 5)");
+    expect(schema).toContain("security definer\nset search_path = ''");
+    expect(schema).toContain("where usage.request_count < 5");
+    expect(schema).toContain("revoke all on all tables in schema finanko_private from public, anon, authenticated");
+    expect(schema).toContain("revoke all on function public.consume_ai_daily_quota() from public, anon");
+    expect(schema).toContain("grant execute on function public.consume_ai_daily_quota() to authenticated");
+  });
+
+  it("limits the destructive reset to public app objects and the Finanko private schema", () => {
+    const sql = executableSql(reset);
+    expect(sql).toContain("drop schema if exists finanko_private cascade");
+    expect(sql).not.toMatch(/drop schema(?: if exists)? public/i);
+    for (const managedSchema of [
+      "auth",
+      "storage",
+      "extensions",
+      "realtime",
+      "vault",
+      "graphql",
+      "graphql_public",
+      "supabase_functions",
+      "supabase_migrations",
+    ]) {
+      expect(sql).not.toMatch(new RegExp(`drop\\s+(?:table|schema|function|procedure|type).*${managedSchema}\\.`, "i"));
+    }
+    expect(sql).toContain("namespace.nspname = 'public'");
+    expect(sql).toContain("dependency.deptype = 'e'");
   });
 });

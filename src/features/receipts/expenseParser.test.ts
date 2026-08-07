@@ -1,20 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { Category } from "../../shared/types/finance";
+import type { Category } from "../../shared/types/expense";
 import { buildReceiptAiPayload } from "./aiParser";
 import { normalizeParsedExpense, parseTextInputLocally } from "./expenseParser";
 
 const categories: Category[] = [
   {
     id: "cat-food",
-    portfolioId: "portfolio-1",
     name: "Food",
-    type: "expense",
     color: "#70c1b3",
   },
 ];
 
 describe("normalizeParsedExpense", () => {
-  it("sends account currency only as a receipt fallback", () => {
+  it("sends the selected currency only as a receipt fallback", () => {
     const payload = buildReceiptAiPayload({ fileName: "thai-receipt.jpg", currency: "GEL", categories });
     expect(payload).toMatchObject({ fallbackCurrency: "GEL" });
     expect(payload).not.toHaveProperty("currency");
@@ -39,7 +37,7 @@ describe("normalizeParsedExpense", () => {
     ).toBeNull();
   });
 
-  it("rejects an incomplete legacy receipt response instead of creating a wrong transaction", () => {
+  it("rejects an invalid receipt response instead of creating a wrong expense", () => {
     expect(normalizeParsedExpense(
       { fileName: "thai-receipt.jpg", currency: "GEL", categories },
       {
@@ -388,7 +386,7 @@ describe("normalizeParsedExpense", () => {
     expect(parsed?.items[0]?.name).toBe("вафли");
   });
 
-  it("parses salary text as income with explicit currency", () => {
+  it("keeps text parsing inside the expense product", () => {
     const parsed = parseTextInputLocally({
       text: "зарплата 4000$",
       currency: "RUB",
@@ -397,7 +395,7 @@ describe("normalizeParsedExpense", () => {
 
     expect(parsed).toMatchObject({
       kind: "transaction",
-      type: "income",
+      type: "expense",
       currency: "USD",
       total: 4000,
       items: [{ amount: 4000 }],
@@ -497,17 +495,18 @@ describe("normalizeParsedExpense", () => {
     });
   });
 
-  it("parses Georgian lari account text as GEL", () => {
+  it("parses a credit payment as an expense in Georgian lari", () => {
     const parsed = parseTextInputLocally({
-      text: "кредит 1200 лари 12%",
+      text: "платёж по кредиту 1200 лари",
       currency: "USD",
       categories,
     });
 
     expect(parsed).toMatchObject({
-      kind: "account",
+      kind: "transaction",
+      type: "expense",
       currency: "GEL",
-      initialBalance: 1200,
+      total: 1200,
     });
   });
 });

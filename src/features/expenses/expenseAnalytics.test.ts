@@ -1,29 +1,26 @@
 import dayjs from "dayjs";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Category, Transaction, TransactionItem } from "../../shared/types/finance";
+import type { Category, Expense, ExpenseItem } from "../../shared/types/expense";
 import { setLiveExchangeRates } from "../../shared/lib/currency";
 import {
-  buildExpenseBaseline,
   buildExpenseTrendBuckets,
   buildExpenseView,
   calculateAverageDailyExpense,
+  getExpenseTrackingStart,
   getExpensePeriodRange,
   UNALLOCATED_CATEGORY_KEY,
 } from "./expenseAnalytics";
 
 const categories: Category[] = [
-  { id: "food", portfolioId: "portfolio", name: "Food", type: "expense", color: "#f00" },
-  { id: "home", portfolioId: "portfolio", name: "Home", type: "expense", color: "#0f0" },
+  { id: "food", name: "Food", color: "#f00" },
+  { id: "home", name: "Home", color: "#0f0" },
 ];
 
 afterEach(() => setLiveExchangeRates(null));
 
-function expense(overrides: Partial<Transaction> = {}): Transaction {
+function expense(overrides: Partial<Expense> = {}): Expense {
   return {
     id: "expense",
-    portfolioId: "portfolio",
-    accountId: "account",
-    type: "expense",
     amount: 100,
     currency: "USD",
     categoryId: "food",
@@ -35,15 +32,14 @@ function expense(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 function view(
-  transactions: Transaction[],
-  items: TransactionItem[] = [],
+  expenses: Expense[],
+  items: ExpenseItem[] = [],
   categoryKeys: string[] = [],
 ) {
   return buildExpenseView({
-    transactions,
-    transactionItems: items,
+    expenses,
+    expenseItems: items,
     categories,
-    portfolioIds: ["portfolio"],
     filters: { period: "month", categoryKeys },
     displayCurrency: "USD",
     now: dayjs("2026-08-04T18:00:00.000Z"),
@@ -53,7 +49,7 @@ function view(
 describe("expense analytics", () => {
   it("uses the saved expense total when item arithmetic does not match", () => {
     const result = view([expense()], [
-      { id: "item", transactionId: "expense", name: "Food", amount: 70, categoryId: "food", confidence: 1 },
+      { id: "item", expenseId: "expense", name: "Food", amount: 70, categoryId: "food", confidence: 1 },
     ]);
 
     expect(result.total).toBe(100);
@@ -67,8 +63,8 @@ describe("expense analytics", () => {
     const result = view(
       [expense()],
       [
-        { id: "food-item", transactionId: "expense", name: "Food", amount: 60, categoryId: "food", confidence: 1 },
-        { id: "home-item", transactionId: "expense", name: "Soap", amount: 30, categoryId: "home", confidence: 1 },
+        { id: "food-item", expenseId: "expense", name: "Food", amount: 60, categoryId: "food", confidence: 1 },
+        { id: "home-item", expenseId: "expense", name: "Soap", amount: 30, categoryId: "home", confidence: 1 },
       ],
       ["home"],
     );
@@ -80,7 +76,7 @@ describe("expense analytics", () => {
   it("exposes the receipt difference through the unallocated filter", () => {
     const result = view(
       [expense()],
-      [{ id: "item", transactionId: "expense", name: "Food", amount: 75, categoryId: "food", confidence: 1 }],
+      [{ id: "item", expenseId: "expense", name: "Food", amount: 75, categoryId: "food", confidence: 1 }],
       [UNALLOCATED_CATEGORY_KEY],
     );
 
@@ -90,7 +86,7 @@ describe("expense analytics", () => {
   it("keeps a negative receipt difference as an unallocated correction", () => {
     const result = view(
       [expense()],
-      [{ id: "item", transactionId: "expense", name: "Food", amount: 125, categoryId: "food", confidence: 1 }],
+      [{ id: "item", expenseId: "expense", name: "Food", amount: 125, categoryId: "food", confidence: 1 }],
       [UNALLOCATED_CATEGORY_KEY],
     );
 
@@ -103,16 +99,14 @@ describe("expense analytics", () => {
     expect(view([expense()], [], ["home"]).total).toBe(0);
   });
 
-  it("filters deleted, non-expense, foreign-portfolio, and out-of-period records", () => {
+  it("filters deleted and out-of-period records", () => {
     const result = view([
       expense(),
       expense({ id: "deleted", deletedAt: "2026-08-05T00:00:00.000Z" }),
-      expense({ id: "income", type: "income" }),
-      expense({ id: "foreign", portfolioId: "foreign" }),
       expense({ id: "old", occurredAt: "2026-07-30T12:00:00.000Z" }),
     ]);
 
-    expect(result.history.map((entry) => entry.transaction.id)).toEqual(["expense"]);
+    expect(result.history.map((entry) => entry.expense.id)).toEqual(["expense"]);
   });
 
   it("combines multiple selected categories into one total and matching history", () => {
@@ -180,7 +174,7 @@ describe("expense analytics", () => {
 
   it("keeps week graphs on seven daily points", () => {
     const buckets = buildExpenseTrendBuckets(
-      [{ transaction: expense(), contribution: 100 }],
+      [{ expense: expense(), contribution: 100 }],
       { period: "week", categoryKeys: [] },
       dayjs("2026-08-04T18:00:00.000Z"),
     );
@@ -204,7 +198,7 @@ describe("expense analytics", () => {
   });
 
   it("calculates daily average across a completed custom range", () => {
-    const history = [{ transaction: expense(), contribution: 100 }];
+    const history = [{ expense: expense(), contribution: 100 }];
 
     expect(calculateAverageDailyExpense(
       history,
@@ -221,7 +215,7 @@ describe("expense analytics", () => {
   it("calculates all-time daily average from the first expense through today", () => {
     const history = [
       {
-        transaction: expense({ occurredAt: "2026-08-03T12:00:00.000Z" }),
+        expense: expense({ occurredAt: "2026-08-03T12:00:00.000Z" }),
         contribution: 100,
       },
     ];
@@ -234,18 +228,27 @@ describe("expense analytics", () => {
     )).toBe(20);
   });
 
-  it("builds a stable read-only baseline", () => {
-    const result = buildExpenseBaseline({
-      transactions: [expense(), expense({ id: "gel", amount: 12, currency: "GEL" })],
-      transactionItems: [
-        { id: "item", transactionId: "expense", name: "Food", amount: 100, categoryId: "food", confidence: 1 },
-      ],
-    });
+  it("starts an unfinished year average when expense tracking actually began", () => {
+    const history = [
+      {
+        expense: expense({ occurredAt: "2026-08-04T12:00:00.000Z" }),
+        contribution: 100,
+      },
+    ];
 
-    expect(result.expenseCount).toBe(2);
-    expect(result.itemCount).toBe(1);
-    expect(result.totalsByCurrency).toEqual({ USD: 100, GEL: 12 });
-    expect(result.countsByCategoryId).toEqual({ food: 2 });
-    expect(result.expenseIds).toEqual(["expense", "gel"]);
+    expect(calculateAverageDailyExpense(
+      history,
+      { period: "year", categoryKeys: [] },
+      100,
+      dayjs("2026-08-07T18:00:00.000Z"),
+      "2026-07-01T12:00:00.000Z",
+    )).toBeCloseTo(100 / 38);
+  });
+
+  it("finds the first persisted expense without using deleted rows", () => {
+    expect(getExpenseTrackingStart([
+      expense({ id: "current", occurredAt: "2026-07-01T12:00:00.000Z" }),
+      expense({ id: "older-deleted", occurredAt: "2025-01-01T12:00:00.000Z", deletedAt: "2026-01-01T00:00:00.000Z" }),
+    ])).toBe("2026-07-01T12:00:00.000Z");
   });
 });

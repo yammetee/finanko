@@ -1,20 +1,13 @@
-import type { User } from "@supabase/supabase-js";
 import { LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
-import { initializeFinanceData } from "../finance/financeStore";
+import { initializeExpenseData } from "../expenses/expenseStore";
+import { getAuthErrorKey } from "./authErrors";
 import { useAuthStore } from "./authStore";
 
 interface AuthGateProps {
   children: React.ReactNode;
-}
-
-function getUserFinanceName(user: User | null): string {
-  if (!user) return "Personal";
-  const userName = user.user_metadata?.name;
-  if (typeof userName === "string" && userName.trim()) return userName;
-  return user.email ?? "Personal";
 }
 
 export function AuthGate({ children }: AuthGateProps) {
@@ -22,9 +15,8 @@ export function AuthGate({ children }: AuthGateProps) {
   const { t } = useI18n();
   const currentUser = user();
   const currentUserId = typeof currentUser?.id === "string" ? currentUser.id : null;
-  const currentUserFinanceName = getUserFinanceName(currentUser);
-  const [financeReady, setFinanceReady] = useState(false);
-  const [financeError, setFinanceError] = useState<string | null>(null);
+  const [expensesReady, setExpensesReady] = useState(false);
+  const [expensesError, setExpensesError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,28 +33,28 @@ export function AuthGate({ children }: AuthGateProps) {
     let active = true;
 
     if (typeof currentUserId !== "string") {
-      setFinanceReady(false);
+      setExpensesReady(false);
       return () => {
         active = false;
       };
     }
 
-    setFinanceReady(false);
-    setFinanceError(null);
-    void initializeFinanceData(currentUserId, currentUserFinanceName)
-      .then(() => { if (active) setFinanceReady(true); })
-      .catch((error) => { if (active) setFinanceError(error instanceof Error ? error.message : "Finance data could not be loaded"); });
+    setExpensesReady(false);
+    setExpensesError(null);
+    void initializeExpenseData(currentUserId)
+      .then(() => { if (active) setExpensesReady(true); })
+      .catch(() => { if (active) setExpensesError(t("feedback.loadFailed")); });
 
     return () => {
       active = false;
     };
-  }, [currentUserFinanceName, currentUserId]);
+  }, [currentUserId, t]);
 
-  if (currentUser && financeError) {
-    return <div className="auth-screen"><div className="auth-card"><p className="muted auth-description">{financeError}</p><button className="auth-action auth-action-primary" type="button" onClick={() => window.location.reload()}>{t("actions.retry")}</button></div></div>;
+  if (currentUser && expensesError) {
+    return <div className="auth-screen"><div className="auth-card"><p className="muted auth-description">{expensesError}</p><button className="auth-action auth-action-primary" type="button" onClick={() => window.location.reload()}>{t("actions.retry")}</button></div></div>;
   }
 
-  if (loading || (currentUser && !financeReady)) {
+  if (loading || (currentUser && !expensesReady)) {
     return (
       <div className="auth-screen auth-loading-screen">
         <div className="auth-loader" />
@@ -78,18 +70,27 @@ export function AuthGate({ children }: AuthGateProps) {
     event.preventDefault();
     setAuthError(null);
     setAuthNotice(null);
+
+    if (authMode === "signUp" && !legalAccepted) {
+      setAuthError(t("auth.acceptLegalError"));
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       if (authMode === "signIn") {
         await signInWithPassword(email.trim(), password);
       } else {
-        if (!legalAccepted) throw new Error(t("auth.acceptLegalError"));
-        await signUpWithPassword(email.trim(), password, new Date().toISOString());
-        setAuthNotice(t("auth.signUpCheckEmail"));
+        const result = await signUpWithPassword(email.trim(), password, new Date().toISOString());
+        if (result.requiresEmailConfirmation) {
+          setAuthMode("signIn");
+          setPassword("");
+          setAuthNotice(t("auth.signUpCheckEmail"));
+        }
       }
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : t("auth.authFailed"));
+      setAuthError(t(getAuthErrorKey(error)));
     } finally {
       setSubmitting(false);
     }

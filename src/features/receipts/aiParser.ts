@@ -1,12 +1,10 @@
-import type { Category, Currency } from "../../shared/types/finance";
+import type { Category, Currency } from "../../shared/types/expense";
 import { getSupabaseClient } from "../../shared/api/supabase";
 import {
-  detectAmountInText,
   detectCurrencyInText,
   normalizeParsedExpense,
   parseTextInputLocally,
   type ParsedExpense,
-  type ParsedTextInput,
 } from "./expenseParser";
 
 interface ParseTextInput {
@@ -43,8 +41,11 @@ async function requestAiParser<T>(payload: unknown, strict = false): Promise<T |
     if (!session) return null;
     const response = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ kind: "parse", payload }) });
     if (response.ok) return await response.json() as T;
+    const error = await response.json().catch(() => null) as { error?: string } | null;
+    if (response.status === 429 || error?.error === "Daily AI limit reached") {
+      throw new Error("ai_daily_limit");
+    }
     if (strict) {
-      const error = await response.json().catch(() => null) as { error?: string } | null;
       throw new Error(error?.error === "Receipt recognition was incomplete" ? "receipt_incomplete" : "receipt_request_failed");
     }
     return null;
@@ -54,8 +55,8 @@ async function requestAiParser<T>(payload: unknown, strict = false): Promise<T |
   }
 }
 
-export async function parseTextInput(input: ParseTextInput): Promise<ParsedTextInput> {
-  const aiResult = await requestAiParser<ParsedTextInput>({
+export async function parseTextInput(input: ParseTextInput): Promise<ParsedExpense> {
+  const aiResult = await requestAiParser<ParsedExpense>({
     mode: "text",
     text: input.text,
     currency: input.currency,
@@ -64,21 +65,6 @@ export async function parseTextInput(input: ParseTextInput): Promise<ParsedTextI
 
   const parsed = aiResult ?? parseTextInputLocally(input);
   const explicitCurrency = detectCurrencyInText(input.text);
-  const explicitAmount = detectAmountInText(input.text);
-
-  if (parsed.kind === "account") {
-    const accountTypes = new Set(["bank", "card", "cash", "savings", "investment", "crypto", "debt", "credit", "mortgage", "custom"]);
-    return {
-      ...parsed,
-      name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "Счёт",
-      type: accountTypes.has(parsed.type) ? parsed.type : "custom",
-      currency: explicitCurrency ?? parsed.currency,
-      initialBalance:
-        Number.isFinite(parsed.initialBalance) && parsed.initialBalance > 0
-          ? parsed.initialBalance
-          : explicitAmount ?? 0,
-    };
-  }
 
   const normalized = normalizeParsedExpense(input, parsed);
   return normalized

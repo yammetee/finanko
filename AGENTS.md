@@ -1,83 +1,49 @@
-# AGENTS.md
-
-Guidance for coding agents working on Finanko.
+# Finanko agent handoff
 
 ## Product
 
-Finanko is a minimal, mobile-first tracker for actual personal expenses. Its primary flow is `Receipt / Text / Manual → editable draft → save → filtered spending total`.
+Finanko is a compact, mobile-first personal expense tracker. The active flow is:
 
-The product should feel calm, thin, elegant, and practical. It is not an accounting cockpit, portfolio manager, or marketing site.
+`Receipt / Text / Manual -> editable expense draft -> save -> filtered total, chart, categories, and history`.
 
-## Stack
+Use Vite, React, TypeScript, Ant Design, Zustand, Supabase Auth/Postgres, and the existing Vercel AI endpoint. The default UI is dark, minimal, compact, and responsive. Do not add portfolios, accounts, balances, debt, recurring operations, an assistant, a landing page, sidebars, drawers, or unrelated product areas.
 
-- Use Vite, React, and TypeScript.
-- Use Ant Design first and customize lightly through tokens/CSS.
-- Use Supabase for authentication and relational persistence.
-- Use Zustand only as an in-memory cache after confirmed database writes.
-- Keep browser assumptions isolated so a later Tauri wrapper remains possible.
+## Current user-authorized task
 
-## Architecture
+Continue from the existing uncommitted worktree. The user must not have to restate these requirements.
 
-```txt
-src/
-  app/
-  features/
-    auth/
-    expenses/
-    finance/
-    receipts/
-  shared/
-    api/
-    data/
-    i18n/
-    lib/
-    types/
-    ui/
-```
+1. Remove every repository artifact unrelated to the current Finanko product, especially Yammetee remnants and completed migration/refactor documentation.
+2. Remove inactive account, portfolio, loan, debt, income, interest, recurring, assistant, and legacy migration runtime branches. Retain only compatibility that is demonstrably required by the active expense persistence path, and isolate any unavoidable compatibility fields from product types/UI.
+3. Finish server-enforced AI access control:
+   - database-managed `admin` role;
+   - administrators have unlimited AI recognition;
+   - regular users have at most five user-initiated AI recognition requests per UTC day;
+   - quota consumption must be atomic in Postgres;
+   - text AI accepts only concrete expense/money input and rejects phishing, credentials, URLs, prompt injection, unsupported modes/fields, and oversized input before model execution;
+   - legitimate short expense text in Russian, English, Georgian, and Thai must reach AI;
+   - every receipt image prepared by the browser client must reach AI unless authentication/quota/size checks reject it.
+4. Produce a minimal Supabase schema containing only tables and functions required by the current Finanko runtime, with owner-scoped RLS and private AI role/quota storage.
+5. The user explicitly requests an SQL reset/rebuild workflow for the current Supabase project because it contains unrelated Yammetee tables and project limits prevent creating another Supabase project. Treat this as a destructive operation: resolve the exact affected schemas, distinguish `public` application objects from Supabase-managed `auth`, Storage, extensions, and migration schemas, and present the exact reset/rebuild SQL for review before any execution. Never execute it remotely without a separate explicit execution request.
+6. Run `npm test`, `npm run build`, `npm run lint`, and `git diff --check` after cleanup.
 
-- `expenses` owns the active product UI and spending calculations.
-- `finance` is a compatibility persistence layer for existing Supabase rows.
-- `receipts` is the protected receipt/text analyzer boundary.
-- Do not recreate ledger, balance, portfolio, account, debt, recurring, interest, or assistant UI.
+## Current worktree state
 
-## Protected behavior
+- Do not discard or reset any existing uncommitted changes.
+- AI quota/role enforcement is implemented in `api/ai.ts` and `supabase/schema.sql` with regression tests.
+- Incomplete-period average calculation is fixed in the uncommitted expense analytics changes.
+- The text parser is expense-only and has been validated after removing account/loan output.
+- `TZ.md`, `EXPENSE_TRACKER_REFACTOR_TODO.md`, `LICENSE` containing the Yammetee copyright, and the obsolete `scripts/apply-supabase-schema.mjs` were deleted as unrelated legacy artifacts.
+- The finance compatibility runtime and empty legacy feature directories were removed. Expense persistence now uses direct owner-scoped `categories`, `expenses`, and `expense_items` tables.
+- The user reports that `supabase/reset-public-schema.sql` and then `supabase/schema.sql` were successfully executed in the current Supabase project. Do not repeat the destructive reset unless separately and explicitly requested.
+- Supabase sign-up now consumes an immediately returned session when email confirmation is disabled, or prompts the user to confirm email and then sign in when confirmation is required. Authentication errors are localized from stable error codes instead of exposing provider messages.
+- Russian user-facing instructions and errors consistently use the formal `Вы` form.
+- `npm test` (73 tests), `npm run build`, `npm run lint`, and `git diff --check` passed after the authentication and localization changes.
 
-- Do not change the current receipt recognition algorithm, prompts, image preparation, normalization, or response contract unless explicitly requested.
-- Do not change the current text recognition algorithm or fallback unless explicitly requested.
-- Analyzer output fills an editable draft and never blocks saving because of confidence or arithmetic mismatch.
-- The current form values are the source of truth when saving.
+## Working rules
 
-## Data safety
-
-- Existing expenses are real data. Never rewrite, normalize, recreate, reset, truncate, or mass-delete them.
-- Preserve IDs, amounts, currencies, categories, dates, descriptions, sources, and receipt items.
-- Keep legacy `portfolios` and `accounts` tables while real transactions reference them.
-- Hide legacy portfolio/account relations from the UI and treat them only as storage compatibility fields.
-- Prefer soft deletion for expenses.
-- Destructive actions require explicit user confirmation.
-- Keep owner-scoped RLS on every exposed financial table.
-
-## Design
-
-- Dark theme is the default.
-- Mobile is the primary view; desktop preserves the same interaction model.
-- Receipt, Text, and Manual actions must be visible immediately after authentication.
-- Avoid sidebars, dense toolbars, nested navigation, and unnecessary confirmation steps.
-- Use compact spacing, subtle borders, restrained color, clear labels, and 44×44 px touch targets.
-- Filters for period and category must update totals, analytics, and history together.
-- Do not build a landing page unless explicitly requested.
-
-## AI and privacy
-
-- Send only the selected receipt image or expense text plus required category/currency context.
-- AI suggestions are not financial advice and do not make automated decisions.
-- Keep AI credentials server-side.
-
-## Development
-
-- Read existing code before changing patterns.
-- Prefer reuse of the current auth, repository, parsers, formatting, and i18n primitives.
-- Keep changes scoped to actual-expense tracking.
-- Use `rg` for searches.
-- Add tests for shared calculations, filters, normalization boundaries, and data transformations.
-- Run `npm test`, `npm run build`, and `npm run lint` before finishing.
+- Read the current diff and trace imports before deleting more code.
+- Use `rg` for repository searches and `apply_patch` for edits/deletions.
+- Preserve the receipt image preparation and receipt normalization behavior unless a change is required by the current explicit task.
+- AI output only prepares an editable draft; current form values remain the source of truth when saving.
+- Keep AI credentials server-side and user role/quota tables inaccessible directly from browser roles.
+- Maintain an English pending commit message covering the entire diff against `HEAD`.

@@ -3,20 +3,19 @@ import DatePicker from "antd/es/date-picker";
 import dayjs from "dayjs";
 import { Camera, FileText, LogOut, PenLine } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CURRENCIES } from "../../shared/constants/finance";
+import { CURRENCIES, DEFAULT_CURRENCY } from "../../shared/constants/expenses";
 import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
 import { formatMoney } from "../../shared/lib/format";
 import { isValidMoneyDecimal } from "../../shared/lib/money";
 import { CurrencyIcon, NativeCurrencyIcon } from "../../shared/ui/CurrencyIcon";
-import type { Currency, Transaction } from "../../shared/types/finance";
+import type { Currency, Expense } from "../../shared/types/expense";
 import { useAuthStore } from "../auth/authStore";
-import { useFinanceStore } from "../finance/financeStore";
-import { isDefaultExpenseCategory, sortDefaultExpenseCategories } from "../finance/seedData";
 import { parseReceiptInput, parseTextInput } from "../receipts/aiParser";
 import { detectAmountInText, detectCurrencyInText, parseTextInputLocally, type ParsedExpense } from "../receipts/expenseParser";
 import { prepareReceiptImage } from "../receipts/receiptImage";
+import { isDefaultExpenseCategory, sortDefaultExpenseCategories } from "./categoryData";
 import { ExpenseDetailsPage } from "./ExpenseDetailsPage";
 import { ExpenseFormPage, type ExpenseFormMode } from "./ExpenseFormPage";
 import { ExpenseRows } from "./ExpenseRows";
@@ -27,11 +26,13 @@ import {
   buildExpenseView,
   calculateAverageDailyExpense,
   categoryGroupKey,
+  getExpenseTrackingStart,
   UNALLOCATED_CATEGORY_KEY,
   type ExpenseFilters,
   type ExpensePeriod,
 } from "./expenseAnalytics";
 import { createEmptyExpenseDraft, expenseFormToInput, type ExpenseDraft, type ExpenseFormValues } from "./expenseDraft";
+import { useExpenseStore } from "./expenseStore";
 
 const { RangePicker } = DatePicker;
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
@@ -43,6 +44,7 @@ function receiptErrorKey(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "file_too_large" || code === "compressed_file_too_large") return "receipt.fileTooLarge" as const;
   if (code === "unsupported_file" || code === "unsupported_image") return "receipt.unsupported" as const;
+  if (code === "ai_daily_limit") return "ai.dailyLimit" as const;
   if (code === "receipt_incomplete") return "receipt.incomplete" as const;
   return "receipt.parseError" as const;
 }
@@ -51,12 +53,12 @@ export function ExpensesPage() {
   const { message } = AntApp.useApp();
   const { locale, setLocale, t } = useI18n();
   const signOut = useAuthStore((state) => state.signOut);
-  const finance = useFinanceStore();
+  const expenseState = useExpenseStore();
   const receiptInput = useRef<HTMLInputElement>(null);
   const [formMode, setFormMode] = useState<ExpenseFormMode | null>(null);
   const [draft, setDraft] = useState<ExpenseDraft | null>(null);
-  const [editing, setEditing] = useState<Transaction | null>(null);
-  const [selected, setSelected] = useState<Transaction | null>(null);
+  const [editing, setEditing] = useState<Expense | null>(null);
+  const [selected, setSelected] = useState<Expense | null>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -76,14 +78,13 @@ export function ExpensesPage() {
     setShowAllHistory(false);
   }, [filters.period, filters.categoryKeys, filters.customRange]);
 
-  const activePortfolios = useMemo(() => finance.portfolios.filter((portfolio) => !portfolio.deletedAt), [finance.portfolios]);
-  const primaryPortfolio = activePortfolios.find((portfolio) => portfolio.id === finance.activePortfolioId) ?? activePortfolios[0];
-  const primaryAccount = finance.accounts.find((account) => account.portfolioId === primaryPortfolio?.id && !account.deletedAt);
-  const portfolioIds = useMemo(() => activePortfolios.map((portfolio) => portfolio.id), [activePortfolios]);
-  const expenseCategories = useMemo(() => finance.categories.filter((category) => category.type === "expense" && portfolioIds.includes(category.portfolioId)), [finance.categories, portfolioIds]);
-  const primaryCategories = useMemo(() => sortDefaultExpenseCategories(expenseCategories.filter((category) => category.portfolioId === primaryPortfolio?.id && isDefaultExpenseCategory(category))), [expenseCategories, primaryPortfolio?.id]);
-  const formCategories = useMemo(() => editing ? expenseCategories.filter((category) => category.portfolioId === editing.portfolioId) : primaryCategories, [editing, expenseCategories, primaryCategories]);
-  const baseCurrency = primaryPortfolio?.baseCurrency ?? "USD";
+  const expenseCategories = expenseState.categories;
+  const primaryCategories = useMemo(
+    () => sortDefaultExpenseCategories(expenseCategories.filter(isDefaultExpenseCategory)),
+    [expenseCategories],
+  );
+  const formCategories = primaryCategories;
+  const baseCurrency = DEFAULT_CURRENCY;
   const displayCurrency = currencyMode === "native" ? baseCurrency : currencyMode;
   const currencyModes: DisplayCurrency[] = ["native", ...CURRENCIES];
   const nextCurrency = currencyModes[(currencyModes.indexOf(currencyMode) + 1) % currencyModes.length];
@@ -94,8 +95,8 @@ export function ExpensesPage() {
   const categoryGroups = useMemo(() => buildExpenseCategoryGroups(analyticsCategories, (category) => getCategoryName(category, t)), [analyticsCategories, t]);
   const expenseView = useMemo(() => {
     void ratesVersion;
-    return buildExpenseView({ transactions: finance.transactions, transactionItems: finance.transactionItems, categories: analyticsCategories, portfolioIds, filters, displayCurrency });
-  }, [analyticsCategories, displayCurrency, filters, finance.transactionItems, finance.transactions, portfolioIds, ratesVersion]);
+    return buildExpenseView({ expenses: expenseState.expenses, expenseItems: expenseState.expenseItems, categories: analyticsCategories, filters, displayCurrency });
+  }, [analyticsCategories, displayCurrency, expenseState.expenseItems, expenseState.expenses, filters, ratesVersion]);
   const categoryNames = useMemo(() => new Map(categoryGroups.map((group) => [group.key, group.name])), [categoryGroups]);
   const otherKey = categoryGroupKey("Other");
   const breakdown = expenseView.byCategory.reduce<Array<(typeof expenseView.byCategory)[number]>>((items, item) => {
@@ -106,7 +107,17 @@ export function ExpensesPage() {
     return items;
   }, []).sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
   const breakdownTotal = breakdown.reduce((sum, item) => sum + Math.abs(item.value), 0);
-  const average = calculateAverageDailyExpense(expenseView.history, filters, expenseView.total);
+  const trackingStartedAt = useMemo(
+    () => getExpenseTrackingStart(expenseState.expenses),
+    [expenseState.expenses],
+  );
+  const average = calculateAverageDailyExpense(
+    expenseView.history,
+    filters,
+    expenseView.total,
+    dayjs(),
+    trackingStartedAt,
+  );
   const trend = useMemo(() => buildExpenseTrendBuckets(expenseView.history, filters), [expenseView.history, filters]);
   const selectedCategory = categoryGroups.find((group) => {
     const keys = group.key === otherKey ? [otherKey, UNALLOCATED_CATEGORY_KEY] : [group.key];
@@ -135,40 +146,35 @@ export function ExpensesPage() {
     const input = { text, currency: baseCurrency, categories: primaryCategories };
     try {
       const parsed = await parseTextInput(input).catch(() => parseTextInputLocally(input));
-      if (parsed.kind === "transaction") {
-        const expense = parsed as ParsedExpense;
-        setDraft({ amount: expense.total, currency: expense.currency, categoryId: expense.items[0]?.categoryId ?? primaryCategories[0]?.id, description: expense.description || text, occurredAt: dayjs(), source: "text_ai", items: expense.items, receiptReview: expense.receiptReview });
-      } else {
-        setParseError(t("expense.parserSuggestionOnly"));
-        setDraft({ ...createEmptyExpenseDraft(detectCurrencyInText(text) ?? baseCurrency, primaryCategories[0]?.id), amount: detectAmountInText(text) ?? undefined, description: text, source: "text_ai" });
-      }
+      const expense = parsed as ParsedExpense;
+      setDraft({ amount: expense.total, currency: expense.currency, categoryId: expense.items[0]?.categoryId ?? primaryCategories[0]?.id, description: expense.description || text, occurredAt: dayjs(), source: "text_ai", items: expense.items, receiptReview: expense.receiptReview });
     } catch {
       setParseError(t("expense.parserSuggestionOnly"));
       setDraft({ ...createEmptyExpenseDraft(detectCurrencyInText(text) ?? baseCurrency, primaryCategories[0]?.id), amount: detectAmountInText(text) ?? undefined, description: text, source: "text_ai" });
     } finally { setParsing(false); }
   }
 
-  function openEdit(transaction: Transaction) {
-    const items = finance.transactionItems.filter((item) => item.transactionId === transaction.id).map(({ id, name, amount, quantity, unitPrice, categoryId, confidence }) => ({ id, name, amount, quantity, unitPrice, categoryId, confidence }));
-    setEditing(transaction); setSelected(null); setFormMode("edit"); setParseError(null);
-    setDraft({ amount: transaction.amount, currency: transaction.currency, categoryId: transaction.categoryId, description: transaction.description, occurredAt: dayjs(transaction.occurredAt), source: transaction.source, items });
+  function openEdit(expense: Expense) {
+    const items = expenseState.expenseItems.filter((item) => item.expenseId === expense.id).map(({ id, name, amount, quantity, unitPrice, categoryId, confidence }) => ({ id, name, amount, quantity, unitPrice, categoryId, confidence }));
+    setEditing(expense); setSelected(null); setFormMode("edit"); setParseError(null);
+    setDraft({ amount: expense.amount, currency: expense.currency, categoryId: expense.categoryId, description: expense.description, occurredAt: dayjs(expense.occurredAt), source: expense.source, items });
   }
 
   async function saveExpense(values: ExpenseFormValues) {
-    if (!primaryPortfolio || !primaryAccount) { message.error(t("expense.contextUnavailable")); return; }
+    if (formCategories.length === 0) { message.error(t("expense.contextUnavailable")); return; }
     if (!isValidMoneyDecimal(values.amount, values.currency) || values.amount <= 0) { message.error(t("feedback.invalidMoneyAmount")); return; }
     setSaving(true);
     try {
       const input = expenseFormToInput(values);
-      if (editing) { await finance.updateTransaction(editing.id, input); message.success(t("expense.updated")); }
-      else { await finance.addTransaction(input); message.success(t("expense.saved")); }
+      if (editing) { await expenseState.updateExpense(editing.id, input); message.success(t("expense.updated")); }
+      else { await expenseState.addExpense(input); message.success(t("expense.saved")); }
       closeForm();
     } catch { message.error(t("feedback.saveFailed")); }
     finally { setSaving(false); }
   }
 
-  async function deleteExpense(transaction: Transaction) {
-    try { await finance.deleteTransaction(transaction.id); setSelected(null); message.success(t("expense.deleted")); }
+  async function deleteExpense(expense: Expense) {
+    try { await expenseState.deleteExpense(expense.id); setSelected(null); message.success(t("expense.deleted")); }
     catch { message.error(t("feedback.saveFailed")); }
   }
 
@@ -179,7 +185,7 @@ export function ExpensesPage() {
   const home = (
     <>
       <section className="summary-header">
-        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{formatMoney(expenseView.total, displayCurrency)}</strong><small><span>{t("expense.transactionCount", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {formatMoney(average, displayCurrency)}</span></small></div>
+        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{formatMoney(expenseView.total, displayCurrency)}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {formatMoney(average, displayCurrency)}</span></small></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>
@@ -217,7 +223,7 @@ export function ExpensesPage() {
       <input ref={receiptInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
       <header className="app-header"><div className="brand"><span>F</span>Finanko</div><div className="header-actions"><button className="currency-button" type="button" title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })} onClick={() => setCurrencyMode(nextCurrency)}>{currencyMode === "native" ? <NativeCurrencyIcon size={15} /> : <CurrencyIcon currency={currencyMode} size={15} />}{currentCurrencyLabel}</button><button type="button" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>{locale.toUpperCase()}</button><button type="button" aria-label={t("actions.signOut")} onClick={() => void signOut()}><LogOut size={17} /></button></div></header>
       <main className="main-content">
-        {formMode ? <ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /> : selected ? <ExpenseDetailsPage transaction={selected} items={finance.transactionItems.filter((item) => item.transactionId === selected.id)} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
+        {formMode ? <ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /> : selected ? <ExpenseDetailsPage expense={selected} items={expenseState.expenseItems.filter((item) => item.expenseId === selected.id)} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
       </main>
     </div>
   );

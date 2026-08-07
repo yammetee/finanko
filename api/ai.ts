@@ -1,7 +1,7 @@
 interface ApiRequest {
   method?: string;
   headers: { authorization?: string };
-  body?: { kind?: "parse"; payload?: Record<string, unknown> };
+  body?: { kind?: "parse"; payload?: Record<string, unknown>; [key: string]: unknown };
 }
 
 interface ApiResponse {
@@ -27,6 +27,103 @@ interface ReceiptOcrResult {
   totals: { subtotal: number | null; discount: number | null; tax: number | null; total: number | null };
   documentConfidence: number;
   warnings: string[];
+}
+
+type SupportedCurrency = "USD" | "GEL" | "RUB" | "THB";
+
+type ValidatedAiPayload =
+  | { mode: "text"; text: string; currency: SupportedCurrency; categories: string[] }
+  | { mode: "receipt"; fileDataUrl: string; fallbackCurrency: SupportedCurrency; categories: string[] };
+
+interface PayloadValidationResult {
+  payload?: ValidatedAiPayload;
+  status?: number;
+  error?: string;
+}
+
+interface AiQuotaResult {
+  allowed: boolean;
+  is_admin: boolean;
+  requests_used: number;
+  requests_limit: number | null;
+}
+
+const supportedCurrencies = new Set<SupportedCurrency>(["USD", "GEL", "RUB", "THB"]);
+const receiptDataUrlPattern = /^data:image\/(?:jpeg|png|webp|heic|heif);base64,/i;
+const unsafeTextPattern = /(?:https?:\/\/|www\.|(?:[a-z0-9-]+\.)+(?:com|net|org|io|ru|ge|co|app|dev|xyz)(?:[/?#:]|\b)|phishing|фишинг|ფიშინგ|თაღლით|ฟิชชิง|หลอกลวง|jailbreak|взлом|hack(?:ing)?|scam|мошеннич|prompt\s*injection|system\s*prompt|игнорируй\s+(?:все\s+)?(?:предыдущие|системные)\s+инструкции|ignore\s+(?:all\s+)?previous\s+instructions|წინა\s+ინსტრუქციების\s+იგნორირება|ละเว้นคำสั่งก่อนหน้า)/iu;
+const credentialPattern = /(?:\b(?:password|login|otp|2fa|cvv|cvc|pin|api[\s_-]*key|access[\s_-]*token|private[\s_-]*key|seed[\s_-]*phrase|verification[\s_-]*code)\b|парол|логин|одноразов(?:ый|ого)\s+код|код\s+подтверждения|пин[-\s]?код|сид[-\s]?фраз|приватн(?:ый|ого)\s+ключ|секретн(?:ый|ого)\s+ключ|номер\s+(?:банковской\s+)?карт|პაროლ|ბარათის\s+ნომერ|პირადი\s+გასაღებ|รหัสผ่าน|รหัสยืนยัน|หมายเลขบัตร|คีย์ส่วนตัว|วลีกู้คืน)/iu;
+const moneyAmountPattern = /(?:\d(?:[\d\s.,]*\d)?|[$€₾₽฿])/u;
+const financeContextPattern = /(?:\b(?:usd|gel|rub|thb|lari|baht|money|spent|paid|bought|purchase|expense|receipt|coffee|food|grocery|taxi|rent|bill|subscription|medicine|fuel)\b|потрат|купил|купила|покуп|оплат|заплат|расход|чек|кофе|еда|продукт|магазин|такси|транспорт|аренд|коммун|подписк|сч[её]т|обед|ужин|завтрак|лекарств|одежд|билет|топлив|бензин|руб|доллар|лари|бат)/iu;
+const unsupportedMoneyContextPattern = /(?:\b(?:salary|income|loan|credit|mortgage|deposit|account|transfer)\b|зарплат|доход|кредит|ипотек|вклад|перевод|ხელფას|შემოსავალ|სესხ|ანგარიშ|გადარიცხვ|เงินเดือน|รายได้|เงินกู้|สินเชื่อ|บัญชี|โอนเงิน)/iu;
+const generalRequestPattern = /(?:\b(?:write|tell|explain|generate|create|translate|summarize|code|script|email|essay|story)\b|напиши|расскажи|объясни|сгенерируй|создай|переведи|резюмируй|сценари|письмо|истори|реферат|стать|დაწერე|მომიყევი|ახსენი|შექმენი|თარგმნე|เขียน|เล่า|อธิบาย|สร้าง|แปล)/iu;
+
+function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: Set<string>) {
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
+function validatedCategories(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 32) return null;
+  if (!value.every((category) => typeof category === "string" && category.trim().length > 0 && category.trim().length <= 120)) return null;
+  return value.map((category) => (category as string).trim());
+}
+
+function validatedCurrency(value: unknown): SupportedCurrency | null {
+  return typeof value === "string" && supportedCurrencies.has(value as SupportedCurrency)
+    ? value as SupportedCurrency
+    : null;
+}
+
+export function isFinancialExpenseText(text: string) {
+  if (!moneyAmountPattern.test(text) || generalRequestPattern.test(text) || unsupportedMoneyContextPattern.test(text)) return false;
+  if (financeContextPattern.test(text)) return true;
+  const words = text.match(/[\p{L}\p{N}]+/gu) ?? [];
+  return text.length <= 120 && words.length >= 2 && words.length <= 12;
+}
+
+export function hasUnsafeTextIntent(text: string) {
+  return unsafeTextPattern.test(text) || credentialPattern.test(text);
+}
+
+export function validateAiPayload(value: unknown): PayloadValidationResult {
+  if (!value || typeof value !== "object") return { status: 400, error: "Invalid AI payload" };
+  const raw = value as Record<string, unknown>;
+  const categories = validatedCategories(raw.categories);
+  if (!categories) return { status: 400, error: "Invalid categories" };
+
+  if (raw.mode === "text") {
+    if (!hasOnlyKeys(raw, new Set(["mode", "text", "currency", "categories"]))) {
+      return { status: 400, error: "Unsupported text request fields" };
+    }
+    const currency = validatedCurrency(raw.currency);
+    const text = typeof raw.text === "string" ? raw.text.trim() : "";
+    if (!currency || text.length < 2 || text.length > 500) {
+      return { status: 400, error: "Invalid text expense request" };
+    }
+    if (hasUnsafeTextIntent(text)) {
+      return { status: 422, error: "Sensitive or unsafe text is not allowed" };
+    }
+    if (!isFinancialExpenseText(text)) {
+      return { status: 422, error: "Only money-related expense text is allowed" };
+    }
+    return { payload: { mode: "text", text, currency, categories } };
+  }
+
+  if (raw.mode === "receipt") {
+    if (!hasOnlyKeys(raw, new Set(["mode", "fileName", "fileType", "fileDataUrl", "text", "fallbackCurrency", "categories"]))) {
+      return { status: 400, error: "Unsupported receipt request fields" };
+    }
+    const fallbackCurrency = validatedCurrency(raw.fallbackCurrency);
+    const fileDataUrl = typeof raw.fileDataUrl === "string" ? raw.fileDataUrl : "";
+    if (!fallbackCurrency || !receiptDataUrlPattern.test(fileDataUrl)) {
+      return { status: 400, error: "Valid receipt image is required" };
+    }
+    if (fileDataUrl.length > 2_500_000) {
+      return { status: 413, error: "Receipt image is too large" };
+    }
+    return { payload: { mode: "receipt", fileDataUrl, fallbackCurrency, categories } };
+  }
+
+  return { status: 400, error: "Invalid parser mode" };
 }
 
 function positiveReceiptAmount(value: unknown): value is number {
@@ -76,9 +173,9 @@ const parserFormat = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["kind", "description", "currency", "items", "total", "name", "type", "initialBalance", "annualInterestRate", "interestFrequency", "loanTermMonths"],
+    required: ["kind", "description", "currency", "items", "total", "type"],
     properties: {
-      kind: { type: "string", enum: ["transaction", "account"] },
+      kind: { type: "string", enum: ["transaction"] },
       description: { type: ["string", "null"] },
       currency: { type: "string", enum: ["USD", "GEL", "RUB", "THB"] },
       total: { type: ["number", "null"] },
@@ -91,12 +188,7 @@ const parserFormat = {
           confidence: { type: "number", minimum: 0, maximum: 1 },
         },
       } },
-      name: { type: ["string", "null"] },
-      type: { enum: ["bank", "card", "cash", "savings", "investment", "crypto", "debt", "credit", "mortgage", "custom", "income", "expense", null] },
-      initialBalance: { type: ["number", "null"] },
-      annualInterestRate: { type: ["number", "null"] },
-      interestFrequency: { enum: ["daily", "monthly", null] },
-      loanTermMonths: { type: ["number", "null"] },
+      type: { type: "string", enum: ["expense"] },
     },
   },
 };
@@ -145,7 +237,7 @@ const receiptOcrFormat = {
 function parserSystem(mode: unknown) {
   const shared = "Return only data matching the supplied JSON schema. Currency aliases are strict: бат/baht/THB/฿/บาท = THB; руб/RUB/₽ = RUB; лари/GEL/₾/ლარი = GEL; доллар/USD/$ = USD. fallbackCurrency is only a last resort when the source contains no currency evidence. Any currency visible in text or image overrides fallbackCurrency. categoryId must be one of the supplied category names, never an invented database id. Numbers must be JSON numbers, not strings.";
   if (mode !== "receipt") {
-    return `${shared} Parse short personal-finance text. If it describes a loan, credit, mortgage, deposit, or account, return kind=account and fill account fields; transaction fields may be null/empty. Otherwise return kind=transaction with one or more concrete items and fill transaction fields; account fields may be null. Preserve concrete Russian wording when the input is Russian. Split multiple explicitly priced purchases into separate items. Do not invent amounts. Never provide advice.`;
+    return `${shared} Parse only a concrete personal expense. Return kind=transaction and type=expense. Preserve concrete Russian wording when the input is Russian. Split multiple explicitly priced purchases into separate items. Do not interpret income, account creation, loans, advice, instructions, or unrelated questions as other product entities. Do not invent amounts. Never provide advice.`;
   }
   return `${shared} Assemble a receipt transaction from the supplied OCR rows and receipt image. Treat OCR rows as a row index, but visually verify names, quantities and amounts against the image and correct obvious OCR mistakes. Every returned item must map to one visible product or explicit discount row; preserve their order and never invent a product. Exclude headers, subtotals, totals, payment, cash, change, loyalty and barcode rows. Use the final payable total when present and never alter a readable amount merely to force arithmetic equality. For weighed goods printed as grams, convert quantity to kilograms and unitPrice to price per kilogram. Discounts must be negative. Translate readable Thai, Georgian and English product names into specific natural Russian while preserving useful brands. If a name cannot be translated confidently, preserve the original readable name instead of guessing a different product or using generic names such as операция, сбор, товар, продукт, позиция or другое. description is a short Russian list of recognized purchases. Lower confidence whenever the image does not support a specific translation.`;
 }
@@ -181,6 +273,27 @@ async function isAuthenticatedUser(supabaseUrl: string, supabaseKey: string, tok
     },
   });
   return authResponse.ok;
+}
+
+async function consumeAiDailyQuota(supabaseUrl: string, supabaseKey: string, token: string) {
+  const quotaResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_ai_daily_quota`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseKey,
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: "{}",
+  });
+  if (!quotaResponse.ok) throw new Error("AI quota check failed");
+  const value = await quotaResponse.json() as unknown;
+  const quota = (Array.isArray(value) ? value[0] : value) as Partial<AiQuotaResult> | undefined;
+  if (!quota || typeof quota.allowed !== "boolean" || typeof quota.is_admin !== "boolean"
+    || typeof quota.requests_used !== "number"
+    || (quota.requests_limit !== null && typeof quota.requests_limit !== "number")) {
+    throw new Error("Invalid AI quota response");
+  }
+  return quota as AiQuotaResult;
 }
 
 function normalizeReceiptResult(value: unknown) {
@@ -219,12 +332,7 @@ function fallbackReceipt(ocr: ReceiptOcrResult, payload: Record<string, unknown>
     currency: ocr.currency === "UNKNOWN" ? payload.fallbackCurrency : ocr.currency,
     items,
     total,
-    name: null,
     type: "expense",
-    initialBalance: null,
-    annualInterestRate: null,
-    interestFrequency: null,
-    loanTermMonths: null,
   };
 }
 
@@ -303,29 +411,44 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       return;
     }
 
+    const body = request.body;
+    const kind = body?.kind;
+    if (!body || typeof body !== "object" || !hasOnlyKeys(body, new Set(["kind", "payload"])) || kind !== "parse") {
+      response.status(400).json({ error: "Invalid request kind" });
+      return;
+    }
+
+    const validation = validateAiPayload(body.payload);
+    if (!validation.payload) {
+      response.status(validation.status ?? 400).json({ error: validation.error ?? "Invalid AI payload" });
+      return;
+    }
+    const payload = validation.payload;
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       response.status(503).json({ error: "AI is not configured" });
       return;
     }
 
-    const kind = request.body?.kind;
-    const payload = request.body?.payload ?? {};
-    if (kind !== "parse") {
-      response.status(400).json({ error: "Invalid request kind" });
+    let quota: AiQuotaResult;
+    try {
+      quota = await consumeAiDailyQuota(supabaseUrl, supabaseKey, token);
+    } catch {
+      response.status(503).json({ error: "AI quota is temporarily unavailable" });
+      return;
+    }
+    if (!quota.allowed) {
+      response.status(429).json({
+        error: "Daily AI limit reached",
+        limit: quota.requests_limit,
+        used: quota.requests_used,
+      });
       return;
     }
 
-    if (kind === "parse" && payload.mode === "receipt") {
+    if (payload.mode === "receipt") {
       const image = payload.fileDataUrl;
-      if (typeof image !== "string" || !image.startsWith("data:image/")) {
-        response.status(400).json({ error: "Receipt image is required" });
-        return;
-      }
-      if (image.length > 2_500_000) {
-        response.status(413).json({ error: "Receipt image is too large" });
-        return;
-      }
 
       const receiptModel = process.env.OPENAI_RECEIPT_MODEL ?? "gpt-5.6-terra";
       const ocr = await requestStructuredOutput(apiKey, receiptOcrSystem, parserContent(payload), receiptOcrFormat, receiptModel) as ReceiptOcrResult;

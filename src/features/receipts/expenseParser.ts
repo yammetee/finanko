@@ -1,9 +1,4 @@
-import type {
-  AccountType,
-  Category,
-  Currency,
-  InterestFrequency,
-} from "../../shared/types/finance";
+import type { Category, Currency } from "../../shared/types/expense";
 
 export interface ParsedExpenseItem {
   name: string;
@@ -29,26 +24,13 @@ export interface ReceiptReview {
 
 export interface ParsedExpense {
   kind: "transaction";
-  type?: "income" | "expense";
+  type?: "expense";
   description: string;
   currency: Currency;
   items: ParsedExpenseItem[];
   total: number;
   receiptReview?: ReceiptReview;
 }
-
-export interface ParsedAccount {
-  kind: "account";
-  name: string;
-  type: AccountType;
-  currency: Currency;
-  initialBalance: number;
-  annualInterestRate?: number;
-  interestFrequency?: InterestFrequency;
-  loanTermMonths?: number;
-}
-
-export type ParsedTextInput = ParsedExpense | ParsedAccount;
 
 export interface ParseTextExpenseInput {
   text: string;
@@ -99,19 +81,6 @@ function resolveCategoryId(categories: Category[], value: unknown, fallbackName:
     categories.find((category) => category.name.toLowerCase().includes(rawValue))?.id ??
     categories.find((category) => rawValue.includes(category.name.toLowerCase()))?.id ??
     findCategoryId(categories, fallbackName)
-  );
-}
-
-function findCategoryIdByType(categories: Category[], type: Category["type"], fallbackName: string) {
-  return (
-    categories.find(
-      (category) =>
-        category.type === type &&
-        category.name.toLowerCase().includes(fallbackName.toLowerCase()),
-    )?.id ??
-    categories.find((category) => category.type === type)?.id ??
-    categories[0]?.id ??
-    ""
   );
 }
 
@@ -415,7 +384,7 @@ export function normalizeParsedExpense(
 
   return {
     kind: "transaction",
-    type: payload.type === "income" ? "income" : "expense",
+    type: "expense",
     description: buildReceiptDescription(input, normalizedItems),
     currency: detectCurrencyInText(searchableText) ?? (isCurrency(payload.currency) ? payload.currency : input.currency),
     items: normalizedItems,
@@ -429,10 +398,7 @@ function parseExpenseText({
   currency,
   categories,
 }: ParseTextExpenseInput): ParsedExpense {
-  const isIncome = /(?:зарплат|salary|income|получил|доход)/i.test(text);
-  const categoryId = isIncome
-    ? findCategoryIdByType(categories, "income", "salary")
-    : findCategoryIdByType(categories, "expense", "food");
+  const categoryId = findCategoryId(categories, "food");
   const matches = Array.from(
     text.matchAll(/([^\d\n,;:]+?)\s+([-+]?\d+(?:[\s.,]\d{3})*(?:[.,]\d+)?)/gu),
   );
@@ -441,7 +407,7 @@ function parseExpenseText({
       const amount = Number(match[2].replace(/\s/g, "").replace(",", "."));
       if (!Number.isFinite(amount) || amount <= 0) return null;
       return {
-        name: normalizeItemName(match[1].trim() || (isIncome ? "Доход" : "Расход")),
+        name: normalizeItemName(match[1].trim() || "Расход"),
         amount: roundMoney(amount),
         quantity: 1,
         unitPrice: roundMoney(amount),
@@ -454,7 +420,7 @@ function parseExpenseText({
   if (items.length === 0) {
     const amount = detectAmountInText(text) ?? 0;
     items.push({
-      name: isIncome ? "Доход" : text.trim() || "Расход",
+      name: text.trim() || "Расход",
       amount: roundMoney(amount),
       quantity: 1,
       unitPrice: roundMoney(amount),
@@ -465,7 +431,7 @@ function parseExpenseText({
 
   return {
     kind: "transaction",
-    type: isIncome ? "income" : "expense",
+    type: "expense",
     description: buildReceiptDescription({ text, currency, categories }, items),
     currency: detectCurrencyInText(text) ?? currency,
     items,
@@ -473,22 +439,6 @@ function parseExpenseText({
   };
 }
 
-export function parseTextInputLocally(input: ParseTextExpenseInput): ParsedTextInput {
-  const { text, currency } = input;
-  const creditMatch = text.match(/(?:кредит|ипотек|loan|credit|mortgage)/i);
-  if (!creditMatch) return parseExpenseText(input);
-
-  const rateMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:%|процент|percent)/i);
-  const yearsMatch = text.match(/(\d+)\s*(?:год|года|лет|year|years)/i);
-
-  return {
-    kind: "account",
-    name: /сбер|sber/i.test(text) ? "Кредит Сбербанк" : "Кредит",
-    type: /ипотек|mortgage/i.test(text) ? "mortgage" : "credit",
-    currency: detectCurrencyInText(text) ?? currency,
-    initialBalance: detectAmountInText(text) ?? 0,
-    annualInterestRate: rateMatch ? Number(rateMatch[1].replace(",", ".")) : undefined,
-    interestFrequency: "daily",
-    loanTermMonths: yearsMatch ? Number(yearsMatch[1]) * 12 : undefined,
-  };
+export function parseTextInputLocally(input: ParseTextExpenseInput): ParsedExpense {
+  return parseExpenseText(input);
 }

@@ -1,5 +1,5 @@
 import type { Locale } from "../../shared/i18n/i18nContext";
-import type { Currency } from "../../shared/types/finance";
+import type { Currency } from "../../shared/types/expense";
 import type { ExpenseTrendBucket } from "./expenseAnalytics";
 
 const HEIGHT = 160;
@@ -65,7 +65,7 @@ export function SpendingChart({ buckets, currency, locale, label }: SpendingChar
         ))}
         {points.map((point, index) => (
           <g key={point.key}>
-            {point.transactionCount > 0 || index === 0 || index === points.length - 1 ? (
+            {point.expenseCount > 0 || index === 0 || index === points.length - 1 ? (
               <circle className="chart-point" cx={`${point.x}%`} cy={point.y} r="3" />
             ) : null}
             {showLabel(index) ? <text className="chart-date" x={`${point.x}%`} y={BOTTOM + 24} textAnchor="middle">{dateLabel(point, locale, buckets.length)}</text> : null}

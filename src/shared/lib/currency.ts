@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import ratesData from "../data/exchangeRates.json";
-import type { Currency } from "../types/finance";
+import type { Currency } from "../types/expense";
 
 type RateRow = Record<Currency, number> & { date: string };
 

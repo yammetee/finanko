@@ -4,12 +4,16 @@ import { getSupabaseClient, isSupabaseConfigured } from "../../shared/api/supaba
 
 let unsubscribeAuth: (() => void) | null = null;
 
+export interface SignUpResult {
+  requiresEmailConfirmation: boolean;
+}
+
 interface AuthState {
   loading: boolean;
   session: Session | null;
   initialize: () => Promise<void>;
   signInWithPassword: (email: string, password: string) => Promise<void>;
-  signUpWithPassword: (email: string, password: string, legalAcceptedAt: string) => Promise<void>;
+  signUpWithPassword: (email: string, password: string, legalAcceptedAt: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   user: () => User | null;
 }
@@ -42,17 +46,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const supabase = await getSupabaseClient();
     if (!supabase) return;
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) throw error;
+    set({ session: data.session, loading: false });
   },
   signUpWithPassword: async (email, password, legalAcceptedAt) => {
     const supabase = await getSupabaseClient();
-    if (!supabase) return;
+    if (!supabase) throw new Error("Supabase is not configured");
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -66,6 +71,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       },
     });
     if (error) throw error;
+
+    if (data.session) {
+      set({ session: data.session, loading: false });
+    }
+
+    return { requiresEmailConfirmation: !data.session };
   },
   signOut: async () => {
     const supabase = await getSupabaseClient();

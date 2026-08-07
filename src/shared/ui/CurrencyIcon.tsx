@@ -1,5 +1,5 @@
 import { Coins } from "lucide-react";
-import type { Currency } from "../types/finance";
+import type { Currency } from "../types/expense";
 
 const currencySymbols: Record<Currency, string> = {
   USD: "$",

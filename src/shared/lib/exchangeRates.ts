@@ -1,4 +1,4 @@
-import type { Currency } from "../types/finance";
+import type { Currency } from "../types/expense";
 import { setLiveExchangeRates } from "./currency";
 
 const exchangeRatesUrl = "https://open.er-api.com/v6/latest/USD";
