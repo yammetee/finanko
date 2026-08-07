@@ -18,9 +18,9 @@ export interface ExpenseDraft {
 }
 
 export interface ExpenseFormValues {
-  amount: number;
+  amount?: number;
   currency: Currency;
-  categoryId: string;
+  categoryId?: string;
   description?: string;
   occurredAt: Dayjs;
   source: ExpenseSource;
@@ -41,6 +41,15 @@ export function createEmptyExpenseDraft(
   };
 }
 
+export function calculateExpenseItemsTotal(
+  items: Array<Pick<ParsedExpenseItem, "amount">>,
+) {
+  return Math.round(items.reduce(
+    (sum, item) => sum + (Number.isFinite(item.amount) ? item.amount : 0),
+    0,
+  ) * 100) / 100;
+}
+
 export function expenseFormToInput(values: ExpenseFormValues): NewExpenseInput {
   const items = values.items ?? [];
   const description = items.length > 0
@@ -49,10 +58,10 @@ export function expenseFormToInput(values: ExpenseFormValues): NewExpenseInput {
 
   return {
     amount: items.length > 0
-      ? Math.round(items.reduce((sum, item) => sum + item.amount, 0) * 100) / 100
-      : values.amount,
+      ? calculateExpenseItemsTotal(items)
+      : values.amount ?? 0,
     currency: values.currency,
-    categoryId: items[0]?.categoryId ?? values.categoryId,
+    categoryId: items[0]?.categoryId ?? values.categoryId ?? "",
     description,
     occurredAt: values.occurredAt.toISOString(),
     source: values.source,

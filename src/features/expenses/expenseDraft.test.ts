@@ -1,12 +1,21 @@
 import dayjs from "dayjs";
 import { describe, expect, it } from "vitest";
 import {
+  calculateExpenseItemsTotal,
   expenseFormToInput,
   type ExpenseDraft,
   type ExpenseFormValues,
 } from "./expenseDraft";
 
 describe("expense draft persistence", () => {
+  it("calculates the editable item total once for display and persistence", () => {
+    expect(calculateExpenseItemsTotal([
+      { amount: 40 },
+      { amount: 50 },
+      { amount: 100 },
+    ])).toBe(190);
+  });
+
   it("saves edited draft values instead of analyzer output", () => {
     const input = expenseFormToInput({
       amount: 125,
@@ -40,7 +49,10 @@ describe("expense draft persistence", () => {
       currency: "GEL",
       categoryId: "food",
       description: "Кофе, Продукты",
-      items: [{ amount: 5 }, { amount: 40 }],
+      items: [
+        { amount: 5, categoryId: "food" },
+        { amount: 40, categoryId: "home" },
+      ],
     });
   });
 

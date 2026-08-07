@@ -175,6 +175,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .form-page, .details-page { margin: 0 auto; max-width: 560px; width: 100%; }
 .page-heading { align-items: center; display: grid; gap: 8px; grid-template-columns: 36px minmax(0, 1fr); margin-bottom: 16px; }
 .page-heading h1 { font-size: 18px; font-weight: 600; margin: 0; }
+.draft-total { border-bottom: 1px solid var(--border); margin-bottom: 14px; padding: 0 2px 14px; }
+.draft-total span { color: var(--text-muted); display: block; font-size: 12px; }
+.draft-total strong { display: block; font-size: 30px; font-variant-numeric: tabular-nums; letter-spacing: -.035em; margin-top: 4px; }
 .expense-form .ant-form-item { margin-bottom: 14px; }
 .expense-form .ant-form-item-label { padding-bottom: 4px; }
 .expense-form .ant-form-item-label > label { color: var(--text-secondary); font-size: 12px; }

@@ -5,6 +5,6 @@ export function formatMoney(amount: number, currency: Currency) {
     style: "currency",
     currency,
     currencyDisplay: "narrowSymbol",
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
