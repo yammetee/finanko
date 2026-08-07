@@ -2,6 +2,7 @@ import dayjs from "dayjs";
 import { describe, expect, it } from "vitest";
 import {
   calculateExpenseItemsTotal,
+  createEmptyExpenseDraft,
   expenseFormToInput,
   type ExpenseDraft,
   type ExpenseFormValues,
@@ -16,26 +17,30 @@ describe("expense draft persistence", () => {
     ])).toBe(190);
   });
 
-  it("saves edited draft values instead of analyzer output", () => {
-    const input = expenseFormToInput({
-      amount: 125,
+  it("creates a manual draft with an editable item instead of aggregate fields", () => {
+    expect(createEmptyExpenseDraft("GEL", "food")).toMatchObject({
       currency: "GEL",
-      categoryId: "food",
-      description: "  Исправленный расход  ",
+      items: [{ name: "", categoryId: "food", confidence: 1 }],
+    });
+  });
+
+  it("saves manually entered items through the shared item path", () => {
+    const values: ExpenseFormValues = {
+      currency: "GEL",
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
       source: "manual",
-    });
+      items: [{ name: "  Исправленный расход  ", amount: 125, categoryId: "food", confidence: 1 }],
+    };
+    const input = expenseFormToInput(values);
 
     expect(input.amount).toBe(125);
     expect(input.description).toBe("Исправленный расход");
+    expect(expenseFormToInput({ ...values, currency: "USD" }).amount).toBe(125);
   });
 
   it("derives aggregate fields from manually or automatically created items", () => {
     const input = expenseFormToInput({
-      amount: 999,
       currency: "GEL",
-      categoryId: "other",
-      description: "duplicate summary",
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
       source: "text_ai",
       items: [
@@ -58,10 +63,7 @@ describe("expense draft persistence", () => {
 
   it("treats analyzer review warnings as informational", () => {
     const values: ExpenseFormValues & Pick<ExpenseDraft, "receiptReview"> = {
-      amount: 48,
       currency: "THB",
-      categoryId: "food",
-      description: "Edited after review",
       occurredAt: dayjs("2026-08-04T12:00:00.000Z"),
       source: "receipt_ai",
       items: [

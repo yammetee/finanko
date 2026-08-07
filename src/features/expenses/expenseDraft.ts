@@ -6,62 +6,64 @@ import type {
 import type { NewExpenseInput } from "./expenseTypes";
 import type { ParsedExpenseItem, ReceiptReview } from "../receipts/expenseParser";
 
-export interface ExpenseDraft {
+export type ExpenseDraftItem = Omit<ParsedExpenseItem, "amount"> & {
+  id?: string;
   amount?: number;
+};
+
+export interface ExpenseDraft {
   currency: Currency;
-  categoryId?: string;
-  description: string;
   occurredAt: Dayjs;
   source: ExpenseSource;
-  items: Array<ParsedExpenseItem & { id?: string }>;
+  items: ExpenseDraftItem[];
   receiptReview?: ReceiptReview;
 }
 
 export interface ExpenseFormValues {
-  amount?: number;
   currency: Currency;
-  categoryId?: string;
-  description?: string;
   occurredAt: Dayjs;
   source: ExpenseSource;
-  items?: Array<ParsedExpenseItem & { id?: string }>;
+  items?: ExpenseDraftItem[];
 }
 
 export function createEmptyExpenseDraft(
   currency: Currency,
   categoryId?: string,
+  item: Pick<ExpenseDraftItem, "name"> & Partial<Pick<ExpenseDraftItem, "amount">> = { name: "" },
 ): ExpenseDraft {
   return {
     currency,
-    categoryId,
-    description: "",
     occurredAt: dayjs(),
     source: "manual",
-    items: [],
+    items: [{
+      name: item.name,
+      amount: item.amount,
+      categoryId: categoryId ?? "",
+      confidence: 1,
+    }],
   };
 }
 
 export function calculateExpenseItemsTotal(
-  items: Array<Pick<ParsedExpenseItem, "amount">>,
+  items: Array<Pick<ExpenseDraftItem, "amount">>,
 ) {
-  return Math.round(items.reduce(
-    (sum, item) => sum + (Number.isFinite(item.amount) ? item.amount : 0),
-    0,
-  ) * 100) / 100;
+  return Math.round(items.reduce((sum, item) => {
+    const amount = Number(item.amount);
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  }, 0) * 100) / 100;
 }
 
 export function expenseFormToInput(values: ExpenseFormValues): NewExpenseInput {
-  const items = values.items ?? [];
-  const description = items.length > 0
-    ? items.map((item) => item.name.trim()).filter(Boolean).join(", ").slice(0, 2000)
-    : values.description?.trim() ?? "";
+  const items = (values.items ?? []).map((item) => ({
+    ...item,
+    amount: item.amount ?? 0,
+  }));
+  const description = items.map((item) => item.name.trim()).filter(Boolean).join(", ").slice(0, 2000);
 
   return {
-    amount: items.length > 0
-      ? calculateExpenseItemsTotal(items)
-      : values.amount ?? 0,
+    amount: calculateExpenseItemsTotal(items),
     currency: values.currency,
-    categoryId: items[0]?.categoryId ?? values.categoryId ?? "",
+    categoryId: items[0]?.categoryId ?? "",
     description,
     occurredAt: values.occurredAt.toISOString(),
     source: values.source,

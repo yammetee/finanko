@@ -148,10 +148,12 @@ export function ExpensesPage() {
     setEditing(null); setFormMode("receipt"); setDraft(null); setParseError(null); setParsing(true);
     try {
       const parsed = await parseReceiptInput({ fileName: file.name, fileType: "image/jpeg", fileDataUrl: await prepareReceiptImage(file), currency: baseCurrency, categories: primaryCategories });
-      setDraft({ amount: parsed.total, currency: parsed.currency, categoryId: parsed.items[0]?.categoryId ?? primaryCategories[0]?.id, description: parsed.description, occurredAt: dayjs(), source: "receipt_ai", items: parsed.items, receiptReview: parsed.receiptReview });
+      setDraft(parsed.items.length > 0
+        ? { currency: parsed.currency, occurredAt: dayjs(), source: "receipt_ai", items: parsed.items, receiptReview: parsed.receiptReview }
+        : { ...createEmptyExpenseDraft(parsed.currency, primaryCategories[0]?.id, { name: parsed.description }), source: "receipt_ai", receiptReview: parsed.receiptReview });
     } catch (error) {
       setParseError(t(receiptErrorKey(error)));
-      setDraft({ ...createEmptyExpenseDraft(baseCurrency, primaryCategories[0]?.id), description: file.name, source: "receipt_ai" });
+      setDraft({ ...createEmptyExpenseDraft(baseCurrency, primaryCategories[0]?.id, { name: file.name }), source: "receipt_ai" });
     } finally { setParsing(false); if (receiptInput.current) receiptInput.current.value = ""; }
   }
 
@@ -162,18 +164,20 @@ export function ExpensesPage() {
       const parsed = await parseTextInput(input).catch(() => parseTextInputLocally(input));
       const expense = parsed as ParsedExpense;
       const categoryId = expense.items[0]?.categoryId ?? primaryCategories[0]?.id;
-      const description = expense.description || text;
-      setDraft({ amount: expense.total, currency: expense.currency, categoryId, description, occurredAt: dayjs(), source: "text_ai", items: expense.items, receiptReview: expense.receiptReview });
+      setDraft(expense.items.length > 0
+        ? { currency: expense.currency, occurredAt: dayjs(), source: "text_ai", items: expense.items, receiptReview: expense.receiptReview }
+        : { ...createEmptyExpenseDraft(expense.currency, categoryId, { name: expense.description || text, amount: expense.total || undefined }), source: "text_ai", receiptReview: expense.receiptReview });
     } catch {
       setParseError(t("expense.parserSuggestionOnly"));
-      setDraft({ ...createEmptyExpenseDraft(detectCurrencyInText(text) ?? baseCurrency, primaryCategories[0]?.id), amount: detectAmountInText(text) ?? undefined, description: text, source: "text_ai" });
+      setDraft({ ...createEmptyExpenseDraft(detectCurrencyInText(text) ?? baseCurrency, primaryCategories[0]?.id, { name: text, amount: detectAmountInText(text) ?? undefined }), source: "text_ai" });
     } finally { setParsing(false); }
   }
 
   function openEdit(expense: Expense) {
-    const items = expenseState.expenseItems.filter((item) => item.expenseId === expense.id).map(({ id, name, amount, quantity, unitPrice, categoryId, confidence }) => ({ id, name, amount, quantity, unitPrice, categoryId, confidence }));
+    const savedItems = expenseState.expenseItems.filter((item) => item.expenseId === expense.id).map(({ id, name, amount, quantity, unitPrice, categoryId, confidence }) => ({ id, name, amount, quantity, unitPrice, categoryId, confidence }));
+    const items = savedItems.length > 0 ? savedItems : [{ name: expense.description || t("expense.untitled"), amount: expense.amount, categoryId: expense.categoryId, confidence: 1 }];
     setEditing(expense); setSelected(null); setFormMode("edit"); setParseError(null);
-    setDraft({ amount: expense.amount, currency: expense.currency, categoryId: expense.categoryId, description: expense.description, occurredAt: dayjs(expense.occurredAt), source: expense.source, items });
+    setDraft({ currency: expense.currency, occurredAt: dayjs(expense.occurredAt), source: expense.source, items });
   }
 
   async function saveExpense(values: ExpenseFormValues) {

@@ -30,19 +30,18 @@ Continue from the existing uncommitted worktree. The user must not have to resta
 
 - Do not discard or reset any existing uncommitted changes.
 - AI quota/role enforcement is implemented in `api/ai.ts` and `supabase/schema.sql` with regression tests.
-- Incomplete-period average calculation is fixed in the uncommitted expense analytics changes.
+- Incomplete-period average calculation is fixed.
 - The text parser is expense-only and has been validated after removing account/loan output.
 - `TZ.md`, `EXPENSE_TRACKER_REFACTOR_TODO.md`, `LICENSE` containing the Yammetee copyright, and the obsolete `scripts/apply-supabase-schema.mjs` were deleted as unrelated legacy artifacts.
 - The finance compatibility runtime and empty legacy feature directories were removed. Expense persistence now uses direct owner-scoped `categories`, `expenses`, and `expense_items` tables.
 - The user reports that `supabase/reset-public-schema.sql` and then `supabase/schema.sql` were successfully executed in the current Supabase project. Do not repeat the destructive reset unless separately and explicitly requested.
 - Supabase sign-up now consumes an immediately returned session when email confirmation is disabled, or prompts the user to confirm email and then sign in when confirmation is required. Authentication errors are localized from stable error codes instead of exposing provider messages.
 - Russian user-facing instructions and errors consistently use the formal `Вы` form.
-- Recognized text and receipts remain itemized. Their review UI shows the derived aggregate in USD, shared source currency and date, plus editable item names, prices, and category buttons; duplicate parent inputs stay hidden and are derived from the items on save.
+- Manual entry, recognized text, and receipts always use the same item editor with a shared source currency and date. Each item has its own name, price, and category; the form shows a read-only total derived only from item prices, and persistence derives the aggregate amount from the same items.
 - Every explicitly priced product remains a separate categorized item; drinking water is normalized to Food even if AI labels it Health.
 - Native currency mode keeps the headline total, daily average, and trend chart in USD while history rows and category totals stay separated and displayed in their source currencies.
-- Manual entry can use the same item editor as AI drafts: each position has its own name, price, and existing category buttons, and users can add or remove positions.
 - The unused legacy `shortDate` formatter, duplicate client-side receipt total recovery module, stale chart chunk rule, dead translation entries, redundant CSS selector, and unused export surface were removed; recovery tests now exercise the canonical server implementation.
-- `npm test` (77 tests), `npm run build`, `npm run lint`, and `git diff --check` pass after restoring per-item category controls and source-currency detail analytics with USD aggregate metrics.
+- `npm test` (78 tests), `npm run build`, `npm run lint`, and `git diff --check` pass after unifying manual and recognized drafts around item-level editing and derived totals.
 
 ## Working rules
 
