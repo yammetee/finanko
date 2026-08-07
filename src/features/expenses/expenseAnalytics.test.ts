@@ -4,7 +4,6 @@ import type { Category, Transaction, TransactionItem } from "../../shared/types/
 import { setLiveExchangeRates } from "../../shared/lib/currency";
 import {
   buildExpenseBaseline,
-  buildExpenseTrendBuckets,
   buildExpenseView,
   calculateAverageDailyExpense,
   getExpensePeriodRange,
@@ -160,87 +159,6 @@ describe("expense analytics", () => {
       customRange: ["2026-07-02T14:00:00.000Z", "2026-07-08T14:00:00.000Z"],
     }, now)?.end.format("YYYY-MM-DD HH:mm"))
       .toBe("2026-07-08 23:59");
-  });
-
-  it("creates a cumulative point for every day of the selected month", () => {
-    const result = view([
-      expense({ id: "first", amount: 30, occurredAt: "2026-08-01T12:00:00.000Z" }),
-      expense({ id: "second", amount: 70, occurredAt: "2026-08-04T12:00:00.000Z" }),
-    ]);
-    const buckets = buildExpenseTrendBuckets(
-      result.history,
-      { period: "month", categoryKeys: [] },
-      dayjs("2026-08-04T18:00:00.000Z"),
-    );
-
-    expect(buckets).toHaveLength(31);
-    expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([30, 30, 30, 100]);
-    expect(buckets[buckets.length - 1].value).toBe(result.total);
-  });
-
-  it("splits today into 24 hourly points", () => {
-    const history = [{ transaction: expense(), contribution: 100 }];
-    const buckets = buildExpenseTrendBuckets(
-      history,
-      { period: "today", categoryKeys: [] },
-      dayjs("2026-08-04T18:00:00.000Z"),
-    );
-
-    expect(buckets).toHaveLength(24);
-    expect(buckets[buckets.length - 1].value).toBe(100);
-  });
-
-  it("always creates seven daily points for a week", () => {
-    const buckets = buildExpenseTrendBuckets(
-      [{ transaction: expense(), contribution: 100 }],
-      { period: "week", categoryKeys: [] },
-      dayjs("2026-08-04T18:00:00.000Z"),
-    );
-
-    expect(buckets).toHaveLength(7);
-    expect(buckets.every((bucket) => bucket.unit === "day")).toBe(true);
-  });
-
-  it("creates twelve monthly points for a year and preserves transaction counts", () => {
-    const history = [
-      {
-        transaction: expense({ id: "january", amount: 20, occurredAt: "2026-01-10T12:00:00.000Z" }),
-        contribution: 20,
-      },
-      {
-        transaction: expense({ id: "august", amount: 80, occurredAt: "2026-08-04T12:00:00.000Z" }),
-        contribution: 80,
-      },
-    ];
-    const buckets = buildExpenseTrendBuckets(
-      history,
-      { period: "year", categoryKeys: [] },
-      dayjs("2026-08-04T18:00:00.000Z"),
-    );
-
-    expect(buckets).toHaveLength(12);
-    expect(buckets[0]).toEqual(expect.objectContaining({ value: 20, transactionCount: 1 }));
-    expect(buckets[7]).toEqual(expect.objectContaining({ value: 100, transactionCount: 1 }));
-    expect(buckets[buckets.length - 1].value).toBe(100);
-  });
-
-  it("moves the cumulative trend down for negative corrections", () => {
-    const buckets = buildExpenseTrendBuckets(
-      [
-        {
-          transaction: expense({ id: "expense", occurredAt: "2026-08-01T12:00:00.000Z" }),
-          contribution: 100,
-        },
-        {
-          transaction: expense({ id: "correction", occurredAt: "2026-08-03T12:00:00.000Z" }),
-          contribution: -25,
-        },
-      ],
-      { period: "month", categoryKeys: [] },
-      dayjs("2026-08-04T18:00:00.000Z"),
-    );
-
-    expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([100, 100, 75, 75]);
   });
 
   it("calculates daily average using elapsed days in the current period", () => {

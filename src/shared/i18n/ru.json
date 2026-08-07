@@ -1,4 +1,6 @@
 {
+  "actions.back": "Назад",
+  "actions.cancel": "Отмена",
   "actions.delete": "Удалить",
   "actions.edit": "Изменить",
   "actions.parseSmart": "Распознать",
@@ -60,6 +62,7 @@
   "expense.save": "Сохранить расход",
   "expense.saveChanges": "Сохранить изменения",
   "expense.saved": "Расход сохранён",
+  "expense.source": "Источник",
   "expense.spent": "Потрачено",
   "expense.switchLanguage": "Переключить язык",
   "expense.textTitle": "Опиши расход",

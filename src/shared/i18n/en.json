@@ -1,4 +1,6 @@
 {
+  "actions.back": "Back",
+  "actions.cancel": "Cancel",
   "actions.delete": "Delete",
   "actions.edit": "Edit",
   "actions.parseSmart": "Analyze",
@@ -60,6 +62,7 @@
   "expense.save": "Save expense",
   "expense.saveChanges": "Save changes",
   "expense.saved": "Expense saved",
+  "expense.source": "Source",
   "expense.spent": "Spent",
   "expense.switchLanguage": "Switch language",
   "expense.textTitle": "Describe the expense",

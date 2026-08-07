@@ -4,7 +4,7 @@ import theme from "antd/es/theme";
 import type { PropsWithChildren } from "react";
 
 const appFontFamily =
-  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 export function AppThemeProvider({ children }: PropsWithChildren) {
   return (
@@ -12,24 +12,24 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
       theme={{
         algorithm: theme.darkAlgorithm,
         token: {
-          colorPrimary: "#38b6f0",
-          colorInfo: "#38b6f0",
-          colorSuccess: "#48dc88",
-          colorError: "#ff7180",
-          colorWarning: "#f4bd45",
-          colorBgBase: "#04080c",
-          colorBgContainer: "#0b141c",
-          colorBgElevated: "#101e29",
-          colorBorder: "#1c3443",
-          colorBorderSecondary: "#162a37",
-          colorText: "#eef7fb",
-          colorTextSecondary: "#b4c4ce",
-          colorTextTertiary: "#8195a2",
+          colorPrimary: "#a1dccb",
+          colorInfo: "#a1dccb",
+          colorSuccess: "#a1dccb",
+          colorError: "#ff8c88",
+          colorWarning: "#e2bd71",
+          colorBgBase: "#080a0a",
+          colorBgContainer: "#111413",
+          colorBgElevated: "#171b19",
+          colorBorder: "rgba(255, 255, 255, 0.10)",
+          colorBorderSecondary: "rgba(255, 255, 255, 0.07)",
+          colorText: "#f5f7f6",
+          colorTextSecondary: "#bac1be",
+          colorTextTertiary: "#929b97",
           borderRadius: 10,
           borderRadiusLG: 12,
           controlHeight: 44,
           controlHeightSM: 36,
-          boxShadowSecondary: "0 18px 48px rgba(0, 0, 0, 0.38)",
+          boxShadowSecondary: "0 20px 60px rgba(0, 0, 0, 0.32)",
           fontFamily: appFontFamily,
         },
         components: {
@@ -38,19 +38,11 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
             dangerShadow: "none",
             fontWeight: 550,
           },
-          Card: {
-            colorBgContainer: "#0b141c",
-            headerBg: "#0b141c",
-            headerFontSize: 15,
-          },
-          Drawer: {
-            colorBgElevated: "#0e1b26",
-          },
           Input: {
-            activeShadow: "0 0 0 2px rgba(56, 182, 240, 0.12)",
+            activeShadow: "0 0 0 2px rgba(161, 220, 203, 0.10)",
           },
           Select: {
-            optionSelectedBg: "#103b52",
+            optionSelectedBg: "rgba(161, 220, 203, 0.13)",
           },
         },
       }}
