@@ -6,6 +6,7 @@ import {
   buildExpenseBaseline,
   buildExpenseTrendBuckets,
   buildExpenseView,
+  calculateAverageDailyExpense,
   getExpensePeriodRange,
   UNALLOCATED_CATEGORY_KEY,
 } from "./expenseAnalytics";
@@ -240,6 +241,51 @@ describe("expense analytics", () => {
     );
 
     expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([100, 100, 75, 75]);
+  });
+
+  it("calculates daily average using elapsed days in the current period", () => {
+    const result = view([
+      expense({ id: "first", amount: 100, occurredAt: "2026-08-01T12:00:00.000Z" }),
+      expense({ id: "second", amount: 40, occurredAt: "2026-08-04T12:00:00.000Z" }),
+    ]);
+
+    expect(calculateAverageDailyExpense(
+      result.history,
+      { period: "month", categoryKeys: [] },
+      result.total,
+      dayjs("2026-08-07T18:00:00.000Z"),
+    )).toBe(20);
+  });
+
+  it("calculates daily average across a completed custom range", () => {
+    const history = [{ transaction: expense(), contribution: 100 }];
+
+    expect(calculateAverageDailyExpense(
+      history,
+      {
+        period: "custom",
+        categoryKeys: [],
+        customRange: ["2026-08-01T00:00:00.000Z", "2026-08-10T00:00:00.000Z"],
+      },
+      100,
+      dayjs("2026-08-20T18:00:00.000Z"),
+    )).toBe(10);
+  });
+
+  it("calculates all-time daily average from the first expense through today", () => {
+    const history = [
+      {
+        transaction: expense({ occurredAt: "2026-08-03T12:00:00.000Z" }),
+        contribution: 100,
+      },
+    ];
+
+    expect(calculateAverageDailyExpense(
+      history,
+      { period: "all", categoryKeys: [] },
+      100,
+      dayjs("2026-08-07T18:00:00.000Z"),
+    )).toBe(20);
   });
 
   it("builds a stable read-only baseline", () => {

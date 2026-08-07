@@ -32,7 +32,7 @@
   "expense.allCategories": "All categories",
   "expense.amount": "Amount",
   "expense.amountRequired": "Enter an amount greater than zero",
-  "expense.averageExpense": "Average expense",
+  "expense.averageDailyExpense": "Average daily spending",
   "expense.categories": "Categories",
   "expense.category": "Category",
   "expense.contextUnavailable": "Expense storage is unavailable. Reload the app and try again.",

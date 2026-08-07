@@ -3,8 +3,8 @@ import type { Currency } from "../../shared/types/finance";
 import type { Locale } from "../../shared/i18n/i18nContext";
 import type { ExpenseTrendBucket } from "./expenseAnalytics";
 
-const HEIGHT = 240;
-const PLOT = { left: 12, right: 98, top: 16, bottom: 202 };
+const HEIGHT = 220;
+const PLOT = { left: 13, right: 98, top: 14, bottom: 184 };
 const Y_TICK_COUNT = 5;
 
 interface ExpenseTrendChartProps {
@@ -48,8 +48,8 @@ function formatChartMoney(amount: number, currency: Currency, locale: Locale) {
 
 export function ExpenseTrendChart({ buckets, currency, locale, label }: ExpenseTrendChartProps) {
   const values = buckets.map((bucket) => bucket.value);
-  const minimum = Math.min(0, ...values);
-  const maximum = Math.max(1, ...values);
+  const minimum = Math.min(0, ...values) * 1.08;
+  const maximum = Math.max(1, ...values) * 1.08;
   const span = maximum - minimum || 1;
   const plotHeight = PLOT.bottom - PLOT.top;
   const xFor = (index: number) => buckets.length <= 1
@@ -105,11 +105,13 @@ export function ExpenseTrendChart({ buckets, currency, locale, label }: ExpenseT
 
         {points.map((point, index) => (
           <g className="expense-line-chart-point" key={point.key}>
-            <circle cx={`${point.x}%`} cy={point.y} r={buckets.length > 20 ? 3 : 4.5}>
-              <title>
-                {`${pointLabel(point, locale, buckets.length)}: ${formatMoney(point.value, currency)}`}
-              </title>
-            </circle>
+            {point.transactionCount > 0 || index === 0 || index === points.length - 1 ? (
+              <circle cx={`${point.x}%`} cy={point.y} r={buckets.length > 20 ? 3 : 4.5}>
+                <title>
+                  {`${pointLabel(point, locale, buckets.length)}: ${formatMoney(point.value, currency)}`}
+                </title>
+              </circle>
+            ) : null}
             {shouldShowXLabel(index, buckets.length, point.unit) ? (
               <text className="expense-line-chart-x-label" x={`${point.x}%`} y={PLOT.bottom + 27} textAnchor="middle">
                 {pointLabel(point, locale, buckets.length)}

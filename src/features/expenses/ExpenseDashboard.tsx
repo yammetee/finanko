@@ -52,6 +52,7 @@ import {
   buildExpenseCategoryGroups,
   buildExpenseTrendBuckets,
   buildExpenseView,
+  calculateAverageDailyExpense,
   categoryGroupKey,
   UNALLOCATED_CATEGORY_KEY,
   type ExpenseFilters,
@@ -62,16 +63,7 @@ const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
 
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
-const MONEY_SYMBOLS = ["$", "€", "₾", "₽", "฿", "¥", "£", "₿", "₩", "¢", "₹", "₺", "$", "₾", "€", "₽"];
 type CurrencyDisplayMode = Currency | "native";
-
-function MoneyBackdrop() {
-  return (
-    <div className="money-backdrop" aria-hidden="true">
-      {MONEY_SYMBOLS.map((symbol, index) => <span key={`${symbol}-${index}`}>{symbol}</span>)}
-    </div>
-  );
-}
 
 function receiptErrorKey(error: unknown) {
   const code = error instanceof Error ? error.message : "";
@@ -214,9 +206,11 @@ export function ExpenseDashboard() {
     () => buildExpenseTrendBuckets(expenseView.history, filters),
     [expenseView.history, filters],
   );
-  const averageExpense = expenseView.history.length > 0
-    ? expenseView.total / expenseView.history.length
-    : 0;
+  const averageDailyExpense = calculateAverageDailyExpense(
+    expenseView.history,
+    filters,
+    expenseView.total,
+  );
   const categoryMagnitude = localizedCategoryBreakdown.reduce(
     (sum, category) => sum + Math.abs(category.value),
     0,
@@ -437,7 +431,6 @@ export function ExpenseDashboard() {
 
   return (
     <div className="expense-app-shell">
-      <MoneyBackdrop />
       <input
         ref={receiptInputRef}
         className="visually-hidden"
@@ -505,143 +498,166 @@ export function ExpenseDashboard() {
         </section>
 
         <Card className="expense-summary-card">
-          <Text className="expense-eyebrow">{t("expense.spent")}</Text>
-          <Title className="expense-total" level={1}>
-            {formatMoney(expenseView.total, displayCurrency)}
-          </Title>
+          <div className="expense-summary-layout">
+            <div className="expense-total-block">
+              <Text className="expense-eyebrow">{t("expense.spent")}</Text>
+              <Title className="expense-total" level={1}>
+                {formatMoney(expenseView.total, displayCurrency)}
+              </Title>
+            </div>
 
-          <div className="expense-filter-section">
-            <Text className="expense-filter-label">{t("expense.period")}</Text>
-            <div className="expense-filter-chips" role="group" aria-label={t("expense.period")}>
-              {PERIODS.map((period) => (
-                <button
-                  aria-pressed={filters.period === period}
-                  className={`expense-filter-chip${filters.period === period ? " is-active" : ""}`}
-                  key={period}
-                  type="button"
-                  onClick={() => setFilters((current) => ({
-                    ...current,
-                    period,
-                    customRange: period === "custom" && !current.customRange
-                      ? [dayjs().startOf("month").toISOString(), dayjs().endOf("day").toISOString()]
-                      : current.customRange,
-                  }))}
+            <div className="expense-filter-controls">
+              <div className="expense-filter-section">
+                <Text className="expense-filter-label">{t("expense.period")}</Text>
+                <div className="expense-filter-chips" role="group" aria-label={t("expense.period")}>
+                  {PERIODS.map((period) => (
+                    <button
+                      aria-pressed={filters.period === period}
+                      className={`expense-filter-chip${filters.period === period ? " is-active" : ""}`}
+                      key={period}
+                      type="button"
+                      onClick={() => setFilters((current) => ({
+                        ...current,
+                        period,
+                        customRange: period === "custom" && !current.customRange
+                          ? [dayjs().startOf("month").toISOString(), dayjs().endOf("day").toISOString()]
+                          : current.customRange,
+                      }))}
+                    >
+                      {t(`expense.period.${period}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {filters.period === "custom" ? (
+                <RangePicker
+                  aria-label={t("expense.customRange")}
+                  className="expense-custom-range"
+                  allowClear={false}
+                  value={filters.customRange
+                    ? [dayjs(filters.customRange[0]), dayjs(filters.customRange[1])]
+                    : undefined}
+                  onChange={(range) => {
+                    const start = range?.[0];
+                    const end = range?.[1];
+                    if (!start || !end) return;
+                    setFilters((current) => ({
+                      ...current,
+                      customRange: [start.toISOString(), end.toISOString()],
+                    }));
+                  }}
+                />
+              ) : null}
+
+              <div className="expense-filter-section">
+                <Text className="expense-filter-label">{t("expense.categories")}</Text>
+                <div
+                  className="expense-filter-chips expense-filter-category-chips"
+                  role="group"
+                  aria-label={t("expense.categories")}
                 >
-                  {t(`expense.period.${period}`)}
-                </button>
-              ))}
+                  <button
+                    aria-pressed={filters.categoryKeys.length === 0}
+                    className={`expense-filter-chip${filters.categoryKeys.length === 0 ? " is-active" : ""}`}
+                    type="button"
+                    onClick={() => setFilters((current) => ({ ...current, categoryKeys: [] }))}
+                  >
+                    {t("expense.allCategories")}
+                  </button>
+                  {categoryGroups.map((group) => (
+                    <button
+                      aria-pressed={isCategorySelected(group.key)}
+                      className={`expense-filter-chip${isCategorySelected(group.key) ? " is-active" : ""}`}
+                      key={group.key}
+                      type="button"
+                      onClick={() => toggleCategory(group.key)}
+                    >
+                      <span className="expense-category-dot" style={{ background: group.color }} />
+                      {group.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {filters.categoryKeys.length > 0 || filters.period !== "month" ? (
+                <Button
+                  className="expense-reset-filters"
+                  type="link"
+                  onClick={() => setFilters({ period: "month", categoryKeys: [] })}
+                >
+                  {t("expense.resetFilters")}
+                </Button>
+              ) : null}
             </div>
           </div>
-
-          {filters.period === "custom" ? (
-            <RangePicker
-              aria-label={t("expense.customRange")}
-              className="expense-custom-range"
-              allowClear={false}
-              value={filters.customRange
-                ? [dayjs(filters.customRange[0]), dayjs(filters.customRange[1])]
-                : undefined}
-              onChange={(range) => {
-                const start = range?.[0];
-                const end = range?.[1];
-                if (!start || !end) return;
-                setFilters((current) => ({
-                  ...current,
-                  customRange: [start.toISOString(), end.toISOString()],
-                }));
-              }}
-            />
-          ) : null}
-
-          <div className="expense-filter-section">
-            <Text className="expense-filter-label">{t("expense.categories")}</Text>
-            <div className="expense-filter-chips" role="group" aria-label={t("expense.categories")}>
-              <button
-                aria-pressed={filters.categoryKeys.length === 0}
-                className={`expense-filter-chip${filters.categoryKeys.length === 0 ? " is-active" : ""}`}
-                type="button"
-                onClick={() => setFilters((current) => ({ ...current, categoryKeys: [] }))}
-              >
-                {t("expense.allCategories")}
-              </button>
-              {categoryGroups.map((group) => (
-                <button
-                  aria-pressed={isCategorySelected(group.key)}
-                  className={`expense-filter-chip${isCategorySelected(group.key) ? " is-active" : ""}`}
-                  key={group.key}
-                  type="button"
-                  onClick={() => toggleCategory(group.key)}
-                >
-                  <span className="expense-category-dot" style={{ background: group.color }} />
-                  {group.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {filters.categoryKeys.length > 0 || filters.period !== "month" ? (
-            <Button
-              className="expense-reset-filters"
-              type="link"
-              onClick={() => setFilters({ period: "month", categoryKeys: [] })}
-            >
-              {t("expense.resetFilters")}
-            </Button>
-          ) : null}
         </Card>
 
-        <div className="expense-insights-grid">
-          <Card className="expense-panel" title={t("expense.trend")}>
-            {expenseView.history.length > 0 ? (
-              <>
-                <div className="expense-insight-summary">
+        <Card className="expense-panel expense-analytics-card" title={t("expense.trend")}>
+          {expenseView.history.length > 0 ? (
+            <>
+              <div className="expense-insight-summary">
+                <span className="expense-insight-metric">
                   <span>{t("expense.transactionCount", { count: expenseView.history.length })}</span>
-                  <span>{t("expense.averageExpense")}: <strong>{formatMoney(averageExpense, displayCurrency)}</strong></span>
-                </div>
-                <ExpenseTrendChart
-                  buckets={trendBuckets}
-                  currency={displayCurrency}
-                  label={t("expense.trend")}
-                  locale={locale}
-                />
-              </>
-            ) : <Text className="muted">{t("empty.noExpenses")}</Text>}
-          </Card>
-
-          <Card className="expense-panel" title={t("section.expensesByCategory")}>
-            {localizedCategoryBreakdown.length > 0 ? (
-              <div className="expense-category-list">
-                {localizedCategoryBreakdown.map((category) => {
-                  const active = isCategorySelected(category.key);
-                  const share = categoryMagnitude > 0
-                    ? Math.round((Math.abs(category.value) / categoryMagnitude) * 100)
-                    : 0;
-                  return (
-                    <button
-                      aria-pressed={active}
-                      className={`expense-category-row${active ? " is-active" : ""}`}
-                      key={category.key}
-                      type="button"
-                      onClick={() => toggleCategory(category.key)}
-                    >
-                      <span className="expense-category-label">
-                        <span className="expense-category-dot" style={{ background: category.color }} />
-                        {category.name}
-                      </span>
-                      <span className="expense-category-value">
-                        {formatMoney(category.value, displayCurrency)}
-                      </span>
-                      <span className="expense-category-track" aria-hidden="true">
-                        <span style={{ background: category.color, width: `${Math.max(3, share)}%` }} />
-                      </span>
-                      <span className="expense-category-share">{share}%</span>
-                    </button>
-                  );
-                })}
+                </span>
+                <span className="expense-insight-metric">
+                  <span>{t("expense.averageDailyExpense")}</span>
+                  <strong>{formatMoney(averageDailyExpense, displayCurrency)}</strong>
+                </span>
               </div>
-            ) : <Text className="muted">{t("empty.noExpenses")}</Text>}
-          </Card>
-        </div>
+              <ExpenseTrendChart
+                buckets={trendBuckets}
+                currency={displayCurrency}
+                label={t("expense.trend")}
+                locale={locale}
+              />
+
+              {localizedCategoryBreakdown.length > 0 ? (
+                <section className="expense-category-breakdown" aria-labelledby="expense-category-breakdown-title">
+                  <Text className="expense-section-title" id="expense-category-breakdown-title">
+                    {t("section.expensesByCategory")}
+                  </Text>
+                  <div className="expense-category-stack" aria-hidden="true">
+                    {localizedCategoryBreakdown.map((category) => (
+                      <span
+                        key={category.key}
+                        style={{
+                          background: category.color,
+                          flexGrow: Math.abs(category.value),
+                          minWidth: category.value === 0 ? 0 : 3,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="expense-category-legend">
+                    {localizedCategoryBreakdown.map((category) => {
+                      const active = isCategorySelected(category.key);
+                      const share = categoryMagnitude > 0
+                        ? Math.round((Math.abs(category.value) / categoryMagnitude) * 100)
+                        : 0;
+                      return (
+                        <button
+                          aria-pressed={active}
+                          className={`expense-category-legend-item${active ? " is-active" : ""}`}
+                          key={category.key}
+                          type="button"
+                          onClick={() => toggleCategory(category.key)}
+                        >
+                          <span className="expense-category-label">
+                            <span className="expense-category-dot" style={{ background: category.color }} />
+                            {category.name}
+                          </span>
+                          <strong>{formatMoney(category.value, displayCurrency)}</strong>
+                          <span>{share}%</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+            </>
+          ) : <Text className="muted">{t("empty.noExpenses")}</Text>}
+        </Card>
 
         <Card className="expense-history-card" title={t("expense.history") }>
           <ExpenseHistory

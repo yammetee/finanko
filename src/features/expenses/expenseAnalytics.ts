@@ -182,6 +182,32 @@ export function buildExpenseTrendBuckets(
   });
 }
 
+export function calculateAverageDailyExpense(
+  history: ExpenseHistoryEntry[],
+  filters: ExpenseFilters,
+  total: number,
+  now = dayjs(),
+) {
+  if (history.length === 0) return 0;
+
+  const selectedRange = getExpensePeriodRange(filters, now);
+  const start = selectedRange?.start ?? history.reduce((earliest, entry) => {
+    const occurredAt = dayjs(entry.transaction.occurredAt);
+    return occurredAt.isBefore(earliest) ? occurredAt : earliest;
+  }, dayjs(history[0].transaction.occurredAt));
+  const selectedEnd = selectedRange?.end ?? now;
+  const latestExpense = history.reduce((latest, entry) => {
+    const occurredAt = dayjs(entry.transaction.occurredAt);
+    return occurredAt.isAfter(latest) ? occurredAt : latest;
+  }, dayjs(history[0].transaction.occurredAt));
+  const end = selectedRange
+    ? (selectedEnd.isAfter(now) ? now : selectedEnd)
+    : (latestExpense.isAfter(now) ? latestExpense : now);
+  const dayCount = Math.max(1, end.startOf("day").diff(start.startOf("day"), "day") + 1);
+
+  return total / dayCount;
+}
+
 function isInsidePeriod(transaction: Transaction, range: PeriodRange | null) {
   if (!range) return true;
   const occurredAt = dayjs(transaction.occurredAt);

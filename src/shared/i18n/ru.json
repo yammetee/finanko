@@ -32,7 +32,7 @@
   "expense.allCategories": "Все категории",
   "expense.amount": "Сумма",
   "expense.amountRequired": "Введи сумму больше нуля",
-  "expense.averageExpense": "Средний расход",
+  "expense.averageDailyExpense": "Средний расход в день",
   "expense.categories": "Категории",
   "expense.category": "Категория",
   "expense.contextUnavailable": "Хранилище расходов недоступно. Перезагрузи приложение и попробуй снова.",
