@@ -32,6 +32,15 @@ export interface ExpenseHistoryEntry {
   contribution: number;
 }
 
+export interface ExpenseTrendBucket {
+  key: string;
+  start: string;
+  end: string;
+  value: number;
+  transactionCount: number;
+  unit: "hour" | "day" | "month" | "year";
+}
+
 interface ExpenseViewInput {
   transactions: Transaction[];
   transactionItems: TransactionItem[];
@@ -99,6 +108,64 @@ export function getExpensePeriodRange(
     };
   }
   return { start: now.startOf("month"), end: now.endOf("month") };
+}
+
+function trendRange(history: ExpenseHistoryEntry[], filters: ExpenseFilters, now: Dayjs): PeriodRange | null {
+  const selectedRange = getExpensePeriodRange(filters, now);
+  if (selectedRange) return selectedRange;
+  if (history.length === 0) return null;
+
+  const timestamps = history.map((entry) => dayjs(entry.transaction.occurredAt));
+  return {
+    start: timestamps.reduce((earliest, value) => value.isBefore(earliest) ? value : earliest).startOf("month"),
+    end: timestamps.reduce((latest, value) => value.isAfter(latest) ? value : latest).endOf("month"),
+  };
+}
+
+export function buildExpenseTrendBuckets(
+  history: ExpenseHistoryEntry[],
+  filters: ExpenseFilters,
+  now = dayjs(),
+): ExpenseTrendBucket[] {
+  const range = trendRange(history, filters, now);
+  if (!range || range.end.isBefore(range.start)) return [];
+
+  const dayCount = range.end.startOf("day").diff(range.start.startOf("day"), "day") + 1;
+  const unit: ExpenseTrendBucket["unit"] = filters.period === "today"
+    ? "hour"
+    : filters.period === "week" || filters.period === "month"
+      ? "day"
+      : filters.period === "year" || filters.period === "all"
+        ? "month"
+        : dayCount <= 62 ? "day" : dayCount <= 730 ? "month" : "year";
+  const buckets: Array<{ start: Dayjs; end: Dayjs }> = [];
+  let cursor = unit === "day" ? range.start.startOf("day") : range.start.startOf(unit);
+
+  while (!cursor.isAfter(range.end)) {
+    const bucketEnd = cursor.endOf(unit);
+    buckets.push({
+      start: cursor.isBefore(range.start) ? range.start : cursor,
+      end: bucketEnd.isAfter(range.end) ? range.end : bucketEnd,
+    });
+    cursor = bucketEnd.add(1, "millisecond");
+  }
+
+  let cumulativeValue = 0;
+  return buckets.map((bucket) => {
+    const entries = history.filter((entry) => {
+      const occurredAt = dayjs(entry.transaction.occurredAt);
+      return !occurredAt.isBefore(bucket.start) && !occurredAt.isAfter(bucket.end);
+    });
+    cumulativeValue += entries.reduce((sum, entry) => sum + entry.contribution, 0);
+    return {
+      key: `${bucket.start.toISOString()}-${bucket.end.toISOString()}`,
+      start: bucket.start.toISOString(),
+      end: bucket.end.toISOString(),
+      value: cumulativeValue,
+      transactionCount: entries.length,
+      unit,
+    };
+  });
 }
 
 export function calculateAverageDailyExpense(

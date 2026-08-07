@@ -3,14 +3,14 @@ import DatePicker from "antd/es/date-picker";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
 import InputNumber from "antd/es/input-number";
-import Select from "antd/es/select";
 import Spin from "antd/es/spin";
 import { ArrowLeft, Sparkles, Trash2 } from "lucide-react";
 import { useEffect } from "react";
 import type { MessageKey } from "../../shared/i18n/i18nContext";
 import { useI18n } from "../../shared/i18n/i18nContext";
+import { CURRENCIES } from "../../shared/constants/finance";
+import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import type { Category } from "../../shared/types/finance";
-import { CurrencySelect } from "../../shared/ui/FormSelects";
 import type { ExpenseDraft, ExpenseFormValues } from "./expenseDraft";
 
 export type ExpenseEditorMode = "text" | "receipt" | "manual" | "edit";
@@ -121,21 +121,54 @@ export function ExpenseEditor({
             />
           ) : null}
 
-          <div className="amount-fields">
-            <Form.Item
-              name="amount"
-              label={t("form.amount")}
-              rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}
-            >
-              <InputNumber autoFocus={mode === "manual"} min={0.01} step={0.01} />
-            </Form.Item>
-            <Form.Item name="currency" label={t("form.currency")} rules={[{ required: true }]}>
-              <CurrencySelect />
-            </Form.Item>
-          </div>
+          <Form.Item
+            name="amount"
+            label={t("form.amount")}
+            rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}
+          >
+            <InputNumber autoFocus={mode === "manual"} min={0.01} step={0.01} />
+          </Form.Item>
+          <Form.Item name="currency" hidden rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item noStyle shouldUpdate={(previous, current) => previous.currency !== current.currency}>
+            {({ getFieldValue, setFieldValue }) => (
+              <div className="editor-choice-group">
+                <span>{t("form.currency")}</span>
+                <div>
+                  {CURRENCIES.map((currency) => (
+                    <button
+                      className={getFieldValue("currency") === currency ? "is-active" : ""}
+                      key={currency}
+                      type="button"
+                      onClick={() => setFieldValue("currency", currency)}
+                    >
+                      <CurrencyIcon currency={currency} size={13} />
+                      {currency}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Form.Item>
 
-          <Form.Item name="categoryId" label={t("expense.category")} rules={[{ required: true }]}>
-            <Select options={categoryOptions} />
+          <Form.Item name="categoryId" hidden rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item noStyle shouldUpdate={(previous, current) => previous.categoryId !== current.categoryId}>
+            {({ getFieldValue, setFieldValue }) => (
+              <div className="editor-choice-group">
+                <span>{t("expense.category")}</span>
+                <div>
+                  {categoryOptions.map((option) => (
+                    <button
+                      className={getFieldValue("categoryId") === option.value ? "is-active" : ""}
+                      key={option.value}
+                      type="button"
+                      onClick={() => setFieldValue("categoryId", option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </Form.Item>
           <Form.Item name="description" label={t("form.description")}>
             <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} />
@@ -164,8 +197,25 @@ export function ExpenseEditor({
                       <Form.Item name={[field.name, "amount"]} label={t("form.amount")} rules={[{ required: true }]}>
                         <InputNumber step={0.01} />
                       </Form.Item>
-                      <Form.Item name={[field.name, "categoryId"]} label={t("expense.category")} rules={[{ required: true }]}>
-                        <Select options={categoryOptions} />
+                      <Form.Item name={[field.name, "categoryId"]} hidden rules={[{ required: true }]}><Input /></Form.Item>
+                      <Form.Item noStyle shouldUpdate>
+                        {() => (
+                          <div className="parsed-item-categories">
+                            <span>{t("expense.category")}</span>
+                            <div>
+                              {categoryOptions.map((option) => (
+                                <button
+                                  className={draftForm.getFieldValue(["items", field.name, "categoryId"]) === option.value ? "is-active" : ""}
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => draftForm.setFieldValue(["items", field.name, "categoryId"], option.value)}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </Form.Item>
                     </div>
                     <Form.Item name={[field.name, "quantity"]} hidden><InputNumber /></Form.Item>

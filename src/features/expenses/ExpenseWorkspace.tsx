@@ -24,9 +24,11 @@ import {
 import { prepareReceiptImage } from "../receipts/receiptImage";
 import { ExpenseActivity } from "./ExpenseActivity";
 import { ExpenseEditor, type ExpenseEditorMode } from "./ExpenseEditor";
+import { ExpenseGraph } from "./ExpenseGraph";
 import { ExpenseRecord } from "./ExpenseRecord";
 import {
   buildExpenseCategoryGroups,
+  buildExpenseTrendBuckets,
   buildExpenseView,
   calculateAverageDailyExpense,
   categoryGroupKey,
@@ -115,8 +117,8 @@ export function ExpenseWorkspace() {
   const currencyModes: CurrencyDisplay[] = ["native", ...CURRENCIES];
   const currentCurrencyIndex = currencyModes.indexOf(currencyDisplay);
   const nextCurrencyMode = currencyModes[(currentCurrencyIndex + 1) % currencyModes.length];
-  const currentCurrencyLabel = currencyDisplay === "native" ? t("currency.native") : currencyDisplay;
-  const nextCurrencyLabel = nextCurrencyMode === "native" ? t("currency.native") : nextCurrencyMode;
+  const currentCurrencyLabel = currencyDisplay === "native" ? baseCurrency : currencyDisplay;
+  const nextCurrencyLabel = nextCurrencyMode === "native" ? baseCurrency : nextCurrencyMode;
   const otherCategory = primaryCategories.find(
     (category) => category.name.trim().toLocaleLowerCase() === "other",
   );
@@ -171,6 +173,10 @@ export function ExpenseWorkspace() {
   }, []).sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
   const categoryMagnitude = breakdown.reduce((sum, category) => sum + Math.abs(category.value), 0);
   const averageDailyExpense = calculateAverageDailyExpense(expenseView.history, filters, expenseView.total);
+  const trendBuckets = useMemo(
+    () => buildExpenseTrendBuckets(expenseView.history, filters),
+    [expenseView.history, filters],
+  );
   const selectedCategoryKey = categoryGroups.find((group) => {
     const keys = group.key === otherCategoryKey ? [otherCategoryKey, UNALLOCATED_CATEGORY_KEY] : [group.key];
     return keys.every((key) => filters.categoryKeys.includes(key));
@@ -352,32 +358,53 @@ export function ExpenseWorkspace() {
       </section>
 
       <section className="spending-overview" aria-labelledby="spending-total-title">
-        <div className="overview-controls">
-          <label>
-            <span>{t("expense.period")}</span>
-            <select
-              value={filters.period}
-              onChange={(event) => {
-                const period = event.target.value as ExpensePeriod;
-                setFilters((current) => ({
+        <div className="overview-filter">
+          <span>{t("expense.period")}</span>
+          <div className="filter-rail" role="group" aria-label={t("expense.period")}>
+            {PERIODS.map((period) => (
+              <button
+                className={filters.period === period ? "is-active" : ""}
+                aria-pressed={filters.period === period}
+                key={period}
+                type="button"
+                onClick={() => setFilters((current) => ({
                   ...current,
                   period,
                   customRange: period === "custom" && !current.customRange
                     ? [dayjs().startOf("month").toISOString(), dayjs().endOf("day").toISOString()]
                     : current.customRange,
-                }));
-              }}
+                }))}
+              >
+                {t(`expense.period.${period}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="overview-filter">
+          <span>{t("expense.categories")}</span>
+          <div className="filter-rail" role="group" aria-label={t("expense.categories")}>
+            <button
+              className={selectedCategoryKey === "" ? "is-active" : ""}
+              aria-pressed={selectedCategoryKey === ""}
+              type="button"
+              onClick={() => setCategoryFilter("")}
             >
-              {PERIODS.map((period) => <option key={period} value={period}>{t(`expense.period.${period}`)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>{t("expense.categories")}</span>
-            <select value={selectedCategoryKey} onChange={(event) => setCategoryFilter(event.target.value)}>
-              <option value="">{t("expense.allCategories")}</option>
-              {categoryGroups.map((group) => <option key={group.key} value={group.key}>{group.name}</option>)}
-            </select>
-          </label>
+              {t("expense.allCategories")}
+            </button>
+            {categoryGroups.map((group) => (
+              <button
+                className={selectedCategoryKey === group.key ? "is-active" : ""}
+                aria-pressed={selectedCategoryKey === group.key}
+                key={group.key}
+                type="button"
+                onClick={() => setCategoryFilter(group.key)}
+              >
+                <i style={{ background: group.color }} />
+                {group.name}
+              </button>
+            ))}
+          </div>
         </div>
 
         {filters.period === "custom" ? (
@@ -400,21 +427,16 @@ export function ExpenseWorkspace() {
             <span id="spending-total-title">{t("expense.spent")}</span>
             <strong>{formatMoney(expenseView.total, displayCurrency)}</strong>
           </div>
-          <button
-            className="currency-cycle"
-            type="button"
-            title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })}
-            onClick={() => setCurrencyDisplay(nextCurrencyMode)}
-          >
-            {currencyDisplay === "native" ? <NativeCurrencyIcon size={16} /> : <CurrencyIcon currency={currencyDisplay} size={16} />}
-            {currentCurrencyLabel}
-          </button>
         </div>
 
         <div className="overview-meta">
           <span>{t("expense.transactionCount", { count: expenseView.history.length })}</span>
           <span>{t("expense.averageDailyExpense")} <strong>{formatMoney(averageDailyExpense, displayCurrency)}</strong></span>
         </div>
+
+        {expenseView.history.length > 0 ? (
+          <ExpenseGraph buckets={trendBuckets} currency={displayCurrency} locale={locale} label={t("expense.trend")} />
+        ) : null}
 
         {breakdown.length > 0 ? (
           <div className="category-summary">
@@ -466,6 +488,16 @@ export function ExpenseWorkspace() {
       <header className="topbar">
         <div className="wordmark"><span>F</span>Finanko</div>
         <div>
+          <button
+            className="topbar-currency"
+            type="button"
+            title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })}
+            aria-label={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })}
+            onClick={() => setCurrencyDisplay(nextCurrencyMode)}
+          >
+            {currencyDisplay === "native" ? <NativeCurrencyIcon size={15} /> : <CurrencyIcon currency={currencyDisplay} size={15} />}
+            <span>{currentCurrencyLabel}</span>
+          </button>
           <button type="button" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>{locale.toUpperCase()}</button>
           <button type="button" onClick={() => void signOut()} aria-label={t("actions.signOut")}><LogOut size={17} /></button>
         </div>

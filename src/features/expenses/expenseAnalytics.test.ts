@@ -4,6 +4,7 @@ import type { Category, Transaction, TransactionItem } from "../../shared/types/
 import { setLiveExchangeRates } from "../../shared/lib/currency";
 import {
   buildExpenseBaseline,
+  buildExpenseTrendBuckets,
   buildExpenseView,
   calculateAverageDailyExpense,
   getExpensePeriodRange,
@@ -159,6 +160,33 @@ describe("expense analytics", () => {
       customRange: ["2026-07-02T14:00:00.000Z", "2026-07-08T14:00:00.000Z"],
     }, now)?.end.format("YYYY-MM-DD HH:mm"))
       .toBe("2026-07-08 23:59");
+  });
+
+  it("builds cumulative points for the compact spending graph", () => {
+    const result = view([
+      expense({ id: "first", amount: 30, occurredAt: "2026-08-01T12:00:00.000Z" }),
+      expense({ id: "second", amount: 70, occurredAt: "2026-08-04T12:00:00.000Z" }),
+    ]);
+    const buckets = buildExpenseTrendBuckets(
+      result.history,
+      { period: "month", categoryKeys: [] },
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+
+    expect(buckets).toHaveLength(31);
+    expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([30, 30, 30, 100]);
+    expect(buckets[buckets.length - 1].value).toBe(result.total);
+  });
+
+  it("keeps week graphs on seven daily points", () => {
+    const buckets = buildExpenseTrendBuckets(
+      [{ transaction: expense(), contribution: 100 }],
+      { period: "week", categoryKeys: [] },
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+
+    expect(buckets).toHaveLength(7);
+    expect(buckets.every((bucket) => bucket.unit === "day")).toBe(true);
   });
 
   it("calculates daily average using elapsed days in the current period", () => {
