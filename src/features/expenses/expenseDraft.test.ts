@@ -30,7 +30,7 @@ describe("expense draft persistence", () => {
     expect(input.description).toBe("Исправленный расход");
   });
 
-  it("derives aggregate fields from recognized items", () => {
+  it("derives aggregate fields from manually or automatically created items", () => {
     const input = expenseFormToInput({
       amount: 999,
       currency: "GEL",

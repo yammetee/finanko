@@ -1,5 +1,6 @@
 {
   "actions.back": "Back",
+  "actions.addItem": "Add item",
   "actions.cancel": "Cancel",
   "actions.delete": "Delete",
   "actions.edit": "Edit",
@@ -113,7 +114,7 @@
   "receipt.warning.totalsMismatch": "Subtotal, discounts, and tax do not reconcile with the final total.",
   "receipt.warning.unreadableRows": "Not every product row could be read.",
   "section.expensesByCategory": "Expenses by category",
-  "section.parsedItems": "Recognized items",
+  "section.parsedItems": "Items",
   "section.receiptItems": "Receipt items",
   "source.manual": "manual",
   "source.receipt_ai": "receipt",

@@ -4,7 +4,7 @@ import Form from "antd/es/form";
 import Input from "antd/es/input";
 import InputNumber from "antd/es/input-number";
 import Spin from "antd/es/spin";
-import { ArrowLeft, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useEffect } from "react";
 import { CURRENCIES } from "../../shared/constants/expenses";
 import type { MessageKey } from "../../shared/i18n/i18nContext";
@@ -76,17 +76,20 @@ export function ExpenseFormPage({ mode, draft, categories, parsing, saving, pars
           <Form.Item name="currency" noStyle rules={[{ required: true }]}><ChoiceGroup label={t("form.currency")} options={CURRENCIES.map((currency) => ({ value: currency, label: <><CurrencyIcon currency={currency} size={12} />{currency}</> }))} /></Form.Item>
           {!hasItems ? <Form.Item name="categoryId" noStyle rules={[{ required: true }]}><ChoiceGroup label={t("expense.category")} options={categories.map((category) => ({ value: category.id, label: category.name }))} /></Form.Item> : null}
           {!hasItems ? <Form.Item name="description" label={t("form.description")}><Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} /></Form.Item> : null}
-          {hasItems ? (
-            <section className="parsed-items"><h2>{t("section.parsedItems")}</h2><Form.List name="items">{(fields, { remove }) => fields.map((field) => (
-              <div className="parsed-item" key={field.key}>
-                <Form.Item name={[field.name, "id"]} hidden><Input /></Form.Item>
-                <div className="parsed-name"><Form.Item name={[field.name, "name"]} rules={[{ required: true }]}><Input placeholder={t("form.name")} /></Form.Item><button type="button" onClick={() => remove(field.name)} aria-label={t("actions.delete")}><Trash2 size={15} /></button></div>
-                <Form.Item name={[field.name, "amount"]} label={t("form.price")} rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}><InputNumber min={0.01} step={0.01} /></Form.Item>
-                <Form.Item name={[field.name, "categoryId"]} noStyle rules={[{ required: true }]}><ChoiceGroup label={t("expense.category")} options={categories.map((category) => ({ value: category.id, label: category.name }))} /></Form.Item>
-                <Form.Item name={[field.name, "quantity"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "unitPrice"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "confidence"]} hidden><InputNumber /></Form.Item>
-              </div>
-            ))}</Form.List></section>
-          ) : null}
+          <Form.List name="items">{(fields, { add, remove }) => (
+            <>
+              {fields.length > 0 ? <section className="parsed-items"><h2>{t("section.parsedItems")}</h2>{fields.map((field) => (
+                <div className="parsed-item" key={field.key}>
+                  <Form.Item name={[field.name, "id"]} hidden><Input /></Form.Item>
+                  <div className="parsed-name"><Form.Item name={[field.name, "name"]} rules={[{ required: true }]}><Input placeholder={t("form.name")} /></Form.Item><button type="button" onClick={() => remove(field.name)} aria-label={t("actions.delete")}><Trash2 size={15} /></button></div>
+                  <Form.Item name={[field.name, "amount"]} label={t("form.price")} rules={[{ required: true }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}><InputNumber min={0.01} step={0.01} /></Form.Item>
+                  <Form.Item name={[field.name, "categoryId"]} noStyle rules={[{ required: true }]}><ChoiceGroup label={t("expense.category")} options={categories.map((category) => ({ value: category.id, label: category.name }))} /></Form.Item>
+                  <Form.Item name={[field.name, "quantity"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "unitPrice"]} hidden><InputNumber /></Form.Item><Form.Item name={[field.name, "confidence"]} hidden><InputNumber /></Form.Item>
+                </div>
+              ))}</section> : null}
+              <button className="add-item-button" type="button" onClick={() => add({ name: "", categoryId: categories[0]?.id, confidence: 1 })}><Plus size={15} />{t("actions.addItem")}</button>
+            </>
+          )}</Form.List>
           <Form.Item name="occurredAt" label={t("form.date")} rules={[{ required: true }]}><DatePicker allowClear={false} /></Form.Item>
           <Form.Item name="source" hidden><Input /></Form.Item>
           <button className="primary-action" disabled={saving} type="submit">{t(mode === "edit" ? "expense.saveChanges" : "expense.save")}</button>

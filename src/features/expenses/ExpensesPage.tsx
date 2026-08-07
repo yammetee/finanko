@@ -100,14 +100,25 @@ export function ExpensesPage() {
   }, [analyticsCategories, displayCurrency, expenseState.expenseItems, expenseState.expenses, filters, ratesVersion]);
   const categoryNames = useMemo(() => new Map(categoryGroups.map((group) => [group.key, group.name])), [categoryGroups]);
   const otherKey = categoryGroupKey("Other");
-  const breakdown = expenseView.byCategory.reduce<Array<(typeof expenseView.byCategory)[number]>>((items, item) => {
+  const categoryAmounts = currencyMode === "native"
+    ? expenseView.nativeByCategory
+    : expenseView.byCategory.map((item) => ({
+      ...item,
+      currency: displayCurrency,
+      convertedValue: item.value,
+    }));
+  const breakdown = categoryAmounts.reduce<Array<(typeof categoryAmounts)[number]>>((items, item) => {
     const key = item.key === UNALLOCATED_CATEGORY_KEY ? otherKey : item.key;
-    const existing = items.find((candidate) => candidate.key === key);
-    if (existing) { existing.value += item.value; return items; }
+    const existing = items.find((candidate) => candidate.key === key && candidate.currency === item.currency);
+    if (existing) {
+      existing.value += item.value;
+      existing.convertedValue += item.convertedValue;
+      return items;
+    }
     items.push({ ...item, key, color: key === otherKey ? otherCategory?.color ?? "#8c8c8c" : item.color, name: categoryNames.get(key) ?? (key === otherKey ? t("category.other") : item.name) });
     return items;
-  }, []).sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
-  const breakdownTotal = breakdown.reduce((sum, item) => sum + Math.abs(item.value), 0);
+  }, []).sort((left, right) => Math.abs(right.convertedValue) - Math.abs(left.convertedValue));
+  const breakdownTotal = breakdown.reduce((sum, item) => sum + Math.abs(item.convertedValue), 0);
   const trackingStartedAt = useMemo(
     () => getExpenseTrackingStart(expenseState.expenses),
     [expenseState.expenses],
@@ -211,7 +222,7 @@ export function ExpensesPage() {
       {expenseView.history.length > 0 ? (
         <div className="analytics-grid">
           <section className="panel chart-panel"><h2>{t("expense.trend")}</h2><SpendingChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></section>
-          <section className="panel category-panel"><h2>{t("section.expensesByCategory")}</h2>{breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.value) / breakdownTotal * 100) : 0; return <button type="button" key={item.key} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, displayCurrency)}</strong><small>{share}%</small></button>; })}</section>
+          <section className="panel category-panel"><h2>{t("section.expensesByCategory")}</h2>{breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.convertedValue) / breakdownTotal * 100) : 0; return <button type="button" key={`${item.key}:${item.currency}`} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, item.currency)}</strong><small>{share}%</small></button>; })}</section>
         </div>
       ) : null}
 

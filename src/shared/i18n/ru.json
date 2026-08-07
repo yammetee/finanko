@@ -1,5 +1,6 @@
 {
   "actions.back": "Назад",
+  "actions.addItem": "Добавить позицию",
   "actions.cancel": "Отмена",
   "actions.delete": "Удалить",
   "actions.edit": "Изменить",
@@ -113,7 +114,7 @@
   "receipt.warning.totalsMismatch": "Промежуточный итог, скидки и налог не сходятся с финальной суммой.",
   "receipt.warning.unreadableRows": "Не все товарные строки удалось прочитать.",
   "section.expensesByCategory": "Расходы по категориям",
-  "section.parsedItems": "Распознанные позиции",
+  "section.parsedItems": "Позиции",
   "section.receiptItems": "Позиции чека",
   "source.manual": "вручную",
   "source.receipt_ai": "чек",

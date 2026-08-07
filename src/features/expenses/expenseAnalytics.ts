@@ -42,6 +42,15 @@ export interface ExpenseTrendBucket {
   unit: "hour" | "day" | "month" | "year";
 }
 
+interface ExpenseNativeCategoryTotal {
+  key: string;
+  name: string;
+  color: string;
+  currency: Currency;
+  value: number;
+  convertedValue: number;
+}
+
 interface ExpenseViewInput {
   expenses: Expense[];
   expenseItems: ExpenseItem[];
@@ -295,35 +304,48 @@ export function buildExpenseView({
     );
 
   const categoryTotals = new Map<string, number>();
+  const nativeCategoryTotals = new Map<string, {
+    key: string;
+    currency: Currency;
+    value: number;
+    convertedValue: number;
+  }>();
+  const addCategoryAmount = (key: string, amount: number, expense: Expense) => {
+    const convertedAmount = convertMoney(
+      amount,
+      expense.currency,
+      displayCurrency,
+      expense.occurredAt,
+    );
+    categoryTotals.set(key, (categoryTotals.get(key) ?? 0) + convertedAmount);
+
+    const nativeKey = `${key}:${expense.currency}`;
+    const current = nativeCategoryTotals.get(nativeKey);
+    nativeCategoryTotals.set(nativeKey, {
+      key,
+      currency: expense.currency,
+      value: (current?.value ?? 0) + amount,
+      convertedValue: (current?.convertedValue ?? 0) + convertedAmount,
+    });
+  };
+
   periodExpenses.forEach((expense) => {
     const items = itemsByExpense.get(expense.id) ?? [];
     if (items.length === 0) {
       const key = categoryKeyById.get(expense.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
-      categoryTotals.set(
-        key,
-        (categoryTotals.get(key) ?? 0) +
-          convertMoney(expense.amount, expense.currency, displayCurrency, expense.occurredAt),
-      );
+      addCategoryAmount(key, expense.amount, expense);
       return;
     }
 
     const itemTotal = items.reduce((sum, item) => sum + item.amount, 0);
     items.forEach((item) => {
       const key = categoryKeyById.get(item.categoryId) ?? UNALLOCATED_CATEGORY_KEY;
-      categoryTotals.set(
-        key,
-        (categoryTotals.get(key) ?? 0) +
-          convertMoney(item.amount, expense.currency, displayCurrency, expense.occurredAt),
-      );
+      addCategoryAmount(key, item.amount, expense);
     });
 
     const unallocated = expense.amount - itemTotal;
     if (Math.abs(unallocated) >= 0.005) {
-      categoryTotals.set(
-        UNALLOCATED_CATEGORY_KEY,
-        (categoryTotals.get(UNALLOCATED_CATEGORY_KEY) ?? 0) +
-          convertMoney(unallocated, expense.currency, displayCurrency, expense.occurredAt),
-      );
+      addCategoryAmount(UNALLOCATED_CATEGORY_KEY, unallocated, expense);
     }
   });
 
@@ -339,11 +361,25 @@ export function buildExpenseView({
       value,
     }))
     .sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
+  const nativeByCategory: ExpenseNativeCategoryTotal[] = [...nativeCategoryTotals.values()]
+    .filter(({ key, value }) =>
+      Math.abs(value) >= 0.005 && (selectedKeys.size === 0 || selectedKeys.has(key)),
+    )
+    .map(({ key, currency, value, convertedValue }) => ({
+      key,
+      name: categoryMeta.get(key)?.name ?? "Unallocated",
+      color: categoryMeta.get(key)?.color ?? "#7f93a6",
+      currency,
+      value,
+      convertedValue,
+    }))
+    .sort((left, right) => Math.abs(right.convertedValue) - Math.abs(left.convertedValue));
 
   return {
     total: history.reduce((sum, entry) => sum + entry.contribution, 0),
     history,
     byCategory,
+    nativeByCategory,
     periodExpenses,
   };
 }

@@ -39,9 +39,10 @@ Continue from the existing uncommitted worktree. The user must not have to resta
 - Russian user-facing instructions and errors consistently use the formal `Вы` form.
 - Recognized text and receipts remain itemized. Their review UI shows the derived aggregate in USD, shared source currency and date, plus editable item names, prices, and category buttons; duplicate parent inputs stay hidden and are derived from the items on save.
 - Every explicitly priced product remains a separate categorized item; drinking water is normalized to Food even if AI labels it Health.
-- Native currency mode keeps each history row in its source currency while totals, averages, charts, and category analytics consistently aggregate in USD.
+- Native currency mode keeps the headline total, daily average, and trend chart in USD while history rows and category totals stay separated and displayed in their source currencies.
+- Manual entry can use the same item editor as AI drafts: each position has its own name, price, and existing category buttons, and users can add or remove positions.
 - The unused legacy `shortDate` formatter, duplicate client-side receipt total recovery module, stale chart chunk rule, dead translation entries, redundant CSS selector, and unused export surface were removed; recovery tests now exercise the canonical server implementation.
-- `npm test` (75 tests), `npm run build`, `npm run lint`, and `git diff --check` pass after restoring per-item category controls and USD aggregate display.
+- `npm test` (77 tests), `npm run build`, `npm run lint`, and `git diff --check` pass after restoring per-item category controls and source-currency detail analytics with USD aggregate metrics.
 
 ## Working rules
 

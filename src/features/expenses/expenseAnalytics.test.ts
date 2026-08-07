@@ -9,6 +9,7 @@ import {
   getExpenseTrackingStart,
   getExpensePeriodRange,
   UNALLOCATED_CATEGORY_KEY,
+  type ExpenseFilters,
 } from "./expenseAnalytics";
 
 const categories: Category[] = [
@@ -137,6 +138,54 @@ describe("expense analytics", () => {
       .toEqual([["USD", 10], ["GEL", 20]]);
     expect(usdExpense).toEqual(expect.objectContaining({ amount: 10, currency: "USD" }));
     expect(gelExpense).toEqual(expect.objectContaining({ amount: 20, currency: "GEL" }));
+  });
+
+  it("keeps category totals separated in their source currencies", () => {
+    setLiveExchangeRates({
+      date: "2026-08-04",
+      USD: 1,
+      GEL: 2,
+      RUB: 100,
+      THB: 40,
+    });
+    const result = view([
+      expense({ id: "usd", amount: 10, currency: "USD" }),
+      expense({ id: "gel", amount: 20, currency: "GEL" }),
+    ]);
+
+    expect(result.total).toBe(20);
+    expect(result.nativeByCategory).toEqual([
+      expect.objectContaining({ key: "food", currency: "USD", value: 10, convertedValue: 10 }),
+      expect.objectContaining({ key: "food", currency: "GEL", value: 20, convertedValue: 10 }),
+    ]);
+  });
+
+  it("uses the converted USD total for averages and trend buckets", () => {
+    setLiveExchangeRates({
+      date: "2026-08-04",
+      USD: 1,
+      GEL: 2,
+      RUB: 100,
+      THB: 40,
+    });
+    const result = view([
+      expense({ id: "usd", amount: 10, currency: "USD" }),
+      expense({ id: "gel", amount: 20, currency: "GEL" }),
+    ]);
+    const filters: ExpenseFilters = { period: "today", categoryKeys: [] };
+
+    expect(calculateAverageDailyExpense(
+      result.history,
+      filters,
+      result.total,
+      dayjs("2026-08-04T18:00:00.000Z"),
+    )).toBe(20);
+    const buckets = buildExpenseTrendBuckets(
+      result.history,
+      filters,
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+    expect(buckets[buckets.length - 1]?.value).toBe(20);
   });
 
   it("uses local calendar boundaries for every period preset", () => {
