@@ -3,8 +3,8 @@ import type { Currency } from "../../shared/types/finance";
 import type { Locale } from "../../shared/i18n/i18nContext";
 import type { ExpenseTrendBucket } from "./expenseAnalytics";
 
-const HEIGHT = 320;
-const PLOT = { left: 12, right: 98, top: 20, bottom: 272 };
+const HEIGHT = 240;
+const PLOT = { left: 12, right: 98, top: 16, bottom: 202 };
 const Y_TICK_COUNT = 5;
 
 interface ExpenseTrendChartProps {

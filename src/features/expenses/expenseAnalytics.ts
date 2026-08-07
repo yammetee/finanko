@@ -162,16 +162,20 @@ export function buildExpenseTrendBuckets(
     cursor = bucketEnd.add(1, "millisecond");
   }
 
+  let cumulativeValue = 0;
+
   return buckets.map((bucket) => {
     const entries = history.filter((entry) => {
       const occurredAt = dayjs(entry.transaction.occurredAt);
       return !occurredAt.isBefore(bucket.start) && !occurredAt.isAfter(bucket.end);
     });
+    cumulativeValue += entries.reduce((sum, entry) => sum + entry.contribution, 0);
+
     return {
       key: `${bucket.start.toISOString()}-${bucket.end.toISOString()}`,
       start: bucket.start.toISOString(),
       end: bucket.end.toISOString(),
-      value: entries.reduce((sum, entry) => sum + entry.contribution, 0),
+      value: cumulativeValue,
       transactionCount: entries.length,
       unit,
     };

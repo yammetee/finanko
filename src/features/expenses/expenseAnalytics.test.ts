@@ -161,7 +161,7 @@ describe("expense analytics", () => {
       .toBe("2026-07-08 23:59");
   });
 
-  it("creates one point for every day of the selected month", () => {
+  it("creates a cumulative point for every day of the selected month", () => {
     const result = view([
       expense({ id: "first", amount: 30, occurredAt: "2026-08-01T12:00:00.000Z" }),
       expense({ id: "second", amount: 70, occurredAt: "2026-08-04T12:00:00.000Z" }),
@@ -173,8 +173,8 @@ describe("expense analytics", () => {
     );
 
     expect(buckets).toHaveLength(31);
-    expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([30, 0, 0, 70]);
-    expect(buckets.reduce((sum, bucket) => sum + bucket.value, 0)).toBe(result.total);
+    expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([30, 30, 30, 100]);
+    expect(buckets[buckets.length - 1].value).toBe(result.total);
   });
 
   it("splits today into 24 hourly points", () => {
@@ -186,7 +186,7 @@ describe("expense analytics", () => {
     );
 
     expect(buckets).toHaveLength(24);
-    expect(buckets.reduce((sum, bucket) => sum + bucket.value, 0)).toBe(100);
+    expect(buckets[buckets.length - 1].value).toBe(100);
   });
 
   it("always creates seven daily points for a week", () => {
@@ -219,7 +219,27 @@ describe("expense analytics", () => {
 
     expect(buckets).toHaveLength(12);
     expect(buckets[0]).toEqual(expect.objectContaining({ value: 20, transactionCount: 1 }));
-    expect(buckets[7]).toEqual(expect.objectContaining({ value: 80, transactionCount: 1 }));
+    expect(buckets[7]).toEqual(expect.objectContaining({ value: 100, transactionCount: 1 }));
+    expect(buckets[buckets.length - 1].value).toBe(100);
+  });
+
+  it("moves the cumulative trend down for negative corrections", () => {
+    const buckets = buildExpenseTrendBuckets(
+      [
+        {
+          transaction: expense({ id: "expense", occurredAt: "2026-08-01T12:00:00.000Z" }),
+          contribution: 100,
+        },
+        {
+          transaction: expense({ id: "correction", occurredAt: "2026-08-03T12:00:00.000Z" }),
+          contribution: -25,
+        },
+      ],
+      { period: "month", categoryKeys: [] },
+      dayjs("2026-08-04T18:00:00.000Z"),
+    );
+
+    expect(buckets.slice(0, 4).map((bucket) => bucket.value)).toEqual([100, 100, 75, 75]);
   });
 
   it("builds a stable read-only baseline", () => {

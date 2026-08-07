@@ -1,5 +1,5 @@
 import Button from "antd/es/button";
-import Drawer from "antd/es/drawer";
+import Modal from "antd/es/modal";
 import Tag from "antd/es/tag";
 import Typography from "antd/es/typography";
 import { Pencil, Trash2 } from "lucide-react";
@@ -48,12 +48,13 @@ export function ExpenseDetail({
   }).format(new Date(transaction.occurredAt));
 
   return (
-    <Drawer
+    <Modal
+      centered
       className="expense-detail"
       open={open}
-      onClose={onClose}
+      onCancel={onClose}
       title={t("expense.detailTitle")}
-      width={440}
+      width={520}
       footer={(
         <div className="expense-detail-actions">
           <Button
@@ -124,6 +125,6 @@ export function ExpenseDetail({
           </section>
         ) : null}
       </div>
-    </Drawer>
+    </Modal>
   );
 }
