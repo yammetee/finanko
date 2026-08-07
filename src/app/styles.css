@@ -212,7 +212,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .delete-confirm p { color: var(--text-secondary); font-size: 12px; margin: 0 0 10px; }
 .delete-confirm > div { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
 .delete-confirm .danger-button { background: var(--danger); border-color: var(--danger); color: white; }
-.currency-option { align-items: center; display: inline-flex; gap: 6px; }
 .currency-icon { display: inline-block; min-width: 1em; text-align: center; }
 
 .auth-screen { align-items: center; background: var(--bg); display: flex; justify-content: center; min-height: 100dvh; padding: 20px; }

@@ -40,6 +40,7 @@ Continue from the existing uncommitted worktree. The user must not have to resta
 - Recognized text and receipts remain itemized. Their review UI shows shared currency and date plus editable item names and prices, while duplicate parent amount, category, and description controls stay hidden and are derived from the items on save.
 - Every explicitly priced product remains a separate categorized item; drinking water is normalized to Food even if AI labels it Health.
 - Native currency mode keeps source currencies in totals and history instead of presenting them as USD; single-currency analytics stay available, while mixed-currency charts require choosing one conversion currency.
+- The unused legacy `shortDate` formatter, duplicate client-side receipt total recovery module, stale chart chunk rule, dead translation entries, redundant CSS selector, and unused export surface were removed; recovery tests now exercise the canonical server implementation.
 - `npm test` (74 tests), `npm run build`, `npm run lint`, and `git diff --check` pass after the item-review, water-category, and native-currency fixes.
 
 ## Working rules

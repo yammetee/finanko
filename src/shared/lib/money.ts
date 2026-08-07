@@ -7,7 +7,7 @@ const FRACTION_DIGITS: Record<Currency, number> = {
   THB: 2,
 };
 
-export function decimalToMinor(amount: number, currency: Currency) {
+function decimalToMinor(amount: number, currency: Currency) {
   if (!Number.isFinite(amount)) throw new Error("Money amount must be finite");
   const factor = 10 ** FRACTION_DIGITS[currency];
   const amountMinor = Math.round(amount * factor);

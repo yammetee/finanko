@@ -20,7 +20,7 @@ export interface ExpenseFilters {
   customRange?: [string, string];
 }
 
-export interface ExpenseCategoryGroup {
+interface ExpenseCategoryGroup {
   key: string;
   name: string;
   color: string;

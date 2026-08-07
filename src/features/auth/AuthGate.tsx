@@ -56,7 +56,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (loading || (currentUser && !expensesReady)) {
     return (
-      <div className="auth-screen auth-loading-screen">
+      <div className="auth-screen">
         <div className="auth-loader" />
       </div>
     );
@@ -101,7 +101,7 @@ export function AuthGate({ children }: AuthGateProps) {
       <div className="auth-card">
         <div className="auth-stack">
           <div>
-            <span className="brand-mark">F</span>
+            <span>F</span>
             <h1 className="auth-title">Finanko</h1>
             <p className="muted auth-description">{t("auth.description")}</p>
           </div>

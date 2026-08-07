@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import handler, { hasUnsafeTextIntent, isFinancialExpenseText, validateAiPayload } from "./ai";
+import handler, { deriveReceiptTotal, hasUnsafeTextIntent, isFinancialExpenseText, validateAiPayload } from "./ai";
 
 function responseRecorder() {
   return {
@@ -35,6 +35,42 @@ function allowedQuotaResponse(overrides: Record<string, unknown> = {}) {
     }],
   } as Response;
 }
+
+describe("receipt total recovery", () => {
+  it("recovers the payable total without treating cash or change as total", () => {
+    expect(deriveReceiptTotal({
+      rows: [
+        ...[58, 79, 66, 19, 39, 10, 55, 20, 40, 30, 20].map((amount) => ({
+          rawText: String(amount),
+          rowType: "product" as const,
+          amount,
+          quantity: null,
+          unitPrice: null,
+          confidence: 1,
+        })),
+        { rawText: "subtotal", rowType: "subtotal", amount: 436, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "discount", rowType: "discount", amount: 5, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "discount", rowType: "discount", amount: 7, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "discount", rowType: "discount", amount: 4, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "total", rowType: "total", amount: 420, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "payment", rowType: "payment", amount: 1000, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "change", rowType: "change", amount: 580, quantity: null, unitPrice: null, confidence: 1 },
+      ],
+      totals: { subtotal: 436, discount: 16, tax: null, total: null },
+    })).toBe(420);
+  });
+
+  it("falls back to item arithmetic when printed totals are unreadable", () => {
+    expect(deriveReceiptTotal({
+      rows: [
+        { rawText: "item", rowType: "product", amount: 100, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "item", rowType: "product", amount: 50, quantity: null, unitPrice: null, confidence: 1 },
+        { rawText: "discount", rowType: "discount", amount: 10, quantity: null, unitPrice: null, confidence: 1 },
+      ],
+      totals: { subtotal: null, discount: null, tax: null, total: null },
+    })).toBe(140);
+  });
+});
 
 describe("AI request policy", () => {
   afterEach(() => {

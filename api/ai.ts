@@ -135,7 +135,7 @@ function roundReceiptMoney(value: number) {
 }
 
 // Keep the serverless entrypoint self-contained so Vercel never has to load client source at runtime.
-function deriveReceiptTotal(ocr: ReceiptOcrResult) {
+export function deriveReceiptTotal(ocr: Pick<ReceiptOcrResult, "rows" | "totals">) {
   if (positiveReceiptAmount(ocr.totals.total)) return roundReceiptMoney(ocr.totals.total);
 
   const explicitTotal = [...ocr.rows]

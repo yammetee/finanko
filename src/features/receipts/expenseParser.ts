@@ -32,7 +32,7 @@ export interface ParsedExpense {
   receiptReview?: ReceiptReview;
 }
 
-export interface ParseTextExpenseInput {
+interface ParseTextExpenseInput {
   text: string;
   currency: Currency;
   categories: Category[];

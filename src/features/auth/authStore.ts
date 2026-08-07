@@ -4,7 +4,7 @@ import { getSupabaseClient, isSupabaseConfigured } from "../../shared/api/supaba
 
 let unsubscribeAuth: (() => void) | null = null;
 
-export interface SignUpResult {
+interface SignUpResult {
   requiresEmailConfirmation: boolean;
 }
 
