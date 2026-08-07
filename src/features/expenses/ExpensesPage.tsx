@@ -35,6 +35,8 @@ import { createEmptyExpenseDraft, expenseFormToInput, type ExpenseDraft, type Ex
 
 const { RangePicker } = DatePicker;
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
+const MOBILE_CATEGORY_LIMIT = 5;
+const HISTORY_LIMIT = 8;
 type DisplayCurrency = Currency | "native";
 
 function receiptErrorKey(error: unknown) {
@@ -61,12 +63,18 @@ export function ExpensesPage() {
   const [ratesVersion, setRatesVersion] = useState(0);
   const [currencyMode, setCurrencyMode] = useState<DisplayCurrency>("native");
   const [filters, setFilters] = useState<ExpenseFilters>({ period: "month", categoryKeys: [] });
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
     let active = true;
     void refreshLiveExchangeRates().then((updated) => { if (active && updated) setRatesVersion((value) => value + 1); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    setShowAllHistory(false);
+  }, [filters.period, filters.categoryKeys, filters.customRange]);
 
   const activePortfolios = useMemo(() => finance.portfolios.filter((portfolio) => !portfolio.deletedAt), [finance.portfolios]);
   const primaryPortfolio = activePortfolios.find((portfolio) => portfolio.id === finance.activePortfolioId) ?? activePortfolios[0];
@@ -104,6 +112,8 @@ export function ExpensesPage() {
     const keys = group.key === otherKey ? [otherKey, UNALLOCATED_CATEGORY_KEY] : [group.key];
     return keys.every((key) => filters.categoryKeys.includes(key));
   })?.key ?? "";
+  const visibleHistory = showAllHistory ? expenseView.history : expenseView.history.slice(0, HISTORY_LIMIT);
+  const hiddenHistoryCount = Math.max(0, expenseView.history.length - HISTORY_LIMIT);
 
   function closeForm() { setFormMode(null); setDraft(null); setEditing(null); setParseError(null); setParsing(false); }
   function openManual() { setEditing(null); setFormMode("manual"); setParseError(null); setDraft(createEmptyExpenseDraft(baseCurrency, primaryCategories[0]?.id)); }
@@ -169,7 +179,7 @@ export function ExpensesPage() {
   const home = (
     <>
       <section className="summary-header">
-        <div><span>{t("expense.spent")}</span><strong>{formatMoney(expenseView.total, displayCurrency)}</strong><small>{t("expense.transactionCount", { count: expenseView.history.length })} · {t("expense.averageDailyExpense")} {formatMoney(average, displayCurrency)}</small></div>
+        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{formatMoney(expenseView.total, displayCurrency)}</strong><small><span>{t("expense.transactionCount", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {formatMoney(average, displayCurrency)}</span></small></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>
@@ -178,8 +188,12 @@ export function ExpensesPage() {
       </section>
 
       <section className="filters" aria-label={t("expense.period")}>
-        <div className="button-filter">{PERIODS.map((period) => <button className={filters.period === period ? "active" : ""} aria-pressed={filters.period === period} key={period} type="button" onClick={() => setFilters((current) => ({ ...current, period, customRange: period === "custom" && !current.customRange ? [dayjs().startOf("month").toISOString(), dayjs().endOf("day").toISOString()] : current.customRange }))}>{t(`expense.period.${period}`)}</button>)}</div>
-        <div className="button-filter category-filter"><button className={selectedCategory === "" ? "active" : ""} type="button" onClick={() => chooseCategory("")}>{t("expense.allCategories")}</button>{categoryGroups.map((group) => <button className={selectedCategory === group.key ? "active" : ""} key={group.key} type="button" onClick={() => chooseCategory(group.key)}><i style={{ background: group.color }} />{group.name}</button>)}</div>
+        <div className="button-filter period-filter">{PERIODS.map((period) => <button className={filters.period === period ? "active" : ""} aria-pressed={filters.period === period} key={period} type="button" onClick={() => setFilters((current) => ({ ...current, period, customRange: period === "custom" && !current.customRange ? [dayjs().startOf("month").toISOString(), dayjs().endOf("day").toISOString()] : current.customRange }))}>{t(`expense.period.${period}`)}</button>)}</div>
+        <div className={`button-filter category-filter${showAllCategories ? " expanded" : ""}`}>
+          <button className={selectedCategory === "" ? "active" : ""} type="button" onClick={() => chooseCategory("")}>{t("expense.allCategories")}</button>
+          {categoryGroups.map((group, index) => <button className={`${selectedCategory === group.key ? "active" : ""}${index >= MOBILE_CATEGORY_LIMIT ? " category-extra" : ""}`} key={group.key} type="button" onClick={() => chooseCategory(group.key)}><i style={{ background: group.color }} />{group.name}</button>)}
+          {categoryGroups.length > MOBILE_CATEGORY_LIMIT ? <button className="category-toggle" type="button" aria-expanded={showAllCategories} onClick={() => setShowAllCategories((value) => !value)}>{showAllCategories ? t("actions.collapse") : t("actions.more", { count: categoryGroups.length - MOBILE_CATEGORY_LIMIT })}</button> : null}
+        </div>
         {filters.period === "custom" ? <RangePicker className="date-range" allowClear={false} value={filters.customRange ? [dayjs(filters.customRange[0]), dayjs(filters.customRange[1])] : undefined} onChange={(range) => { if (range?.[0] && range[1]) setFilters((current) => ({ ...current, customRange: [range[0]!.toISOString(), range[1]!.toISOString()] })); }} /> : null}
       </section>
 
@@ -190,7 +204,11 @@ export function ExpensesPage() {
         </div>
       ) : null}
 
-      <section className="history-section"><h2>{t("expense.history")}</h2><ExpenseRows entries={expenseView.history} displayCurrency={displayCurrency} categoryFiltered={filters.categoryKeys.length > 0} onSelect={setSelected} /></section>
+      <section className="history-section">
+        <div className="section-heading"><h2>{t("expense.history")}</h2><span>{expenseView.history.length}</span></div>
+        <ExpenseRows entries={visibleHistory} displayCurrency={displayCurrency} onSelect={setSelected} />
+        {hiddenHistoryCount > 0 ? <button className="history-toggle" type="button" aria-expanded={showAllHistory} onClick={() => setShowAllHistory((value) => !value)}>{showAllHistory ? t("actions.collapse") : t("actions.showMore", { count: hiddenHistoryCount })}</button> : null}
+      </section>
     </>
   );
 
