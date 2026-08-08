@@ -7,7 +7,7 @@ export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent
     const itemEvents = events.map((event) => {
       if (event.currency === item.quoteCurrency) return event;
       const convert = (value?: string) => value === undefined ? undefined : convertCapitalMoney(value, event.currency, item.quoteCurrency, event.occurredAt);
-      return { ...event, amount: convert(event.amount), unitPrice: convert(event.unitPrice), fee: convert(event.fee), tax: convert(event.tax), currency: item.quoteCurrency };
+      return { ...event, amount: convert(event.amount), fee: convert(event.fee), tax: convert(event.tax), currency: item.quoteCurrency };
     });
     const marketPrice = quotes[item.id]?.price;
     const resolvedPrice = marketPrice ? convertCapitalMoney(marketPrice, quotes[item.id].currency, item.quoteCurrency) : item.manualPrice ?? "0";

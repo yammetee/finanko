@@ -19,9 +19,9 @@ export function validateMarketAssets(value: unknown): MarketAsset[] | null {
     return typeof row.itemId === "string" && row.itemId.length <= 100
       && ["stock", "fund", "crypto"].includes(String(row.type))
       && typeof row.symbol === "string" && /^[A-Za-z0-9._-]{1,32}$/.test(row.symbol)
-      && (row.provider === undefined || ["bybit", "coingecko", "nasdaq"].includes(String(row.provider)))
+      && (row.provider === undefined || ["bybit", "coingecko", "nasdaq", "yahoo"].includes(String(row.provider)))
       && (row.providerAssetId === undefined || (typeof row.providerAssetId === "string" && row.providerAssetId.length <= 100))
-      && (row.fallbackProvider === undefined || ["bybit", "coingecko", "nasdaq"].includes(String(row.fallbackProvider)))
+      && (row.fallbackProvider === undefined || ["bybit", "coingecko", "nasdaq", "yahoo"].includes(String(row.fallbackProvider)))
       && (row.fallbackAssetId === undefined || (typeof row.fallbackAssetId === "string" && row.fallbackAssetId.length <= 100));
   })) return null;
   return assets as MarketAsset[];
@@ -87,6 +87,16 @@ async function nasdaqQuote(asset: MarketAsset): Promise<NormalizedQuote> {
   return { itemId: asset.itemId, price, currency: "USD", provider: "nasdaq", quotedAt: parseNasdaqDate(body.data?.primaryData?.lastTradeTimestamp) ?? new Date().toISOString() };
 }
 
+async function yahooQuote(asset: MarketAsset): Promise<NormalizedQuote> {
+  const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
+  const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`);
+  if (!response.ok) throw new Error("Yahoo Finance unavailable");
+  const body = await response.json() as { chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; regularMarketTime?: number } }>; error?: unknown } };
+  const meta = body.chart?.result?.[0]?.meta;
+  if (body.chart?.error || typeof meta?.regularMarketPrice !== "number" || !Number.isFinite(meta.regularMarketPrice)) throw new Error("Invalid Yahoo Finance quote");
+  return { itemId: asset.itemId, price: String(meta.regularMarketPrice), currency: "USD", provider: "yahoo", quotedAt: new Date((meta.regularMarketTime ?? Date.now() / 1000) * 1000).toISOString() };
+}
+
 export async function fetchMarketQuotes(assets: MarketAsset[]) {
   const crypto = assets.filter((asset) => asset.type === "crypto");
   const securities = assets.filter((asset) => asset.type !== "crypto");
@@ -98,7 +108,11 @@ export async function fetchMarketQuotes(assets: MarketAsset[]) {
     try { return fanOutQuotes([await primary(asset)], matching); } catch { try { return fanOutQuotes([await fallback(fallbackAsset)], matching); } catch { return []; } }
   }));
   const securityQuotes = (await Promise.all(uniqueAssets(securities).map(async (matching) => {
-    try { return fanOutQuotes([await nasdaqQuote(matching[0])], matching); } catch { return []; }
+    const asset = matching[0];
+    const primary = asset.provider === "yahoo" ? yahooQuote : nasdaqQuote;
+    const fallback = asset.fallbackProvider === "nasdaq" ? nasdaqQuote : yahooQuote;
+    const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
+    try { return fanOutQuotes([await primary(asset)], matching); } catch { try { return fanOutQuotes([await fallback(fallbackAsset)], matching); } catch { return []; } }
   }))).flat();
   return [...cryptoQuotes.flat(), ...securityQuotes];
 }
@@ -142,6 +156,19 @@ async function nasdaqHistory(asset: MarketAsset, startDate: string): Promise<Nor
   });
 }
 
+async function yahooHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+  const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
+  const period1 = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
+  const period2 = Math.floor(Date.now() / 1000);
+  const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${period1}&period2=${period2}`);
+  if (!response.ok) throw new Error("Yahoo Finance history unavailable");
+  const body = await response.json() as { chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }>; error?: unknown } };
+  const result = body.chart?.result?.[0];
+  if (body.chart?.error || !result?.timestamp) throw new Error("Invalid Yahoo Finance history");
+  const closes = result.indicators?.quote?.[0]?.close ?? [];
+  return result.timestamp.flatMap((timestamp, index) => typeof closes[index] === "number" && Number.isFinite(closes[index]) ? [{ itemId: asset.itemId, price: String(closes[index]), currency: "USD" as const, provider: "yahoo", quotedAt: new Date(timestamp * 1000).toISOString() }] : []);
+}
+
 export async function fetchMarketHistory(assets: MarketAsset[], startDate: string) {
   const crypto = assets.filter((asset) => asset.type === "crypto");
   const securities = assets.filter((asset) => asset.type !== "crypto");
@@ -152,7 +179,13 @@ export async function fetchMarketHistory(assets: MarketAsset[], startDate: strin
     const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
     try { return fanOutQuotes(await primary(asset, startDate), matching); } catch { try { return fanOutQuotes(await fallback(fallbackAsset, startDate), matching); } catch { return []; } }
   }))).flat();
-  const securityHistory = (await Promise.all(uniqueAssets(securities).map(async (matching) => fanOutQuotes(await nasdaqHistory(matching[0], startDate).catch(() => []), matching)))).flat();
+  const securityHistory = (await Promise.all(uniqueAssets(securities).map(async (matching) => {
+    const asset = matching[0];
+    const primary = asset.provider === "yahoo" ? yahooHistory : nasdaqHistory;
+    const fallback = asset.fallbackProvider === "nasdaq" ? nasdaqHistory : yahooHistory;
+    const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
+    try { return fanOutQuotes(await primary(asset, startDate), matching); } catch { try { return fanOutQuotes(await fallback(fallbackAsset, startDate), matching); } catch { return []; } }
+  }))).flat();
   return [...cryptoHistory, ...securityHistory];
 }
 

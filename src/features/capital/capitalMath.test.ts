@@ -8,9 +8,9 @@ const event = (value: Partial<CapitalEvent> & Pick<CapitalEvent, "id" | "type">)
 describe("capital event replay", () => {
   it("calculates weighted average and partial-sale profit without floating point", () => {
     const result = replayCapitalEvents("btc", [
-      event({ id: "1", type: "buy", quantity: "0.1", unitPrice: "50000", fee: "10" }),
-      event({ id: "2", type: "buy", quantity: "0.2", unitPrice: "60000" }),
-      event({ id: "3", type: "sell", quantity: "0.1", unitPrice: "70000", fee: "5" }),
+      event({ id: "1", type: "buy", quantity: "0.1", amount: "5000", fee: "10" }),
+      event({ id: "2", type: "buy", quantity: "0.2", amount: "12000" }),
+      event({ id: "3", type: "sell", quantity: "0.1", amount: "7000", fee: "5" }),
     ]);
     expect(result.quantity).toBe("0.2");
     expect(result.costBasis).toBe("11340");
@@ -20,7 +20,7 @@ describe("capital event replay", () => {
 
   it("excludes expected events and preserves cost basis through a split", () => {
     const result = replayCapitalEvents("btc", [
-      event({ id: "1", type: "buy", quantity: "2", unitPrice: "100" }),
+      event({ id: "1", type: "buy", quantity: "2", amount: "200" }),
       event({ id: "2", type: "split", splitRatio: "2" }),
       event({ id: "3", type: "dividend", amount: "20", tax: "6", status: "expected" }),
       event({ id: "4", type: "dividend", amount: "10", tax: "3" }),
@@ -33,8 +33,8 @@ describe("capital event replay", () => {
 
   it("calculates current, unrealized, realized, income, and total result", () => {
     const result = replayCapitalEvents("btc", [
-      event({ id: "1", type: "buy", quantity: "2", unitPrice: "100", fee: "4" }),
-      event({ id: "2", type: "sell", quantity: "1", unitPrice: "130", fee: "2" }),
+      event({ id: "1", type: "buy", quantity: "2", amount: "200", fee: "4" }),
+      event({ id: "2", type: "sell", quantity: "1", amount: "130", fee: "2" }),
       event({ id: "3", type: "dividend", amount: "10", tax: "3" }),
     ], "120");
     expect(result.currentValue).toBe("120");
@@ -68,8 +68,8 @@ describe("capital event replay", () => {
 
   it("preserves database-scale decimal precision without floating-point drift", () => {
     const result = replayCapitalEvents("btc", [
-      event({ id: "1", type: "buy", quantity: "0.0000000001", unitPrice: "1234567890.1234567890" }),
-      event({ id: "2", type: "buy", quantity: "0.0000000002", unitPrice: "1234567890.1234567890" }),
+      event({ id: "1", type: "buy", quantity: "0.0000000001", amount: "0.123456789012345678" }),
+      event({ id: "2", type: "buy", quantity: "0.0000000002", amount: "0.246913578024691357" }),
     ], "1234567890.1234567890");
     expect(result.quantity).toBe("0.0000000003");
     expect(result.currentValue).toBe("0.370370367037037036");

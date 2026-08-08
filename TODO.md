@@ -161,10 +161,10 @@ Exit condition: capital can operate end-to-end using manual data while expenses 
 - [x] Identify securities with an editable provider asset ID. Exchange/MIC support remains.
 - [x] Identify listed crypto with an editable stable provider coin ID rather than ticker alone.
 - [ ] Identify tokens with chain and contract address.
-- [x] Store a primary and fallback price source on each item.
+- [x] Store a primary and fallback price source on each market item.
 - [ ] Store an independent income/corporate-action source when needed.
 - [x] Implement normalized provider adapters so vendor response shapes never enter domain or UI code.
-- [x] Use Bybit and CoinGecko for crypto, no-key Nasdaq market data for US stocks/funds, and the existing FX source.
+- [x] Use Bybit and CoinGecko for crypto, no-key Nasdaq and Yahoo market data for US stocks/funds, and the existing FX source.
 - [x] Batch unique instruments across user items to avoid repeated provider calls.
 - [x] Cache normalized prices with provider and retrieval timestamp.
 - [x] Fall back to the secondary provider, then the last known quote, then an explicit manual price.
@@ -181,7 +181,7 @@ Exit condition: every supported item can resolve a stable market identity and cu
 - [x] Support staking income as quantity plus fair value at receipt.
 - [x] Prevent repeated interest generation from duplicating expected or confirmed events. Provider dividend/split idempotency uses the same stored external identifiers but remains to be connected.
 
-Exit condition: dividends, interest, staking, and splits arrive as editable expected events and affect capital only after confirmation.
+Exit condition: calculated interest arrives as an editable expected event and affects capital only after confirmation. Dividends, staking, and splits remain editable manual events while free reliable automation is unavailable.
 
 ## Stage 6: Shared UI foundation
 
@@ -229,8 +229,8 @@ Exit condition: the capital page is useful on mobile and desktop with no unneces
 - [x] Let provider data prefill an item while keeping every field editable before save.
 - [x] Add manual buy, sell, deposit, withdrawal, transfer, dividend, interest, staking, fee, tax, split, and adjustment events.
 - [x] Add a fast opening-position flow using quantity and total invested amount, saved atomically with the new item.
-- [x] Edit or void an incorrect event without destroying unrelated history.
-- [x] Archive and restore closed items and groups without deleting their events.
+- [x] Edit or permanently delete an incorrect event without destroying unrelated history.
+- [x] Permanently delete groups, items, and events with explicit confirmation.
 - [x] Confirm, edit, or ignore expected events in the same visual form pattern.
 - [x] Never introduce capital controls into expense entry forms.
 

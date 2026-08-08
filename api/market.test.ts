@@ -6,6 +6,7 @@ describe("market quote API", () => {
 
   it("accepts only a bounded allow-listed asset request", () => {
     expect(validateMarketAssets({ assets: [{ itemId: "btc", type: "crypto", symbol: "BTC", provider: "bybit" }] })).toHaveLength(1);
+    expect(validateMarketAssets({ assets: [{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "nasdaq", fallbackProvider: "yahoo" }] })).toHaveLength(1);
     expect(validateMarketAssets({ assets: [{ itemId: "btc", type: "crypto", symbol: "BTC/USD" }] })).toBeNull();
     expect(validateMarketAssets({ assets: Array.from({ length: 31 }, (_, index) => ({ itemId: String(index), type: "stock", symbol: "AAPL" })) })).toBeNull();
   });
@@ -18,6 +19,13 @@ describe("market quote API", () => {
   it("normalizes a no-key Nasdaq security quote", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ data: { primaryData: { lastSalePrice: "$313.33", lastTradeTimestamp: "Aug 6, 2026" } }, status: { rCode: 200 } }) } as Response);
     await expect(fetchMarketQuotes([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "nasdaq" }])).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "313.33", currency: "USD", provider: "nasdaq" })]);
+  });
+
+  it("falls back from Nasdaq to a no-key Yahoo Finance quote", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ ok: false } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ chart: { result: [{ meta: { regularMarketPrice: 315.25, regularMarketTime: 1_786_000_000 } }], error: null } }) } as Response);
+    await expect(fetchMarketQuotes([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "nasdaq", fallbackProvider: "yahoo" }])).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "315.25", provider: "yahoo" })]);
   });
 
   it("falls back from Bybit to CoinGecko", async () => {
@@ -49,6 +57,13 @@ describe("market quote API", () => {
   it("normalizes no-key Nasdaq daily security history", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ data: { tradesTable: { rows: [{ date: "08/07/2026", close: "$220.50" }] } }, status: { rCode: 200 } }) } as Response);
     await expect(fetchMarketHistory([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "nasdaq" }], "2026-08-01")).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "220.50", provider: "nasdaq", quotedAt: "2026-08-07T21:00:00.000Z" })]);
+  });
+
+  it("falls back from Nasdaq to no-key Yahoo Finance history", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ ok: false } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ chart: { result: [{ timestamp: [1_786_118_400], indicators: { quote: [{ close: [221.75] }] } }], error: null } }) } as Response);
+    await expect(fetchMarketHistory([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "nasdaq", fallbackProvider: "yahoo" }], "2026-08-01")).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "221.75", provider: "yahoo" })]);
   });
 
   it("normalizes editable crypto and security search suggestions", async () => {

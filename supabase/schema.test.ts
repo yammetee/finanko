@@ -60,6 +60,8 @@ describe("minimal Finanko schema", () => {
     expect(schema).toContain("security definer\nset search_path = ''");
     expect(schema).toContain("capital_events_external_unique_idx");
     expect(schema).toContain("capital_events_required_values_check");
+    expect(schema).not.toContain("unit_price");
+    expect(schema).not.toContain("notes text");
     expect(schema).toContain("annual_interest_rate");
     expect(schema).toContain("interest_compounding");
     expect(schema).toContain("external_provider = excluded.external_provider");
@@ -67,8 +69,11 @@ describe("minimal Finanko schema", () => {
     const capitalSchema = schema.slice(schema.indexOf("create table if not exists finanko_private.capital_groups"));
     expect(capitalSchema).not.toContain("references public.expenses");
     expect(capitalSchema).not.toContain("references public.categories");
-    expect(schema).toContain("drop table if exists finanko_private.market_actions");
-    expect(schema).toContain("drop table if exists finanko_private.market_quotes");
+    expect(schema).not.toContain("archived_at");
+    expect(schema).not.toContain("capital_events drop column deleted_at");
+    expect(schema).toContain("create or replace function public.delete_capital_group(target_id text)");
+    expect(schema).toContain("create or replace function public.delete_capital_item(target_id text)");
+    expect(schema).toContain("create or replace function public.delete_capital_event(target_id text)");
   });
 
   it("rejects unauthenticated and cross-owner capital writes", () => {
@@ -77,7 +82,7 @@ describe("minimal Finanko schema", () => {
     expect(schema).toContain("where g.owner_id <> requester_id");
     expect(schema).toContain("where i.owner_id <> requester_id");
     expect(schema).toContain("where e.owner_id <> requester_id");
-    for (const signature of ["get_capital_snapshot()", "save_capital_snapshot(jsonb)", "save_capital_valuation(jsonb, numeric)", "rebuild_capital_history(jsonb, jsonb)"]) {
+    for (const signature of ["get_capital_snapshot()", "save_capital_snapshot(jsonb)", "save_capital_valuation(jsonb, numeric)", "rebuild_capital_history(jsonb, jsonb)", "delete_capital_group(text)", "delete_capital_item(text)", "delete_capital_event(text)"]) {
       expect(schema).toContain(`revoke all on function public.${signature} from public, anon;`);
       expect(schema).toContain(`grant execute on function public.${signature} to authenticated;`);
     }

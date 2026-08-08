@@ -33,11 +33,12 @@ interface CapitalState extends CapitalSnapshot {
 }
 
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
+const localDate = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 async function persistCurrentValuation(quotes: CapitalQuote[] = []) {
   const state = useCapitalStore.getState();
   const totalUsd = getCapitalTotalUsd(state.items, state.events, state.quotes);
   await saveCapitalValuation(quotes, totalUsd);
-  const date = new Date().toISOString().slice(0, 10);
+  const date = localDate();
   useCapitalStore.setState((current) => ({ valuations: [...current.valuations.filter((value) => value.date !== date), { date, totalUsd }] }));
 }
 async function generateExpectedInterest() {
@@ -77,7 +78,7 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
   },
   saveOpeningPosition: async (input, quantity, invested, occurredAt) => {
     const item = { ...input, id: uid("capital-item") };
-    const event: CapitalEvent = { id: uid("capital-event"), itemId: item.id, type: item.type === "cash" || item.type === "deposit" ? "deposit" : "buy", status: "confirmed", occurredAt, quantity: quantity || undefined, amount: invested, currency: item.quoteCurrency, source: "manual", notes: "Opening position" };
+    const event: CapitalEvent = { id: uid("capital-event"), itemId: item.id, type: item.type === "cash" || item.type === "deposit" ? "deposit" : "buy", status: "confirmed", occurredAt, quantity: quantity || undefined, amount: invested, currency: item.quoteCurrency, source: "manual" };
     await saveCapitalData({ items: [item], events: [event] });
     set((state) => ({ items: [...state.items, item], events: [...state.events, event] }));
     void persistCurrentValuation().catch(() => undefined);
@@ -93,9 +94,9 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
     return value;
   },
-  deleteGroup: async (id) => { await deleteCapitalGroup(id); await useCapitalStore.getState().initialize(); },
-  deleteItem: async (id) => { await deleteCapitalItem(id); await useCapitalStore.getState().initialize(); },
-  deleteEvent: async (id) => { await deleteCapitalEvent(id); await useCapitalStore.getState().initialize(); },
+  deleteGroup: async (id) => { await deleteCapitalGroup(id); await useCapitalStore.getState().initialize(); await useCapitalStore.getState().rebuildHistory(); },
+  deleteItem: async (id) => { await deleteCapitalItem(id); await useCapitalStore.getState().initialize(); await useCapitalStore.getState().rebuildHistory(); },
+  deleteEvent: async (id) => { await deleteCapitalEvent(id); await useCapitalStore.getState().initialize(); await useCapitalStore.getState().rebuildHistory(); },
   setEventStatus: async (id, status) => {
     const value = useCapitalStore.getState().events.find((entry) => entry.id === id);
     if (!value) return;
@@ -115,7 +116,7 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
       const merged = { ...current.quotes, ...Object.fromEntries(quotes.map((quote) => [quote.itemId, quote])) };
       const totalUsd = getCapitalTotalUsd(current.items, current.events, merged);
       await saveCapitalValuation(quotes, totalUsd);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localDate();
       const resolved = new Set(quotes.map((quote) => quote.itemId));
       const unavailableQuoteItemIds = marketItems.filter((item) => !resolved.has(item.id)).map((item) => item.id);
       set((state) => ({ quotes: merged, quotesPartial: unavailableQuoteItemIds.length > 0, unavailableQuoteItemIds, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));

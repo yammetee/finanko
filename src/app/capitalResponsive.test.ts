@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 
 const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 const page = readFileSync(new URL("../features/capital/CapitalPage.tsx", import.meta.url), "utf8");
+const assetForm = readFileSync(new URL("../features/capital/CapitalAssetForm.tsx", import.meta.url), "utf8");
+const eventForm = readFileSync(new URL("../features/capital/CapitalEventForm.tsx", import.meta.url), "utf8");
+const groupForm = readFileSync(new URL("../features/capital/CapitalGroupForm.tsx", import.meta.url), "utf8");
 
 describe("capital responsive and accessible states", () => {
   it("provides compact layouts for mobile and narrow screens", () => {
@@ -15,21 +18,32 @@ describe("capital responsive and accessible states", () => {
 
   it("keeps capital form controls at an iOS-safe focus size", () => {
     expect(styles).toContain("button, input, select, textarea { font: inherit; }");
-    expect(styles).toContain(".capital-editor input, .capital-editor select { font-size: 16px; }");
+    expect(styles).toContain(".capital-form input { font-size: 16px; }");
+    expect(page).not.toContain("capital-editor");
   });
 
   it("keeps provider internals out of the asset form", () => {
-    expect(page).toContain("<ChoiceGroup");
-    expect(page).not.toContain("Основной источник");
-    expect(page).not.toContain("ID у основного источника");
-    expect(page).not.toContain("Запасной источник");
+    expect(assetForm).toContain("<ChoiceGroup");
+    expect(assetForm).not.toContain("Основной источник");
+    expect(assetForm).not.toContain("ID у основного источника");
+    expect(assetForm).not.toContain("Запасной источник");
+  });
+
+  it("uses the shared form page pattern for every capital editor", () => {
+    for (const source of [assetForm, eventForm, groupForm]) {
+      expect(source).toContain('className="form-page"');
+      expect(source).toContain('className="expense-form capital-form"');
+      expect(source).toContain("<Form.Item");
+    }
+    expect(eventForm).toContain("<DatePicker");
+    expect(page).not.toContain("<form");
   });
 
   it("exposes errors, loading, filters, and icon actions to assistive technology", () => {
     expect(page).toContain('role="alert"');
     expect(page).toContain('role="status"');
     expect(page).toContain("aria-pressed=");
-    expect(page).toContain('aria-label={ru ? "Изменить группу"');
+    expect(page).toContain('aria-label={t("actions.edit")}');
     expect(styles).toContain("select:focus-visible");
   });
 });

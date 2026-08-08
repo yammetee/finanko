@@ -13,8 +13,7 @@ export function replayCapitalEvents(itemId: string, events: CapitalEvent[], curr
 
   for (const event of confirmed) {
     const eventQuantity = decimal(event.quantity);
-    const unitPrice = decimal(event.unitPrice);
-    const amount = event.amount === undefined ? multiply(eventQuantity, unitPrice) : decimal(event.amount);
+    const amount = decimal(event.amount);
     const fee = decimal(event.fee);
     const tax = decimal(event.tax);
 

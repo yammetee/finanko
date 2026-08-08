@@ -1,5 +1,5 @@
-import type { Currency } from "../../shared/types/expense";
-
+export const CAPITAL_CURRENCIES = ["USD", "GEL", "RUB", "THB"] as const;
+export type CapitalCurrency = typeof CAPITAL_CURRENCIES[number];
 export type CapitalItemType = "stock" | "fund" | "crypto" | "cash" | "deposit";
 export type CapitalEventType = "buy" | "sell" | "deposit" | "withdrawal" | "transfer" | "dividend" | "interest" | "staking" | "fee" | "tax" | "split" | "adjustment";
 export type CapitalEventStatus = "expected" | "confirmed" | "ignored";
@@ -15,11 +15,11 @@ export interface CapitalItem {
   name: string;
   type: CapitalItemType;
   symbol?: string;
-  quoteCurrency: Currency;
+  quoteCurrency: CapitalCurrency;
   manualPrice?: string;
-  primaryProvider?: "bybit" | "coingecko" | "nasdaq";
+  primaryProvider?: "bybit" | "coingecko" | "nasdaq" | "yahoo";
   primaryAssetId?: string;
-  fallbackProvider?: "bybit" | "coingecko" | "nasdaq";
+  fallbackProvider?: "bybit" | "coingecko" | "nasdaq" | "yahoo";
   fallbackAssetId?: string;
   annualInterestRate?: string;
   interestCadence?: "monthly" | "quarterly" | "yearly";
@@ -53,14 +53,12 @@ export interface CapitalEvent {
   status: CapitalEventStatus;
   occurredAt: string;
   quantity?: string;
-  unitPrice?: string;
   amount?: string;
   fee?: string;
   tax?: string;
-  currency: Currency;
+  currency: CapitalCurrency;
   splitRatio?: string;
   source: "manual" | "automatic";
-  notes?: string;
   reinvest?: boolean;
   externalProvider?: string;
   externalId?: string;
