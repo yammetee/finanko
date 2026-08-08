@@ -2,7 +2,9 @@ import AntApp from "antd/es/app";
 import { Check, ChevronRight, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
+import { convertMoney } from "../../shared/lib/currency";
 import { formatMoney } from "../../shared/lib/format";
+import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { TrendChart } from "../../shared/ui/TrendChart";
 import { CapitalAssetForm } from "./CapitalAssetForm";
 import { CapitalAssetDetailsPage } from "./CapitalAssetDetailsPage";
@@ -20,7 +22,7 @@ type TypeFilter = "all" | "market" | "crypto" | "cash";
 const GROUP_COLORS = ["#5a9feb", "#58b6ad", "#e8b94c", "#9b82e6", "#f07f86", "#c69b58", "#65a9d8", "#e58aa8"];
 const typeMatches = (type: CapitalItemType, filter: TypeFilter) => filter === "all" || (filter === "market" && (type === "stock" || type === "fund")) || type === filter || (filter === "cash" && type === "deposit");
 
-export function CapitalPage({ ratesVersion, debtTotalUsd }: { ratesVersion: number; debtTotalUsd?: number }) {
+export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurrencyChange }: { ratesVersion: number; debtTotalUsd?: number; currencyMode: DisplayCurrency; onCurrencyChange: (value: DisplayCurrency) => void }) {
   const { message } = AntApp.useApp();
   const { locale, t } = useI18n();
   const state = useCapitalStore();
@@ -41,15 +43,17 @@ export function CapitalPage({ ratesVersion, debtTotalUsd }: { ratesVersion: numb
   const invested = sumCapitalValues(positions.map((value) => value.costBasisUsd));
   const result = sumCapitalValues(positions.map((value) => value.profitUsd));
   const income = sumCapitalValues(positions.map((value) => value.incomeUsd));
+  const displayCurrency = currencyMode === "native" ? "USD" : currencyMode;
+  const displayUsd = (value: string | number) => convertMoney(Number(value), "USD", displayCurrency);
   const groupBreakdown = state.groups.map((group, index) => ({
     id: group.id,
     name: group.name,
     color: GROUP_COLORS[index % GROUP_COLORS.length],
-    value: Number(sumCapitalValues(positions.filter(({ item }) => item.groupId === group.id && typeMatches(item.type, typeFilter)).map((position) => position.valueUsd))),
+    value: displayUsd(sumCapitalValues(positions.filter(({ item }) => item.groupId === group.id && typeMatches(item.type, typeFilter)).map((position) => position.valueUsd))),
   })).filter((group) => group.value !== 0).sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
   const groupBreakdownTotal = groupBreakdown.reduce((sum, group) => sum + Math.abs(group.value), 0);
   const pending = state.events.filter((event) => event.status === "expected");
-  const capitalTrend = state.valuations.map((value) => ({ key: value.date, start: `${value.date}T00:00:00Z`, end: `${value.date}T23:59:59Z`, value: Number(value.totalUsd), expenseCount: 1, unit: "day" as const }));
+  const capitalTrend = state.valuations.map((value) => ({ key: value.date, start: `${value.date}T00:00:00Z`, end: `${value.date}T23:59:59Z`, value: displayUsd(value.totalUsd), expenseCount: 1, unit: "day" as const }));
   const eventValue = (event: CapitalEvent) => event.type === "split" ? `${event.splitRatio}×` : event.type === "transfer" && event.quantity ? event.quantity : event.amount ? formatMoney(Number(event.amount), event.currency) : event.quantity ?? "";
 
   const save = async (action: () => Promise<unknown>) => {
@@ -89,14 +93,14 @@ export function CapitalPage({ ratesVersion, debtTotalUsd }: { ratesVersion: numb
 
   return <>
     <section className="summary-header">
-      <div className="summary-copy"><span>{t("capital.total")}</span><strong>{formatMoney(Number(total), "USD")}</strong><small><span>{t("capital.invested")} {formatMoney(Number(invested), "USD")}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(Number(result), "USD")}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(Number(income), "USD")}</span><b aria-hidden="true">·</b><span>{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(debtTotalUsd, "USD")}</span></small></div>
+      <div className="summary-copy"><span>{t("capital.total")}</span><div className="summary-total"><strong>{formatMoney(displayUsd(total), displayCurrency)}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{t("capital.invested")} {formatMoney(displayUsd(invested), displayCurrency)}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(displayUsd(result), displayCurrency)}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(displayUsd(income), displayCurrency)}</span><b aria-hidden="true">·</b><span>{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(displayUsd(debtTotalUsd), displayCurrency)}</span></small></div>
       <div className="quick-actions"><button type="button" onClick={() => setEditor({ kind: "group" })}><Plus size={16}/>{t("capital.group.title")}</button><button className="primary" type="button" disabled={!state.groups.length} onClick={() => setEditor({ kind: "item" })}><Plus size={16}/>{t("capital.asset.title")}</button><button type="button" disabled={!state.items.length} onClick={() => setEditor({ kind: "event" })}><Plus size={16}/>{t("capital.event.title")}</button></div>
     </section>
 
     {state.groups.length > 1 || hasTypeFilters ? <section className="filters">{state.groups.length > 1 ? <div className="button-filter"><button aria-pressed={activeGroupFilter === "all"} className={activeGroupFilter === "all" ? "active" : ""} onClick={() => setGroupFilter("all")}>{t("capital.filters.allGroups")}</button>{state.groups.map((group) => <button aria-pressed={activeGroupFilter === group.id} className={activeGroupFilter === group.id ? "active" : ""} key={group.id} onClick={() => setGroupFilter(group.id)}>{group.name}</button>)}</div> : null}{hasTypeFilters ? <div className="button-filter">{(["all","market","crypto","cash"] as TypeFilter[]).map((type) => <button aria-pressed={typeFilter === type} className={typeFilter === type ? "active" : ""} key={type} onClick={() => setTypeFilter(type)}>{t(`capital.filters.${type}`)}</button>)}</div> : null}</section> : null}
     {capitalTrend.length || groupBreakdown.length ? <div className="analytics-grid">
-      {capitalTrend.length ? <section className="panel chart-panel"><h2>{t("capital.chart")}{state.historyLoading ? <RefreshCw className="spin" size={14}/> : null}</h2><TrendChart buckets={capitalTrend} currency="USD" locale={locale} label={t("capital.chartLabel")}/></section> : null}
-      {groupBreakdown.length ? <section className="panel category-panel"><h2>{t("capital.byGroup")}</h2>{groupBreakdown.map((group) => { const share = groupBreakdownTotal > 0 ? Math.round(Math.abs(group.value) / groupBreakdownTotal * 100) : 0; return <button type="button" key={group.id} onClick={() => setGroupFilter(group.id)}><i style={{ background: group.color }}/><span>{group.name}</span><strong>{formatMoney(group.value, "USD")}</strong><small>{share}%</small></button>; })}</section> : null}
+      {capitalTrend.length ? <section className="panel chart-panel"><h2>{t("capital.chart")}{state.historyLoading ? <RefreshCw className="spin" size={14}/> : null}</h2><TrendChart buckets={capitalTrend} currency={displayCurrency} locale={locale} label={t("capital.chartLabel")}/></section> : null}
+      {groupBreakdown.length ? <section className="panel category-panel"><h2>{t("capital.byGroup")}</h2>{groupBreakdown.map((group) => { const share = groupBreakdownTotal > 0 ? Math.round(Math.abs(group.value) / groupBreakdownTotal * 100) : 0; return <button type="button" key={group.id} onClick={() => setGroupFilter(group.id)}><i style={{ background: group.color }}/><span>{group.name}</span><strong>{formatMoney(group.value, displayCurrency)}</strong><small>{share}%</small></button>; })}</section> : null}
     </div> : null}
     {pending.length ? <section className="panel pending-events"><h2>{t("capital.pending")}</h2>{pending.map((event) => <div key={event.id}><span>{state.items.find((item) => item.id === event.itemId)?.name} · {getCapitalEventLabel(event.type, locale)} · {eventValue(event)}</span><button aria-label={t("actions.edit")} onClick={() => setEditor({ kind: "event", value: event })}><Pencil size={15}/></button><button aria-label={t("capital.confirm")} onClick={() => void runAction(() => state.setEventStatus(event.id, "confirmed"), t("capital.confirmed"))}><Check size={15}/></button><button aria-label={t("capital.ignore")} onClick={() => void runAction(() => state.setEventStatus(event.id, "ignored"), t("capital.ignored"))}><X size={15}/></button></div>)}</section> : null}
     <section className="history-section capital-list"><div className="section-heading"><h2>{t("capital.assets")}</h2><span>{visible.length}</span></div>{visible.map((position) => <button type="button" className="capital-row capital-row-detailed" key={position.item.id} onClick={() => setSelectedItemId(position.item.id)}><div><strong>{position.item.name}</strong><span>{state.groups.find((group) => group.id === position.item.groupId)?.name} · {position.item.symbol || getCapitalItemLabel(position.item.type, locale).toLocaleLowerCase(locale)}</span><small>{t("capital.asset.quantity")}: {position.quantity} · {t("capital.average")}: {formatMoney(Number(position.averageCost), position.item.quoteCurrency)}</small>{position.netIncome !== "0" ? <small>{t("capital.income")}: {formatMoney(Number(position.netIncome), position.item.quoteCurrency)}</small> : null}</div><div><strong>{formatMoney(position.value, position.item.quoteCurrency)}</strong>{state.unavailableQuoteItemIds.includes(position.item.id) || position.priceSource === "missing" ? <small className="negative">{t("capital.quoteStale")}</small> : null}<small className={position.profit < 0 ? "negative" : "positive"}>{t("capital.result")}: {formatMoney(position.profit, position.item.quoteCurrency)}</small></div><ChevronRight size={16}/></button>)}</section>

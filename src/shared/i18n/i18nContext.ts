@@ -7,7 +7,6 @@ export type MessageKey = keyof Messages;
 
 export interface I18nContextValue {
   locale: Locale;
-  setLocale: (locale: Locale) => void;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
 }
 

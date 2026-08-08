@@ -4,7 +4,8 @@ import { ExpensesPage } from "../features/expenses/ExpensesPage";
 import { useCapitalStore } from "../features/capital/capitalStore";
 import { getCapitalTotalUsd } from "../features/capital/capitalView";
 import { useAuthStore } from "../features/auth/authStore";
-import { AppHeader, type DisplayCurrency } from "./AppHeader";
+import { AppHeader } from "./AppHeader";
+import type { DisplayCurrency } from "../shared/ui/CurrencySwitcher";
 import { refreshLiveExchangeRates } from "../shared/lib/exchangeRates";
 import { useDebtStore } from "../features/debts/debtStore";
 import { getOutstandingDebt } from "../features/debts/debtView";
@@ -54,7 +55,7 @@ export function AuthenticatedApp() {
   const debtTotalUsd = debtReady ? getOutstandingDebt(debt.debts, debt.events, "USD") : undefined;
   return (
     <AppThemeProvider>
-      <div className="app-shell"><AppHeader page={page} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} debtTotalUsd={debtTotalUsd} /> : page === "capital" ? <Suspense fallback={null}>{capitalReady ? <CapitalPage ratesVersion={ratesVersion} debtTotalUsd={debtTotalUsd} /> : null}</Suspense> : <Suspense fallback={null}>{debtReady ? <DebtPage currencyMode={currencyMode} ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
+      <div className="app-shell"><AppHeader page={page} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} debtTotalUsd={debtTotalUsd} /> : page === "capital" ? <Suspense fallback={null}>{capitalReady ? <CapitalPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} debtTotalUsd={debtTotalUsd} /> : null}</Suspense> : <Suspense fallback={null}>{debtReady ? <DebtPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
     </AppThemeProvider>
   );
 }

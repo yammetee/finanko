@@ -8,7 +8,7 @@ import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { formatMoney } from "../../shared/lib/format";
 import type { Expense } from "../../shared/types/expense";
-import type { DisplayCurrency } from "../../app/AppHeader";
+import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { parseReceiptInput, parseTextInput } from "../receipts/aiParser";
 import { detectAmountInText, detectCurrencyInText, parseTextInputLocally, type ParsedExpense } from "../receipts/expenseParser";
 import { prepareReceiptImage } from "../receipts/receiptImage";
@@ -45,9 +45,9 @@ function receiptErrorKey(error: unknown) {
   return "receipt.parseError" as const;
 }
 
-interface ExpensesPageProps { currencyMode: DisplayCurrency; ratesVersion: number; capitalTotalUsd?: string; debtTotalUsd?: number }
+interface ExpensesPageProps { currencyMode: DisplayCurrency; onCurrencyChange: (value: DisplayCurrency) => void; ratesVersion: number; capitalTotalUsd?: string; debtTotalUsd?: number }
 
-export function ExpensesPage({ currencyMode, ratesVersion, capitalTotalUsd, debtTotalUsd }: ExpensesPageProps) {
+export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, capitalTotalUsd, debtTotalUsd }: ExpensesPageProps) {
   const { message } = AntApp.useApp();
   const { locale, t } = useI18n();
   const expenseState = useExpenseStore();
@@ -188,7 +188,7 @@ export function ExpensesPage({ currencyMode, ratesVersion, capitalTotalUsd, debt
   const home = (
     <>
       <section className="summary-header">
-        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span><b aria-hidden="true">·</b><span>{t("capital.total")} {capitalTotalUsd === undefined ? "—" : formatMoney(Number(capitalTotalUsd), "USD")}</span><b aria-hidden="true">·</b><span>{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(debtTotalUsd, "USD")}</span></small></div>
+        <div className="summary-copy"><span>{t("expense.spent")}</span><div className="summary-total"><strong>{totalLabel}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span><b aria-hidden="true">·</b><span>{t("capital.total")} {capitalTotalUsd === undefined ? "—" : formatMoney(Number(capitalTotalUsd), "USD")}</span><b aria-hidden="true">·</b><span>{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(debtTotalUsd, "USD")}</span></small></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>

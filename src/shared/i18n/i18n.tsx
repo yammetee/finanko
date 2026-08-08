@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
+import { useEffect, useMemo, type PropsWithChildren } from "react";
 import en from "./en.json";
 import ru from "./ru.json";
 import {
@@ -9,18 +9,16 @@ import {
 } from "./i18nContext";
 
 const dictionaries: Record<Locale, Messages> = { en, ru };
+const locale: Locale = "ru";
 
 export function I18nProvider({ children }: PropsWithChildren) {
-  const [locale, setLocale] = useState<Locale>("ru");
-
   useEffect(() => {
     document.documentElement.lang = locale;
-  }, [locale]);
+  }, []);
 
   const value = useMemo<I18nContextValue>(
     () => ({
       locale,
-      setLocale,
       t: (key, values) => {
         const template = dictionaries[locale][key] ?? dictionaries.en[key] ?? key;
         if (!values) return template;
@@ -31,7 +29,7 @@ export function I18nProvider({ children }: PropsWithChildren) {
         );
       },
     }),
-    [locale],
+    [],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
