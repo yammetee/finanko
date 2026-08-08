@@ -85,14 +85,18 @@ export async function saveCapitalValuation(quotes: CapitalQuote[], totalUsd: str
   if (error) throw error;
 }
 
+export function serializeCapitalSnapshot(snapshot: Partial<CapitalSnapshot>) {
+  return {
+    groups: snapshot.groups?.map((value) => ({ id: value.id, name: value.name })) ?? [],
+    items: snapshot.items?.map((value) => ({ id: value.id, group_id: value.groupId, name: value.name, item_type: value.type, symbol: value.symbol ?? null, quote_currency: value.quoteCurrency, manual_price: value.manualPrice ?? null, primary_provider: value.primaryProvider ?? null, primary_asset_id: value.primaryAssetId ?? null, fallback_provider: value.fallbackProvider ?? null, fallback_asset_id: value.fallbackAssetId ?? null, default_tax_rate: value.defaultTaxRate ?? null, annual_interest_rate: value.annualInterestRate ?? null, interest_cadence: value.interestCadence ?? null, interest_effective_from: value.interestEffectiveFrom ?? null, interest_compounding: value.interestCompounding ?? false, income_destination_item_id: value.incomeDestinationItemId ?? null })) ?? [],
+    events: snapshot.events?.map((value) => ({ id: value.id, item_id: value.itemId, related_item_id: value.relatedItemId ?? null, event_type: value.type, status: value.status, occurred_at: value.occurredAt, quantity: value.quantity ?? null, amount: value.amount ?? null, fee: value.fee ?? null, tax: value.tax ?? null, currency: value.currency, split_ratio: value.splitRatio ?? null, source: value.source, reinvest: value.reinvest ?? false, external_provider: value.externalProvider ?? null, external_id: value.externalId ?? null })) ?? [],
+  };
+}
+
 export async function saveCapitalData(snapshot: Partial<CapitalSnapshot>) {
   const supabase = await client();
   const { error } = await supabase.rpc("save_capital_snapshot", {
-    capital_data: {
-      groups: snapshot.groups?.map((value) => ({ id: value.id, name: value.name })) ?? [],
-      items: snapshot.items?.map((value) => ({ id: value.id, group_id: value.groupId, name: value.name, item_type: value.type, symbol: value.symbol ?? null, quote_currency: value.quoteCurrency, manual_price: value.manualPrice ?? null, primary_provider: value.primaryProvider ?? null, primary_asset_id: value.primaryAssetId ?? null, fallback_provider: value.fallbackProvider ?? null, fallback_asset_id: value.fallbackAssetId ?? null, default_tax_rate: value.defaultTaxRate ?? null, annual_interest_rate: value.annualInterestRate ?? null, interest_cadence: value.interestCadence ?? null, interest_effective_from: value.interestEffectiveFrom ?? null, interest_compounding: value.interestCompounding ?? false, income_destination_item_id: value.incomeDestinationItemId ?? null })) ?? [],
-      events: snapshot.events?.map((value) => ({ id: value.id, item_id: value.itemId, related_item_id: value.relatedItemId ?? null, event_type: value.type, status: value.status, occurred_at: value.occurredAt, quantity: value.quantity ?? null, amount: value.amount ?? null, fee: value.fee ?? null, tax: value.tax ?? null, currency: value.currency, split_ratio: value.splitRatio ?? null, source: value.source, reinvest: value.reinvest ?? false, external_provider: value.externalProvider ?? null, external_id: value.externalId ?? null })) ?? [],
-    },
+    capital_data: serializeCapitalSnapshot(snapshot),
   });
   if (error) throw error;
 }

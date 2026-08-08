@@ -1,7 +1,7 @@
 import AntApp from "antd/es/app";
 import DatePicker from "antd/es/date-picker";
 import dayjs from "dayjs";
-import { Camera, FileText, PenLine } from "lucide-react";
+import { ArrowRight, Camera, FileText, PenLine } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_CURRENCY } from "../../shared/constants/expenses";
 import { getCategoryName } from "../../shared/i18n/displayText";
@@ -196,7 +196,7 @@ export function ExpensesPage({ currencyMode, capitalTotalUsd, capitalState, onOp
   const home = (
     <>
       <section className="summary-header">
-        <div className="home-metrics"><div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div><button className="capital-metric" type="button" onClick={onOpenCapital}><span>{locale === "ru" ? "Капитал" : "Capital"}</span><strong>{capitalState === "ready" ? formatMoney(capitalTotalUsd, "USD") : capitalState === "error" ? "—" : "…"}</strong></button></div>
+        <div className="home-metrics"><div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div><button className="capital-metric" type="button" onClick={onOpenCapital}><span>{t("capital.title")}<ArrowRight aria-hidden="true" size={16}/></span><strong>{capitalState === "ready" ? formatMoney(capitalTotalUsd, "USD") : capitalState === "error" ? "—" : "…"}</strong></button></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>

@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:integration": "RUN_LIVE_MARKET_TESTS=1 vitest run supabase/capital.integration.test.ts api/market.live.test.ts --reporter=verbose",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.4",
     "@eslint/js": "^9.17.0",
     "@types/node": "^26.1.1",
     "@types/react": "^19.0.2",

@@ -6,6 +6,7 @@ const page = readFileSync(new URL("../features/capital/CapitalPage.tsx", import.
 const assetForm = readFileSync(new URL("../features/capital/CapitalAssetForm.tsx", import.meta.url), "utf8");
 const eventForm = readFileSync(new URL("../features/capital/CapitalEventForm.tsx", import.meta.url), "utf8");
 const groupForm = readFileSync(new URL("../features/capital/CapitalGroupForm.tsx", import.meta.url), "utf8");
+const expensesPage = readFileSync(new URL("../features/expenses/ExpensesPage.tsx", import.meta.url), "utf8");
 
 describe("capital responsive and accessible states", () => {
   it("provides compact layouts for mobile and narrow screens", () => {
@@ -14,6 +15,14 @@ describe("capital responsive and accessible states", () => {
     expect(styles).toContain(".capital-row-actions { align-self: start; grid-column: 2; grid-row: 1 / span 2");
     expect(styles).toContain("@media (max-width: 380px)");
     expect(styles).toContain(".capital-stats { grid-template-columns: 1fr; }");
+  });
+
+  it("makes the capital summary an explicit navigation action", () => {
+    expect(expensesPage).toContain('className="capital-metric"');
+    expect(expensesPage).toContain('<ArrowRight aria-hidden="true"');
+    expect(styles).toContain(".capital-metric:hover { background: var(--surface-hover); border-color: var(--border-strong); }");
+    expect(styles).toContain(".capital-metric { min-width: 0; }");
+    expect(styles).not.toContain(".capital-metric { padding-left:");
   });
 
   it("keeps every form control at an iOS-safe focus size", () => {
