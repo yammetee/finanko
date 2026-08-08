@@ -102,7 +102,7 @@ export function AuthGate({ children }: AuthGateProps) {
         <div className="auth-stack">
           <div>
             <span>F</span>
-            <h1 className="auth-title">Finanko</h1>
+            <h1 className="auth-title">evenkvit</h1>
             <p className="muted auth-description">{t("auth.description")}</p>
           </div>
           <form className="auth-local-form" onSubmit={handleSubmit}>

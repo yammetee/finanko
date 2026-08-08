@@ -5,7 +5,7 @@ import { handler as marketHandler } from "./api/market";
 
 function localApiPlugin(): Plugin {
   return {
-    name: "finanko-local-api",
+    name: "evenkvit-local-api",
     configureServer(server) {
       const register = (path: string, handler: typeof aiHandler | typeof marketHandler) => server.middlewares.use(path, async (request, response) => {
         try {

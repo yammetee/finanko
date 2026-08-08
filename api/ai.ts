@@ -179,7 +179,7 @@ function parserContent(payload: Record<string, unknown>) {
 
 const parserFormat = {
   type: "json_schema",
-  name: "finanko_parse_result",
+  name: "evenkvit_parse_result",
   strict: true,
   schema: {
     type: "object",
@@ -207,7 +207,7 @@ const parserFormat = {
 
 const receiptOcrFormat = {
   type: "json_schema",
-  name: "finanko_receipt_ocr",
+  name: "evenkvit_receipt_ocr",
   strict: true,
   schema: {
     type: "object",
@@ -481,7 +481,7 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
     );
     response.status(200).json(parsed);
   } catch (error) {
-    console.error("Finanko AI request failed", error);
+    console.error("evenkvit AI request failed", error);
     response.status(500).json({ error: "AI request failed" });
   }
 }

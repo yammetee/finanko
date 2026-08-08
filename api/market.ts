@@ -15,7 +15,7 @@ interface ApiResponse { status(code: number): ApiResponse; json(payload: unknown
 interface NormalizedQuote { itemId: string; price: string; currency: "USD"; provider: string; quotedAt: string }
 interface MarketSearchResult { name: string; symbol: string; type: AssetType; provider: "coingecko" | "nasdaq" | "yahoo"; providerAssetId: string }
 
-const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; Finanko/1.0)" };
+const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; evenkvit/1.0)" };
 const SEARCH_TIMEOUT_MS = 4_000;
 const COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
 const MARKET_PROVIDERS: MarketProvider[] = ["bybit", "coingecko", "nasdaq", "yahoo"];

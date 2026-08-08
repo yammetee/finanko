@@ -1,4 +1,4 @@
-# Finanko development plan
+# evenkvit development plan
 
 ## Current state
 

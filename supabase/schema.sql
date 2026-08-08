@@ -1,4 +1,4 @@
--- Minimal Finanko schema.
+-- Minimal evenkvit schema. The existing finanko_private schema name is retained for database compatibility.
 create schema if not exists finanko_private;
 revoke all on schema finanko_private from public, anon, authenticated;
 

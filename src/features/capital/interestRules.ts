@@ -25,7 +25,7 @@ export function buildExpectedInterestEvents(items: CapitalItem[], events: Capita
     let date = addClampedUtcMonths(item.interestEffectiveFrom, step * period);
     let externalId = `${item.id}:${date}`;
     while (date <= todayDate) {
-      const matchingEvents = events.filter((event) => event.externalProvider === "finanko_interest" && event.externalId === externalId);
+      const matchingEvents = events.filter((event) => event.externalProvider === "evenkvit_interest" && event.externalId === externalId);
       if (matchingEvents.some((event) => event.status === "expected")) break;
       if (!matchingEvents.length) {
         const eventId = `capital-event-interest-${item.id}-${date}`;
@@ -39,7 +39,7 @@ export function buildExpectedInterestEvents(items: CapitalItem[], events: Capita
           const gross = divide(multiply(balance, decimal(item.annualInterestRate)), decimal(cadencePeriods[item.interestCadence]));
           if (gross > 0n) {
             const tax = multiply(gross, decimal(item.defaultTaxRate));
-            result.push({ id: eventId, itemId: item.id, relatedItemId: item.incomeDestinationItemId, type: "interest", status: "expected", occurredAt, amount: decimalString(gross), tax: decimalString(tax), currency: item.quoteCurrency, source: "automatic", reinvest: item.interestCompounding && !item.incomeDestinationItemId, externalProvider: "finanko_interest", externalId });
+            result.push({ id: eventId, itemId: item.id, relatedItemId: item.incomeDestinationItemId, type: "interest", status: "expected", occurredAt, amount: decimalString(gross), tax: decimalString(tax), currency: item.quoteCurrency, source: "automatic", reinvest: item.interestCompounding && !item.incomeDestinationItemId, externalProvider: "evenkvit_interest", externalId });
           }
         }
         break;

@@ -1,13 +1,14 @@
-# Finanko
+# evenkvit
 
-Finanko is a mobile-first personal finance application.
+evenkvit is a mobile-first personal finance application.
 
-The product has two independent areas:
+The product has three independent areas:
 
 - Expenses: receipt, text, or manual input; editable expense positions; analytics and history.
 - Capital: independently maintained groups, assets, cash positions, operations, market values, and income.
+- Debts: independently maintained loan groups, balances, payments, interest, and early-repayment projections.
 
-Expenses and capital share top-level navigation, but they never share records or automatically change one another.
+Expenses, capital, and debts share top-level navigation, but they never share records or automatically change one another.
 
 The current application uses Vite, React, TypeScript, Ant Design, Zustand, Supabase Auth/Postgres, and Vercel Functions.
 
