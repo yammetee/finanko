@@ -1,5 +1,13 @@
 import { isAuthenticatedUser } from "./serverAuth";
-import { MARKET_REQUEST_LIMIT, normalizeMarketSymbol } from "../src/features/capital/marketContract";
+
+const MARKET_REQUEST_LIMIT = 30;
+const MARKET_SYMBOL_PATTERN = /^[A-Z0-9._-]{1,32}$/;
+
+function normalizeMarketSymbol(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const symbol = value.trim().toUpperCase();
+  return MARKET_SYMBOL_PATTERN.test(symbol) ? symbol : undefined;
+}
 
 type AssetType = "stock" | "fund" | "crypto";
 type MarketProvider = "bybit" | "coingecko" | "nasdaq" | "yahoo";

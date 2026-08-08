@@ -44,8 +44,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .brand { align-items: center; background: transparent; border: 0; color: var(--text); cursor: pointer; display: flex; font-size: 15px; font-weight: 650; gap: 9px; letter-spacing: -.01em; padding: 0; }
 .brand b { font: inherit; }
 .brand > span { align-items: center; background: var(--primary); border-radius: 7px; color: white; display: inline-flex; font-size: 12px; font-weight: 700; height: 27px; justify-content: center; width: 27px; }
-.header-tabs { align-items: stretch; align-self: stretch; display: flex; gap: 4px; justify-self: center; }
-.header-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; font-weight: 600; padding: 0 10px; }
+.header-tabs { align-items: stretch; align-self: stretch; display: flex; justify-self: stretch; }
+.header-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; flex: 1; font-size: 12px; font-weight: 600; padding: 0 10px; }
 .header-tabs button:hover { color: var(--text-secondary); }
 .header-tabs button.active { border-bottom-color: var(--primary); color: var(--text); }
 .header-actions { align-items: center; display: flex; gap: 4px; justify-self: end; }

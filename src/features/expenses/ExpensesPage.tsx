@@ -45,9 +45,9 @@ function receiptErrorKey(error: unknown) {
   return "receipt.parseError" as const;
 }
 
-interface ExpensesPageProps { currencyMode: DisplayCurrency; ratesVersion: number }
+interface ExpensesPageProps { currencyMode: DisplayCurrency; ratesVersion: number; capitalTotalUsd?: string }
 
-export function ExpensesPage({ currencyMode, ratesVersion }: ExpensesPageProps) {
+export function ExpensesPage({ currencyMode, ratesVersion, capitalTotalUsd }: ExpensesPageProps) {
   const { message } = AntApp.useApp();
   const { locale, t } = useI18n();
   const expenseState = useExpenseStore();
@@ -188,7 +188,7 @@ export function ExpensesPage({ currencyMode, ratesVersion }: ExpensesPageProps) 
   const home = (
     <>
       <section className="summary-header">
-        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div>
+        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span>{capitalTotalUsd !== undefined ? <><b aria-hidden="true">·</b><span>{t("capital.total")} {formatMoney(Number(capitalTotalUsd), "USD")}</span></> : null}</small></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>

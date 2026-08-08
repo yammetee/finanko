@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { AppThemeProvider } from "./providers/AppThemeProvider";
 import { ExpensesPage } from "../features/expenses/ExpensesPage";
 import { useCapitalStore } from "../features/capital/capitalStore";
+import { getCapitalTotalUsd } from "../features/capital/capitalView";
 import { useAuthStore } from "../features/auth/authStore";
 import { AppHeader, type DisplayCurrency } from "./AppHeader";
 import { refreshLiveExchangeRates } from "../shared/lib/exchangeRates";
@@ -35,9 +36,10 @@ export function AuthenticatedApp() {
     if (nextPage === "capital" && userId && (capital.ownerId !== userId || capitalLoadState === "idle" || capitalLoadState === "error")) void initializeCapital(userId);
   };
   const capitalReady = Boolean(userId && capital.ownerId === userId && capitalLoadState === "ready");
+  const capitalTotalUsd = capitalReady ? getCapitalTotalUsd(capital.items, capital.events, capital.quotes) : undefined;
   return (
     <AppThemeProvider>
-      <div className="app-shell"><AppHeader page={page} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} ratesVersion={ratesVersion} /> : <Suspense fallback={null}>{capitalReady ? <CapitalPage ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
+      <div className="app-shell"><AppHeader page={page} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} /> : <Suspense fallback={null}>{capitalReady ? <CapitalPage ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
     </AppThemeProvider>
   );
 }
