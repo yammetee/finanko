@@ -18,6 +18,13 @@ describe("capital responsive and accessible states", () => {
     expect(styles).toContain(".capital-editor input, .capital-editor select { font-size: 16px; }");
   });
 
+  it("keeps provider internals out of the asset form", () => {
+    expect(page).toContain("<ChoiceGroup");
+    expect(page).not.toContain("Основной источник");
+    expect(page).not.toContain("ID у основного источника");
+    expect(page).not.toContain("Запасной источник");
+  });
+
   it("exposes errors, loading, filters, and icon actions to assistive technology", () => {
     expect(page).toContain('role="alert"');
     expect(page).toContain('role="status"');

@@ -13,6 +13,7 @@ import { useI18n } from "../../shared/i18n/i18nContext";
 import { formatMoney } from "../../shared/lib/format";
 import type { Category, Currency } from "../../shared/types/expense";
 import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
+import { ChoiceGroup } from "../../shared/ui/ChoiceGroup";
 import { calculateExpenseItemsTotal, type ExpenseDraft, type ExpenseFormValues } from "./expenseDraft";
 
 export type ExpenseFormMode = "text" | "receipt" | "manual" | "edit";
@@ -89,9 +90,4 @@ export function ExpenseFormPage({ mode, draft, categories, parsing, saving, pars
       ) : null}
     </section>
   );
-}
-
-interface ChoiceGroupProps { label: string; value?: string; options: Array<{ value: string; label: React.ReactNode }>; onChange?: (value: string) => void; }
-function ChoiceGroup({ label, value, options, onChange }: ChoiceGroupProps) {
-  return <div className="choice-group" role="group" aria-label={label}><span>{label}</span><div>{options.map((option) => <button aria-pressed={value === option.value} className={value === option.value ? "active" : ""} key={option.value} type="button" onClick={() => onChange?.(option.value)}>{option.label}</button>)}</div></div>;
 }
