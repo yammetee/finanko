@@ -101,9 +101,8 @@ export function AuthGate({ children }: AuthGateProps) {
     <div className="auth-screen">
       <div className="auth-card">
         <div className="auth-stack">
-          <div>
-            <span>F</span>
-            <h1 className="auth-title">evenkvit</h1>
+          <div className="auth-brand">
+            <img alt="evenkvit" src="/evenkvit-mark.png" />
             <p className="muted auth-description">{t("auth.description")}</p>
           </div>
           <form className="auth-local-form" onSubmit={handleSubmit}>

@@ -9,5 +9,7 @@ p,li { color:#b4c4ce; line-height:1.65; }
 .eyebrow,.updated { color:#8195a2; font-size:13px; }
 .notice { background:#0b141c; border:1px solid #1c3443; border-radius:12px; margin:24px 0; padding:16px 18px; }
 nav { display:flex; gap:18px; margin-bottom:30px; }
+.legal-brand { align-items:center; display:flex; }
+.legal-brand img { display:block; height:28px; object-fit:contain; width:48px; }
 strong { color:#eef7fb; }
 @media(max-width:600px){main{padding-top:28px}h1{font-size:28px}}

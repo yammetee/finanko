@@ -41,9 +41,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   top: 0;
   z-index: 10;
 }
-.brand { align-items: center; background: transparent; border: 0; color: var(--text); cursor: pointer; display: flex; font-size: 15px; font-weight: 650; gap: 9px; letter-spacing: -.01em; padding: 0; }
-.brand b { font: inherit; }
-.brand > span { align-items: center; background: var(--primary); border-radius: 7px; color: white; display: inline-flex; font-size: 12px; font-weight: 700; height: 27px; justify-content: center; width: 27px; }
+.brand { align-items: center; background: transparent; border: 0; cursor: pointer; display: flex; height: 42px; justify-content: center; padding: 0; width: 46px; }
+.brand img { display: block; height: 28px; object-fit: contain; width: 46px; }
 .header-tabs { align-items: stretch; align-self: stretch; display: flex; justify-self: stretch; }
 .header-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); cursor: pointer; flex: 1; font-size: 12px; font-weight: 600; padding: 0 10px; }
 .header-tabs button:hover { color: var(--text-secondary); }
@@ -245,7 +244,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-screen { align-items: center; background: var(--bg); display: flex; justify-content: center; min-height: 100dvh; padding: 20px; }
 .auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-width: 360px; padding: 24px; width: 100%; }
 .auth-stack { display: grid; gap: 12px; }
-.auth-title { font-size: 24px; margin: 12px 0 4px; }
+.auth-brand img { display: block; height: auto; margin: 0 auto 16px; max-width: 112px; width: 100%; }
+.auth-brand .auth-description { text-align: center; }
 .auth-description { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0; }
 .auth-local-form { display: grid; gap: 8px; }
 .auth-input, .auth-action { border-radius: 6px; min-height: 40px; width: 100%; }
@@ -313,7 +313,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (max-width: 420px) {
-  .brand b, .currency-label { display: none; }
+  .currency-label { display: none; }
   .app-header { gap: 6px; }
   .header-tabs { gap: 0; }
   .header-tabs button { font-size: 10px; padding-inline: 1px; }

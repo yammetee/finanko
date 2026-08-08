@@ -17,7 +17,7 @@ export function AppHeader({ page, currencyMode, onCurrencyChange, onPageChange }
   const currentLabel = currencyMode === "native" ? t("currency.native") : currencyMode;
   const nextLabel = next === "native" ? t("currency.native") : next;
   return <header className="app-header">
-    <button aria-label="evenkvit" className="brand" type="button" onClick={() => onPageChange("expenses")}><span aria-hidden="true">E</span><b>evenkvit</b></button>
+    <button aria-label="evenkvit" className="brand" type="button" onClick={() => onPageChange("expenses")}><img alt="" src="/evenkvit-mark.png" /></button>
     <nav className="header-tabs" aria-label={locale === "ru" ? "Разделы" : "Sections"}>
       <button aria-current={page === "expenses" ? "page" : undefined} className={page === "expenses" ? "active" : ""} type="button" onClick={() => onPageChange("expenses")}>{t("expense.history")}</button>
       <button aria-current={page === "capital" ? "page" : undefined} className={page === "capital" ? "active" : ""} type="button" onClick={() => onPageChange("capital")}>{t("capital.title")}</button>
