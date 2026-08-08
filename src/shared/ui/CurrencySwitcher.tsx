@@ -17,5 +17,5 @@ export function CurrencySwitcher({ value, onChange }: CurrencySwitcherProps) {
   const currentLabel = value === "native" ? t("currency.native") : value;
   const nextLabel = next === "native" ? t("currency.native") : next;
 
-  return <button className="summary-currency" type="button" title={t("currency.switch", { current: currentLabel, next: nextLabel })} onClick={() => onChange(next)}>{value === "native" ? <NativeCurrencyIcon size={15}/> : <CurrencyIcon currency={value} size={15}/>}<span>{currentLabel}</span></button>;
+  return <button aria-label={t("currency.switch", { current: currentLabel, next: nextLabel })} className="summary-currency" type="button" title={t("currency.switch", { current: currentLabel, next: nextLabel })} onClick={() => onChange(next)}>{value === "native" ? <NativeCurrencyIcon size={18}/> : <CurrencyIcon currency={value} size={18}/>}</button>;
 }

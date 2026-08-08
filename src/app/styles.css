@@ -71,8 +71,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .summary-copy > span { color: var(--text-muted); display: block; font-size: 12px; font-weight: 500; }
 .summary-total { align-items: center; display: flex; gap: 10px; margin: 5px 0 8px; }
 .summary-total > strong { display: block; font-size: 34px; font-variant-numeric: tabular-nums; letter-spacing: -.045em; line-height: 1; }
-.summary-currency { align-items: center; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; display: inline-flex; flex: 0 0 auto; font-size: 11px; font-weight: 600; gap: 5px; height: 30px; padding: 0 8px; }
-.summary-currency:hover { background: var(--surface-hover); border-color: var(--border-strong); color: var(--text); }
+.summary-currency { align-items: center; background: transparent; border: 0; border-radius: 6px; color: var(--text-secondary); cursor: pointer; display: inline-flex; flex: 0 0 auto; height: 30px; justify-content: center; padding: 0; width: 30px; }
+.summary-currency:hover { background: var(--surface-hover); color: var(--text); }
 .summary-copy { flex: 1 1 auto; min-width: 0; }
 .summary-copy > small { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: 12px; gap: 4px 7px; }
 .summary-copy > small b { color: var(--border-strong); font-weight: 400; }
