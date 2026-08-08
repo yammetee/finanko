@@ -14,13 +14,6 @@ export interface ReceiptReview {
   confidence: number;
   requiresReview: boolean;
   warnings: string[];
-  rawRows: string[];
-  totals: {
-    subtotal?: number;
-    discount?: number;
-    tax?: number;
-    total?: number;
-  };
 }
 
 export interface ParsedExpense {
@@ -105,22 +98,13 @@ function cleanText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function optionalFiniteNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
 function normalizeReceiptReview(value: unknown): ReceiptReview | undefined {
   if (!value || typeof value !== "object") return undefined;
   const review = value as {
     confidence?: unknown;
     requiresReview?: unknown;
     warnings?: unknown;
-    rawRows?: unknown;
-    totals?: unknown;
   };
-  const totals = review.totals && typeof review.totals === "object"
-    ? review.totals as Record<string, unknown>
-    : {};
   return {
     confidence:
       typeof review.confidence === "number" && Number.isFinite(review.confidence)
@@ -130,15 +114,6 @@ function normalizeReceiptReview(value: unknown): ReceiptReview | undefined {
     warnings: Array.isArray(review.warnings)
       ? review.warnings.filter((warning): warning is string => typeof warning === "string")
       : [],
-    rawRows: Array.isArray(review.rawRows)
-      ? review.rawRows.filter((row): row is string => typeof row === "string" && Boolean(row.trim()))
-      : [],
-    totals: {
-      subtotal: optionalFiniteNumber(totals.subtotal),
-      discount: optionalFiniteNumber(totals.discount),
-      tax: optionalFiniteNumber(totals.tax),
-      total: optionalFiniteNumber(totals.total),
-    },
   };
 }
 
@@ -166,11 +141,7 @@ function containsThaiText(value: string) {
 }
 
 function isDiscountName(name: string) {
-  return /(?:all\s*cafe|discount|coupon|promo|скид|купон|ส่วนลด|ลด|ფასდაკ)/i.test(name);
-}
-
-function isDiscountLikeItem(item: ParsedExpenseItem) {
-  return isDiscountName(item.name);
+  return /(?:discount|coupon|promo|скид|купон|ส่วนลด|ფასდაკ)/i.test(name);
 }
 
 function getRussianDescriptionNames(description: unknown) {
@@ -213,7 +184,6 @@ function normalizeItemName(name: string) {
     .replace(/^[\s/.,;:-]+|[\s/.,;:-]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (/(?:discount|coupon|promo|скид|купон|ส่วนลด|ลด)/i.test(cleaned)) return cleaned;
   const fallback = russianItemNameFallbacks.find(([pattern]) => pattern.test(cleaned));
   return fallback?.[1] ?? cleaned;
 }
@@ -243,7 +213,6 @@ export function normalizeParsedExpense(
   };
   if (payload.kind !== "transaction") return null;
 
-  const categoryId = findCategoryId(input.categories, "food");
   const russianDescriptionNames = getRussianDescriptionNames(payload.description);
   const items = Array.isArray(payload.items)
     ? payload.items
@@ -260,6 +229,7 @@ export function normalizeParsedExpense(
           };
           if (!isNonZeroFiniteNumber(rawItem.amount)) return null;
           const rawName = cleanText(rawItem.name);
+          if (isDiscountName(rawName)) return null;
           let quantity = isPositiveFiniteNumber(rawItem.quantity)
             ? roundQuantity(rawItem.quantity)
             : undefined;
@@ -268,8 +238,8 @@ export function normalizeParsedExpense(
             : quantity
               ? roundMoney(rawItem.amount / quantity)
               : undefined;
-          const rawAmount = roundMoney(rawItem.amount < 0 && !isDiscountName(rawName) ? Math.abs(rawItem.amount) : rawItem.amount);
-          if (unitPrice && unitPrice < 0 && !isDiscountName(rawName)) unitPrice = Math.abs(unitPrice);
+          const rawAmount = roundMoney(Math.abs(rawItem.amount));
+          if (unitPrice && unitPrice < 0) unitPrice = Math.abs(unitPrice);
           let amount = rawAmount;
           const computedAmount = quantity && unitPrice ? roundMoney(quantity * unitPrice) : undefined;
           if (quantity && quantity >= 10 && unitPrice && Math.abs(unitPrice) < 1 && computedAmount !== undefined && nearlyEqual(rawAmount, computedAmount)) {
@@ -326,44 +296,12 @@ export function normalizeParsedExpense(
   ].join(" ");
   const detectedTotal = explicitText ? detectAmountInText(explicitText) : null;
   const payloadTotal = isPositiveFiniteNumber(payload.total) ? roundMoney(payload.total) : null;
-  let payloadTotalIsSubtotal = false;
-  if (isReceiptInput(input) && items.length >= 3 && payloadTotal !== null) {
-    const discountIndices = items
-      .map((item, index) => (item.amount > 0 && isDiscountLikeItem(item) ? index : -1))
-      .filter((index) => index >= 0);
-
-    discountIndices.forEach((index) => {
-      const discount = items[index];
-      items[index] = {
-        ...discount,
-        amount: -Math.abs(discount.amount),
-        unitPrice: discount.unitPrice === undefined ? undefined : -Math.abs(discount.unitPrice),
-      };
-    });
-
-    const positiveItemsTotal = roundMoney(items.reduce((sum, item) => sum + Math.max(0, item.amount), 0));
-    payloadTotalIsSubtotal = discountIndices.length > 0 && nearlyEqual(payloadTotal, positiveItemsTotal);
-  }
-  const rawItemsTotal = roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
-  if (isReceiptInput(input) && items.length > 0 && payloadTotal !== null && !payloadTotalIsSubtotal) {
-    const adjustment = roundMoney(payloadTotal - rawItemsTotal);
-    const plausibleAdjustmentLimit = Math.max(20, Math.abs(rawItemsTotal) * 0.5);
-    if (adjustment !== 0 && Math.abs(adjustment) <= plausibleAdjustmentLimit) {
-      items.push({
-        name: adjustment < 0 ? "Скидка/корректировка" : "Корректировка итога",
-        amount: adjustment,
-        currency: isCurrency(payload.currency) ? payload.currency : input.currency,
-        quantity: 1,
-        unitPrice: adjustment,
-        categoryId,
-        confidence: 0.5,
-      });
-    }
-  }
   const itemsTotal = roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
-  const total = itemsTotal !== 0 ? itemsTotal : payloadTotal ?? detectedTotal;
+  const total = itemsTotal !== 0
+    ? itemsTotal
+    : isReceiptInput(input) ? 0 : payloadTotal ?? detectedTotal ?? 0;
 
-  if (!isPositiveFiniteNumber(total)) return null;
+  if (!isReceiptInput(input) && !isPositiveFiniteNumber(total)) return null;
 
   let receiptReview = normalizeReceiptReview(payload.receiptReview);
   if (isReceiptInput(input) && items.length === 0) {
@@ -373,32 +311,15 @@ export function normalizeParsedExpense(
       confidence: receiptReview?.confidence ?? 0.35,
       requiresReview: true,
       warnings: Array.from(warnings),
-      rawRows: receiptReview?.rawRows ?? [],
-      totals: receiptReview?.totals ?? { total },
     };
   }
-
-  const normalizedItems =
-    items.length > 0
-      ? items
-      : [
-          {
-            name: "Итого по чеку",
-            amount: total,
-            currency: isCurrency(payload.currency) ? payload.currency : input.currency,
-            quantity: 1,
-            unitPrice: total,
-            categoryId,
-            confidence: 0.45,
-          },
-        ];
 
   return {
     kind: "transaction",
     type: "expense",
-    description: buildReceiptDescription(input, normalizedItems),
+    description: buildReceiptDescription(input, items),
     currency: detectCurrencyInText(searchableText) ?? (isCurrency(payload.currency) ? payload.currency : input.currency),
-    items: normalizedItems,
+    items,
     total,
     receiptReview,
   };

@@ -70,8 +70,6 @@ describe("expense draft persistence", () => {
         confidence: 0.2,
         requiresReview: true,
         warnings: ["low_confidence", "arithmetic_mismatch"],
-        rawRows: ["Coffee 43"],
-        totals: { subtotal: 43, total: 48 },
       },
     };
 

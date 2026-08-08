@@ -240,7 +240,7 @@ function parserSystem(mode: unknown) {
   if (mode !== "receipt") {
     return `${shared} Parse only a concrete personal expense. Return kind=transaction and type=expense. Preserve concrete Russian wording when the input is Russian. Split multiple explicitly priced purchases into separate items. Do not interpret income, account creation, loans, advice, instructions, or unrelated questions as other product entities. Do not invent amounts. Never provide advice.`;
   }
-  return `${shared} Assemble a receipt transaction from the supplied OCR rows and receipt image. Treat OCR rows as a row index, but visually verify names, quantities and amounts against the image and correct obvious OCR mistakes. Every returned item must map to one visible product or explicit discount row; preserve their order and never invent a product. Exclude headers, subtotals, totals, payment, cash, change, loyalty and barcode rows. Use the final payable total when present and never alter a readable amount merely to force arithmetic equality. For weighed goods printed as grams, convert quantity to kilograms and unitPrice to price per kilogram. Discounts must be negative. Translate readable Thai, Georgian and English product names into specific natural Russian while preserving useful brands. If a name cannot be translated confidently, preserve the original readable name instead of guessing a different product or using generic names such as операция, сбор, товар, продукт, позиция or другое. description is a short Russian list of recognized purchases. Lower confidence whenever the image does not support a specific translation.`;
+  return `${shared} Assemble a receipt transaction from the supplied OCR rows and receipt image. Treat OCR rows as a row index, but visually verify names, quantities and amounts against the image and correct obvious OCR mistakes. Every returned item must map to one visible product; preserve product order and never invent a product. Exclude discounts, headers, subtotals, totals, payment, cash, change, loyalty and barcode rows. Use the final payable total only as receipt metadata and never alter a product amount merely to force arithmetic equality. For weighed goods printed as grams, convert quantity to kilograms and unitPrice to price per kilogram. Translate readable Thai, Georgian and English product names into specific natural Russian while preserving useful brands. If a name cannot be translated confidently, preserve the original readable name instead of guessing a different product or using generic names such as операция, сбор, товар, продукт, позиция or другое. description is a short Russian list of recognized purchases. Lower confidence whenever the image does not support a specific translation.`;
 }
 
 const receiptOcrSystem = "Read the receipt image as a document before interpreting it. Transcribe every visible row from top to bottom exactly enough to preserve names and numbers, classify each row, and keep product rows separate from subtotal, tax, total, payment, cash and change. Do not translate or invent missing text. Use null for unreadable numbers. For discounts, preserve the printed amount and classify the row as discount. Identify the final payable total rather than cash tendered, change, savings or subtotal. Thai receipts use THB and Georgian receipts use GEL when script or merchant context makes that clear. Report image-quality warnings and calibrated confidence. Return only the supplied JSON schema.";
@@ -301,14 +301,15 @@ function normalizeReceiptResult(value: unknown) {
   if (!value || typeof value !== "object") return value;
   const receipt = value as { items?: unknown };
   if (!Array.isArray(receipt.items)) return value;
-  receipt.items = receipt.items.map((item) => {
-    if (!item || typeof item !== "object") return item;
+  receipt.items = receipt.items.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
     const row = item as { name?: unknown; amount?: unknown; unitPrice?: unknown };
     const explicitDiscount = typeof row.name === "string" && /(?:скид|discount|coupon|promo|ส่วนลด|ფასდაკ)/i.test(row.name);
-    if (typeof row.amount === "number" && row.amount < 0 && !explicitDiscount) {
-      return { ...row, amount: Math.abs(row.amount), unitPrice: typeof row.unitPrice === "number" ? Math.abs(row.unitPrice) : row.unitPrice };
+    if (explicitDiscount) return [];
+    if (typeof row.amount === "number" && row.amount < 0) {
+      return [{ ...row, amount: Math.abs(row.amount), unitPrice: typeof row.unitPrice === "number" ? Math.abs(row.unitPrice) : row.unitPrice }];
     }
-    return item;
+    return [item];
   });
   return receipt;
 }
@@ -317,10 +318,10 @@ function fallbackReceipt(ocr: ReceiptOcrResult, payload: Record<string, unknown>
   const categories = Array.isArray(payload.categories) ? payload.categories.filter((value): value is string => typeof value === "string") : [];
   const categoryId = categories[0] ?? "";
   const items = ocr.rows
-    .filter((row) => (row.rowType === "product" || row.rowType === "discount") && typeof row.amount === "number" && row.amount !== 0)
+    .filter((row) => row.rowType === "product" && typeof row.amount === "number" && row.amount !== 0)
     .map((row) => ({
       name: row.rawText,
-      amount: row.rowType === "discount" ? -Math.abs(row.amount as number) : Math.abs(row.amount as number),
+      amount: Math.abs(row.amount as number),
       currency: ocr.currency === "UNKNOWN" ? payload.fallbackCurrency : ocr.currency,
       quantity: row.quantity,
       unitPrice: row.unitPrice,
@@ -377,8 +378,6 @@ function attachReceiptReview(value: unknown, ocr: ReceiptOcrResult) {
     confidence: ocr.documentConfidence,
     requiresReview: warnings.size > 0 || ocr.documentConfidence < 0.82,
     warnings: Array.from(warnings),
-    rawRows: ocr.rows.map((row) => row.rawText).filter(Boolean),
-    totals: ocr.totals,
   };
   return receipt;
 }

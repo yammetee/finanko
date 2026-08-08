@@ -42,7 +42,7 @@ describe("normalizeParsedExpense", () => {
     });
   });
 
-  it("rejects empty AI transaction payloads", () => {
+  it("keeps an editable receipt draft when no product row was recognized", () => {
     expect(
       normalizeParsedExpense(
         {
@@ -58,7 +58,14 @@ describe("normalizeParsedExpense", () => {
           items: [],
         },
       ),
-    ).toBeNull();
+    ).toMatchObject({
+      total: 0,
+      items: [],
+      receiptReview: {
+        requiresReview: true,
+        warnings: ["unreadable_rows"],
+      },
+    });
   });
 
   it("rejects an invalid receipt response instead of creating a wrong expense", () => {
@@ -101,7 +108,7 @@ describe("normalizeParsedExpense", () => {
     expect(parsed?.items[2]).toMatchObject({ quantity: 0.336, unitPrice: 45.95, amount: 15.44 });
   });
 
-  it("creates a review draft when only the receipt total is readable", () => {
+  it("does not turn a receipt total into a saved position", () => {
     expect(
       normalizeParsedExpense(
         {
@@ -118,8 +125,8 @@ describe("normalizeParsedExpense", () => {
         },
       ),
     ).toMatchObject({
-      total: 245.5,
-      items: [{ name: "Итого по чеку", amount: 245.5, confidence: 0.45 }],
+      total: 0,
+      items: [],
       receiptReview: {
         requiresReview: true,
         warnings: ["unreadable_rows"],
@@ -127,7 +134,7 @@ describe("normalizeParsedExpense", () => {
     });
   });
 
-  it("preserves OCR rows and review warnings for the manual confirmation step", () => {
+  it("keeps only review data used by the manual confirmation step", () => {
     const parsed = normalizeParsedExpense(
       { fileName: "receipt.jpg", currency: "GEL", categories },
       {
@@ -140,8 +147,6 @@ describe("normalizeParsedExpense", () => {
           confidence: 0.68,
           requiresReview: true,
           warnings: ["blurred"],
-          rawRows: ["MILK 1 x 4.20"],
-          totals: { subtotal: 4.2, discount: null, tax: null, total: 4.2 },
         },
       },
     );
@@ -150,8 +155,6 @@ describe("normalizeParsedExpense", () => {
       confidence: 0.68,
       requiresReview: true,
       warnings: ["blurred"],
-      rawRows: ["MILK 1 x 4.20"],
-      totals: { subtotal: 4.2, discount: undefined, tax: undefined, total: 4.2 },
     });
   });
 
@@ -184,7 +187,7 @@ describe("normalizeParsedExpense", () => {
     });
   });
 
-  it("keeps receipt payable total by adding a negative discount item", () => {
+  it("never adds an artificial position to reconcile the receipt total", () => {
     const parsed = normalizeParsedExpense(
       {
         fileName: "thai-7-eleven.jpg",
@@ -219,11 +222,10 @@ describe("normalizeParsedExpense", () => {
 
     expect(parsed).toMatchObject({
       currency: "THB",
-      total: 357,
+      total: 366,
       items: [
         { name: "Сэндвич", quantity: 1, unitPrice: 52, amount: 52 },
         { name: "Напитки", quantity: 1, unitPrice: 314, amount: 314 },
-        { name: "Скидка/корректировка", quantity: 1, unitPrice: -9, amount: -9 },
       ],
     });
   });
@@ -275,7 +277,7 @@ describe("normalizeParsedExpense", () => {
     expect(parsed?.items.map((item) => item.name)).toEqual(["Молочный напиток", "ореховый батончик"]);
   });
 
-  it("does not use Thai receipt savings amount as total and infers THB from All Cafe", () => {
+  it("keeps a branded All Cafe product and infers THB", () => {
     const parsed = normalizeParsedExpense(
       {
         fileName: "receipt.jpg",
@@ -297,16 +299,16 @@ describe("normalizeParsedExpense", () => {
 
     expect(parsed).toMatchObject({
       currency: "THB",
-      total: 65,
+      total: 83,
       items: [
         { name: "Салат", amount: 52, categoryId: "cat-food" },
         { name: "Лапша", amount: 22, unitPrice: 11, categoryId: "cat-food" },
-        { name: "All Cafe", amount: -9, unitPrice: -9, categoryId: "cat-food" },
+        { name: "All Cafe", amount: 9, unitPrice: 9, categoryId: "cat-food" },
       ],
     });
   });
 
-  it("treats 7-Eleven subtotal plus All Cafe discount as final net total", () => {
+  it("keeps every branded product independent from the printed total", () => {
     const parsed = normalizeParsedExpense(
       {
         fileName: "receipt.jpg",
@@ -334,16 +336,16 @@ describe("normalizeParsedExpense", () => {
       },
     );
 
-    expect(parsed?.total).toBe(357);
+    expect(parsed?.total).toBe(375);
     expect(parsed?.items[parsed.items.length - 1]).toMatchObject({
       name: "All Cafe",
-      amount: -9,
-      unitPrice: -9,
+      amount: 9,
+      unitPrice: 9,
       categoryId: "cat-food",
     });
   });
 
-  it("treats multiple Thai receipt discounts as negative items and keeps net total", () => {
+  it("excludes discount rows instead of saving them as expense positions", () => {
     const parsed = normalizeParsedExpense(
       {
         fileName: "receipt.jpg",
@@ -374,12 +376,9 @@ describe("normalizeParsedExpense", () => {
       },
     );
 
-    expect(parsed?.total).toBe(420);
-    expect(parsed?.items.slice(-3)).toMatchObject([
-      { amount: -5, unitPrice: -5 },
-      { amount: -7, unitPrice: -7 },
-      { amount: -4, unitPrice: -4 },
-    ]);
+    expect(parsed?.total).toBe(436);
+    expect(parsed?.items).toHaveLength(11);
+    expect(parsed?.items.some((item) => /(?:скид|coupon|ส่วนลด)/i.test(item.name))).toBe(false);
   });
 
   it("removes uncertainty words from recognized receipt item names", () => {

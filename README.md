@@ -24,7 +24,7 @@ Finanko tracks actual spending only. Unrelated financial product areas are outsi
 
 ## Data model
 
-The runtime uses two browser-accessible tables: `categories` and `expenses`. Every reviewed position is saved as its own expense row with its own amount, currency, and category. The multi-position total exists only as a converted preview and is never persisted. Every row carries its authenticated owner directly, and Postgres RLS enforces that ownership. Zustand is only an in-memory cache after confirmed database writes.
+The runtime uses two browser-accessible tables: `categories` and `expenses`. Every reviewed position is saved as its own expense row with its own amount, currency, and category. The multi-position total exists only as a converted preview and is never persisted. A printed or AI-provided receipt total never creates or changes a saved position, and non-product receipt rows are not expenses. Every row carries its authenticated owner directly, and Postgres RLS enforces that ownership. Zustand is only an in-memory cache after confirmed database writes.
 
 AI administrator roles and daily usage counters live in the non-exposed `finanko_private` schema. The authenticated quota RPC is the only browser-role entry point to that data.
 

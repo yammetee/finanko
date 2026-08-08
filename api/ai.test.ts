@@ -315,6 +315,13 @@ describe("AI serverless handler", () => {
         unitPrice: null,
         categoryId: "Food",
         confidence: 0.95,
+      }, {
+        name: "Discount",
+        amount: -2,
+        quantity: 1,
+        unitPrice: -2,
+        categoryId: "Food",
+        confidence: 0.9,
       }],
       total: 12,
       type: "expense",
@@ -351,12 +358,11 @@ describe("AI serverless handler", () => {
     expect(response.statusCode).toBe(200);
     expect(response.payload).toEqual({
       ...parsed,
+      items: [parsed.items[0]],
       receiptReview: {
         confidence: 0.95,
         requiresReview: false,
         warnings: [],
-        rawRows: ["Coffee 12"],
-        totals: ocr.totals,
       },
     });
     expect(ocrRequest.text.format.name).toBe("finanko_receipt_ocr");

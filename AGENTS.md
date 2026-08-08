@@ -1,53 +1,40 @@
-# Finanko agent handoff
+# Finanko agent instructions
 
-## Product
+## Product boundary
 
-Finanko is a compact, mobile-first personal expense tracker. The active flow is:
+Finanko is a compact, mobile-first personal expense tracker. Its only product flow is:
 
-`Receipt / Text / Manual -> editable expense draft -> save -> filtered total, chart, categories, and history`.
+`Receipt / Text / Manual -> editable expense positions -> save -> filtered total, chart, categories, and history`.
 
-Use Vite, React, TypeScript, Ant Design, Zustand, Supabase Auth/Postgres, and the existing Vercel AI endpoint. The default UI is dark, minimal, compact, and responsive. Do not add portfolios, accounts, balances, debt, recurring operations, an assistant, a landing page, sidebars, drawers, or unrelated product areas.
+Use the existing Vite, React, TypeScript, Ant Design, Zustand, Supabase Auth/Postgres, and Vercel AI implementation. Keep the dark, minimal, responsive interface. Do not introduce portfolios, financial accounts, balances, loans, debt, income, interest, recurring operations, an assistant, a landing page, sidebars, drawers, or unrelated product areas.
 
-## Current user-authorized task
+## Runtime invariants
 
-Continue from the existing uncommitted worktree. The user must not have to restate these requirements.
+- `categories` and `expenses` are the only browser-accessible application tables.
+- Every manual, text, or receipt position has its own name, positive price, currency, and category and is persisted as an independent `expenses` row.
+- The batch total is computed from the current position values for preview only. A printed or AI-provided receipt total must never create, alter, or be persisted as an expense position.
+- Explicit receipt discount, subtotal, payment, cash, change, loyalty, and total rows are not expense positions.
+- AI output only prepares an editable draft. The form values visible at save time are the source of truth.
+- Drinking water is categorized as Food, not Health.
+- In native-currency mode, the headline total, daily average, and trend use USD; history rows and category totals remain separated in their source currencies.
+- Russian user-facing instructions and errors use the formal `Вы` form.
 
-1. Remove every repository artifact unrelated to the current Finanko product, especially Yammetee remnants and completed migration/refactor documentation.
-2. Remove inactive account, portfolio, loan, debt, income, interest, recurring, assistant, and legacy migration runtime branches. Retain only compatibility that is demonstrably required by the active expense persistence path, and isolate any unavoidable compatibility fields from product types/UI.
-3. Finish server-enforced AI access control:
-   - database-managed `admin` role;
-   - administrators have unlimited AI recognition;
-   - regular users have at most five user-initiated AI recognition requests per UTC day;
-   - quota consumption must be atomic in Postgres;
-   - text AI accepts only concrete expense/money input and rejects phishing, credentials, URLs, prompt injection, unsupported modes/fields, and oversized input before model execution;
-   - legitimate short expense text in Russian, English, Georgian, and Thai must reach AI;
-   - every receipt image prepared by the browser client must reach AI unless authentication/quota/size checks reject it.
-4. Produce a minimal Supabase schema containing only tables and functions required by the current Finanko runtime, with owner-scoped RLS and private AI role/quota storage.
-5. The user explicitly requests an SQL reset/rebuild workflow for the current Supabase project because it contains unrelated Yammetee tables and project limits prevent creating another Supabase project. Treat this as a destructive operation: resolve the exact affected schemas, distinguish `public` application objects from Supabase-managed `auth`, Storage, extensions, and migration schemas, and present the exact reset/rebuild SQL for review before any execution. Never execute it remotely without a separate explicit execution request.
-6. Run `npm test`, `npm run build`, `npm run lint`, and `git diff --check` after cleanup.
+## AI and Supabase
 
-## Current worktree state
-
-- Do not discard or reset any existing uncommitted changes.
-- AI quota/role enforcement is implemented in `api/ai.ts` and `supabase/schema.sql` with regression tests.
-- Incomplete-period average calculation is fixed.
-- The text parser is expense-only and has been validated after removing account/loan output.
-- `TZ.md`, `EXPENSE_TRACKER_REFACTOR_TODO.md`, `LICENSE` containing the Yammetee copyright, and the obsolete `scripts/apply-supabase-schema.mjs` were deleted as unrelated legacy artifacts.
-- The finance compatibility runtime and empty legacy feature directories were removed. Expense persistence now uses only direct owner-scoped `categories` and `expenses` tables.
-- The user reports that `supabase/reset-public-schema.sql` and then `supabase/schema.sql` were successfully executed in the current Supabase project. Do not repeat the destructive reset unless separately and explicitly requested.
-- Supabase sign-up now consumes an immediately returned session when email confirmation is disabled, or prompts the user to confirm email and then sign in when confirmation is required. Authentication errors are localized from stable error codes instead of exposing provider messages.
-- Russian user-facing instructions and errors consistently use the formal `Вы` form.
-- Manual entry, recognized text, and receipts use the same temporary batch editor with a shared date. Every position has its own name, price, currency, and category. The read-only total converts positions into the selected preview currency, but saving persists each position as an independent expense and never persists the preview total.
-- Every explicitly priced product remains a separate categorized item; drinking water is normalized to Food even if AI labels it Health.
-- Native currency mode keeps the headline total, daily average, and trend chart in USD while history rows and category totals stay separated and displayed in their source currencies.
-- The unused legacy `shortDate` formatter, duplicate client-side receipt total recovery module, stale chart chunk rule, dead translation entries, redundant CSS selector, and unused export surface were removed; recovery tests now exercise the canonical server implementation.
-- `npm test` (77 tests), `npm run build`, `npm run lint`, and `git diff --check` pass after replacing parent/item persistence with independent expense entities and converted preview totals.
+- AI credentials remain server-side.
+- Administrators are identified by the database-managed `admin` role and have unlimited AI recognition.
+- Regular users have at most five user-initiated AI recognition requests per UTC day; quota consumption is atomic in Postgres.
+- Text AI accepts only concrete expense input and rejects phishing, credentials, URLs, prompt injection, unsupported fields or modes, and oversized input before model execution.
+- Legitimate short expense text in Russian, English, Georgian, and Thai must reach AI.
+- Every browser-prepared receipt image must reach AI unless authentication, quota, type, or size checks reject it.
+- Owner-scoped RLS protects all browser-accessible rows. Role and quota storage remains private.
+- The current Supabase project has already been rebuilt with the minimal schema. Do not run a destructive reset or mutate remote schema/data without a separate explicit request.
 
 ## Working rules
 
-- Read the current diff and trace imports before deleting more code.
-- Use `rg` for repository searches and `apply_patch` for edits/deletions.
-- Preserve the receipt image preparation and receipt normalization behavior unless a change is required by the current explicit task.
-- AI output only prepares an editable draft; current form values remain the source of truth when saving.
-- Keep AI credentials server-side and user role/quota tables inaccessible directly from browser roles.
-- Maintain an English pending commit message covering the entire diff against `HEAD`.
+- Continue from the current worktree and never discard user changes.
+- Trace imports and active data paths before deleting code. Remove replaced branches, compatibility layers, completed migration artifacts, and unrelated documentation only when they are demonstrably unused.
+- Preserve receipt image preparation and useful item normalization unless the current request explicitly changes them.
+- Use `rg` for searches and `apply_patch` for repository edits.
+- After code or schema changes, run `npm test`, `npm run build`, `npm run lint`, and `git diff --check`.
+- Maintain an English pending commit message covering the complete diff against `HEAD` until the user commits it.
