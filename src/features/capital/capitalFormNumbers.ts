@@ -1,3 +1,5 @@
+import { decimal, decimalString, divide, multiply } from "./decimal";
+
 const decimalPattern = /^\d+(?:[.,]\d+)?$/;
 
 export function normalizeCapitalDecimal(value?: string) {
@@ -20,3 +22,11 @@ export function isCapitalPercent(value?: string) {
   return normalized === undefined || decimalPattern.test(normalized) && Number(normalized) <= 100;
 }
 
+export function rateToPercentInput(rate?: string) {
+  return rate ? decimalString(multiply(decimal(rate), decimal("100"))) : "";
+}
+
+export function percentInputToRate(percent?: string) {
+  const normalized = normalizeCapitalDecimal(percent);
+  return normalized === undefined ? undefined : decimalString(divide(decimal(normalized), decimal("100")));
+}

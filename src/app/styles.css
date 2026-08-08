@@ -287,7 +287,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .capital-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .capital-page { gap: 14px; }
   .capital-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .capital-form input { font-size: 16px; }
+  input,
+  textarea,
+  select,
+  .ant-select-selection-item,
+  .ant-select-selection-placeholder {
+    font-size: 16px !important;
+  }
   .capital-notice { align-items: stretch; flex-direction: column; gap: 10px; }
   .capital-notice button { justify-content: center; }
   .capital-row-detailed { align-items: start; gap: 8px 12px; grid-template-columns: minmax(0, 1fr) 76px; }

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
+const capitalWriterFix = readFileSync(new URL("./migrations/20260808201500_fix_capital_snapshot_rpc.sql", import.meta.url), "utf8");
 
 describe("minimal Finanko schema", () => {
   it("contains only the public expense tables required by the runtime", () => {
@@ -92,5 +93,12 @@ describe("minimal Finanko schema", () => {
     expect(schema).toContain("capital_events_external_unique_idx");
     expect(schema).toContain("on finanko_private.capital_events(owner_id, external_provider, external_id)");
     expect(schema).toContain("on conflict (id) do update set item_id = excluded.item_id");
+  });
+
+  it("rebuilds the capital writer after removing legacy event columns", () => {
+    expect(capitalWriterFix).toContain("create or replace function public.save_capital_snapshot(capital_data jsonb)");
+    expect(capitalWriterFix).toContain("insert into finanko_private.capital_groups");
+    expect(capitalWriterFix).not.toContain("unit_price");
+    expect(capitalWriterFix).not.toContain("notes");
   });
 });

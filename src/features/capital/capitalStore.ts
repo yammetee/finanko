@@ -16,9 +16,8 @@ interface CapitalState extends CapitalSnapshot {
   quotesLoading: boolean;
   quotesPartial: boolean;
   unavailableQuoteItemIds: string[];
-  quotesError?: string;
+  quotesError: boolean;
   loadState: LoadState;
-  error?: string;
   initialize: () => Promise<void>;
   saveGroup: (value: Omit<CapitalGroup, "id"> & { id?: string }) => Promise<CapitalGroup>;
   saveItem: (value: Omit<CapitalItem, "id"> & { id?: string }) => Promise<CapitalItem>;
@@ -34,13 +33,6 @@ interface CapitalState extends CapitalSnapshot {
 
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 const localDate = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-async function persistCurrentValuation(quotes: CapitalQuote[] = []) {
-  const state = useCapitalStore.getState();
-  const totalUsd = getCapitalTotalUsd(state.items, state.events, state.quotes);
-  await saveCapitalValuation(quotes, totalUsd);
-  const date = localDate();
-  useCapitalStore.setState((current) => ({ valuations: [...current.valuations.filter((value) => value.date !== date), { date, totalUsd }] }));
-}
 async function generateExpectedInterest() {
   const state = useCapitalStore.getState();
   const expected = buildExpectedInterestEvents(state.items, state.events);
@@ -50,16 +42,16 @@ async function generateExpectedInterest() {
 }
 
 export const useCapitalStore = create<CapitalState>()((set) => ({
-  groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], quotesLoading: false, quotesPartial: false, unavailableQuoteItemIds: [], historyLoading: false, historyPending: false, loadState: "idle",
+  groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], quotesLoading: false, quotesPartial: false, quotesError: false, unavailableQuoteItemIds: [], historyLoading: false, historyPending: false, loadState: "idle",
   initialize: async () => {
-    set({ loadState: "loading", error: undefined });
+    set({ loadState: "loading" });
     try {
       const snapshot = await loadCapitalData();
       const expected = buildExpectedInterestEvents(snapshot.items, snapshot.events);
       if (expected.length) await saveCapitalData({ events: expected });
       set({ groups: snapshot.groups, items: snapshot.items, events: [...snapshot.events, ...expected], quoteHistory: snapshot.quoteHistory ?? [], valuations: snapshot.valuations ?? [], quotes: Object.fromEntries((snapshot.latestQuotes ?? []).map((quote) => [quote.itemId, quote])), loadState: "ready" });
     }
-    catch (error) { set({ loadState: "error", error: error instanceof Error ? error.message : "Capital load failed" }); }
+    catch { set({ loadState: "error" }); }
   },
   saveGroup: async (input) => {
     const value = { ...input, id: input.id ?? uid("capital-group") };
@@ -71,7 +63,6 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     const value = { ...input, id: input.id ?? uid("capital-item") };
     await saveCapitalData({ items: [value] });
     set((state) => ({ items: [...state.items.filter((entry) => entry.id !== value.id), value] }));
-    void persistCurrentValuation().catch(() => undefined);
     void generateExpectedInterest().catch(() => undefined);
     void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
     return value;
@@ -81,7 +72,6 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     const event: CapitalEvent = { id: uid("capital-event"), itemId: item.id, type: item.type === "cash" || item.type === "deposit" ? "deposit" : "buy", status: "confirmed", occurredAt, quantity: quantity || undefined, amount: invested, currency: item.quoteCurrency, source: "manual" };
     await saveCapitalData({ items: [item], events: [event] });
     set((state) => ({ items: [...state.items, item], events: [...state.events, event] }));
-    void persistCurrentValuation().catch(() => undefined);
     void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
     void generateExpectedInterest().catch(() => undefined);
     return item;
@@ -90,7 +80,6 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     const value = { ...input, id: input.id ?? uid("capital-event") };
     await saveCapitalData({ events: [value] });
     set((state) => ({ events: [...state.events.filter((entry) => entry.id !== value.id), value] }));
-    void persistCurrentValuation().catch(() => undefined);
     void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
     return value;
   },
@@ -103,12 +92,11 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     const updated = { ...value, status };
     await saveCapitalData({ events: [updated] });
     set((state) => ({ events: state.events.map((entry) => entry.id === id ? updated : entry) }));
-    void persistCurrentValuation().catch(() => undefined);
     void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
     if (status === "confirmed") void generateExpectedInterest().catch(() => undefined);
   },
   refreshQuotes: async () => {
-    set({ quotesLoading: true, quotesError: undefined });
+    set({ quotesLoading: true, quotesError: false });
     try {
       const marketItems = useCapitalStore.getState().items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto"));
       const quotes = await loadMarketQuotes(marketItems);
@@ -122,7 +110,7 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
       set((state) => ({ quotes: merged, quotesPartial: unavailableQuoteItemIds.length > 0, unavailableQuoteItemIds, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
     } catch {
       const unavailableQuoteItemIds = useCapitalStore.getState().items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id);
-      set({ quotesError: "Market quotes unavailable", unavailableQuoteItemIds });
+      set({ quotesError: true, unavailableQuoteItemIds });
     } finally { set({ quotesLoading: false }); }
   },
   rebuildHistory: async () => {

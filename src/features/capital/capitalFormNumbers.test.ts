@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCapitalPercent, isNonNegativeCapitalDecimal, isPositiveCapitalDecimal, normalizeCapitalDecimal } from "./capitalFormNumbers";
+import { isCapitalPercent, isNonNegativeCapitalDecimal, isPositiveCapitalDecimal, normalizeCapitalDecimal, percentInputToRate, rateToPercentInput } from "./capitalFormNumbers";
 
 describe("capital form decimals", () => {
   it("keeps decimals as strings and accepts comma input", () => {
@@ -13,5 +13,10 @@ describe("capital form decimals", () => {
     expect(isPositiveCapitalDecimal("0.000")).toBe(false);
     expect(isCapitalPercent("100,01")).toBe(false);
   });
-});
 
+  it("converts stored rates to and from form percentages", () => {
+    expect(rateToPercentInput("0.305")).toBe("30.5");
+    expect(percentInputToRate("30,5")).toBe("0.305");
+    expect(percentInputToRate(" ")).toBeUndefined();
+  });
+});

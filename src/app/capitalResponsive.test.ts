@@ -16,9 +16,12 @@ describe("capital responsive and accessible states", () => {
     expect(styles).toContain(".capital-stats { grid-template-columns: 1fr; }");
   });
 
-  it("keeps capital form controls at an iOS-safe focus size", () => {
+  it("keeps every form control at an iOS-safe focus size", () => {
     expect(styles).toContain("button, input, select, textarea { font: inherit; }");
-    expect(styles).toContain(".capital-form input { font-size: 16px; }");
+    expect(styles).toContain("  input,\n  textarea,\n  select,");
+    expect(styles).toContain("  .ant-select-selection-item,");
+    expect(styles).toContain("  .ant-select-selection-placeholder");
+    expect(styles).toContain("font-size: 16px !important;");
     expect(page).not.toContain("capital-editor");
   });
 

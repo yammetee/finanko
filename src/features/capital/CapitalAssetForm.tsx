@@ -12,8 +12,7 @@ import { useI18n } from "../../shared/i18n/i18nContext";
 import { ChoiceGroup } from "../../shared/ui/ChoiceGroup";
 import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import { getCapitalCadenceLabel, getCapitalItemLabel } from "./capitalLabels";
-import { percentInputToRate, rateToPercentInput } from "./capitalRates";
-import { isCapitalPercent, isNonNegativeCapitalDecimal, isPositiveCapitalDecimal, normalizeCapitalDecimal } from "./capitalFormNumbers";
+import { isCapitalPercent, isNonNegativeCapitalDecimal, isPositiveCapitalDecimal, normalizeCapitalDecimal, percentInputToRate, rateToPercentInput } from "./capitalFormNumbers";
 import { searchMarketAssets } from "./marketRepository";
 import { CAPITAL_CURRENCIES, type CapitalAssetSuggestion, type CapitalCurrency, type CapitalGroup, type CapitalItem, type CapitalItemType } from "./capitalTypes";
 
@@ -121,7 +120,7 @@ export function CapitalAssetForm({ item, groups, items, saving, onBack, onSave }
       {groups.length > 1 ? <Form.Item name="groupId" label={t("capital.asset.group")} rules={[{ required: true }]}><Select options={groups.map((value) => ({ value: value.id, label: value.name }))}/></Form.Item> : null}
       {market ? <Form.Item name="symbol" label={t("capital.asset.symbol")} rules={[{ required: true, whitespace: true, message: t("capital.validation.symbol") }]}><Input autoCapitalize="characters" maxLength={32}/></Form.Item> : null}
       <Form.Item name="currency" noStyle><ChoiceGroup label={t("form.currency")} options={CAPITAL_CURRENCIES.map((value) => ({ value, label: <><CurrencyIcon currency={value} size={12}/>{value}</> }))}/></Form.Item>
-      {market ? <Form.Item name="manualPrice" label={t("capital.asset.manualPrice")} extra={t("capital.asset.manualPriceHint")} rules={[{ validator: (_, value) => isNonNegativeCapitalDecimal(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.nonNegative"))) }]}><Input inputMode="decimal"/></Form.Item> : null}
+      {market ? <Form.Item name="manualPrice" label={t("capital.asset.manualPrice")} rules={[{ validator: (_, value) => isNonNegativeCapitalDecimal(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.nonNegative"))) }]}><Input inputMode="decimal"/></Form.Item> : null}
       {type === "deposit" ? <>
         <Form.Item name="interestRate" label={t("capital.asset.interestRate")} rules={[{ validator: (_, value) => isCapitalPercent(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.percent"))) }]}><Input inputMode="decimal"/></Form.Item>
         {interestRate ? <>
