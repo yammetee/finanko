@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchMarketHistory, fetchMarketQuotes, searchMarketAssets } from "./market";
+import { fetchMarketHistory, fetchMarketQuotes, searchMarketAssets } from "../api/market";
 
 const liveDescribe = process.env.RUN_LIVE_MARKET_TESTS === "1" ? describe : describe.skip;
 const startDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
