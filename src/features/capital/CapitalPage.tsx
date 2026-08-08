@@ -17,6 +17,7 @@ import { buildCapitalPositions } from "./capitalView";
 
 type Editor = { kind: "group"; value?: CapitalGroup } | { kind: "item"; value?: CapitalItem } | { kind: "event"; value?: CapitalEvent } | null;
 type TypeFilter = "all" | "market" | "crypto" | "cash";
+const GROUP_COLORS = ["#5a9feb", "#58b6ad", "#e8b94c", "#9b82e6", "#f07f86", "#c69b58", "#65a9d8", "#e58aa8"];
 const typeMatches = (type: CapitalItemType, filter: TypeFilter) => filter === "all" || (filter === "market" && (type === "stock" || type === "fund")) || type === filter || (filter === "cash" && type === "deposit");
 
 export function CapitalPage({ ratesVersion }: { ratesVersion: number }) {
@@ -40,6 +41,13 @@ export function CapitalPage({ ratesVersion }: { ratesVersion: number }) {
   const invested = sumCapitalValues(positions.map((value) => value.costBasisUsd));
   const result = sumCapitalValues(positions.map((value) => value.profitUsd));
   const income = sumCapitalValues(positions.map((value) => value.incomeUsd));
+  const groupBreakdown = state.groups.map((group, index) => ({
+    id: group.id,
+    name: group.name,
+    color: GROUP_COLORS[index % GROUP_COLORS.length],
+    value: Number(sumCapitalValues(positions.filter(({ item }) => item.groupId === group.id && typeMatches(item.type, typeFilter)).map((position) => position.valueUsd))),
+  })).filter((group) => group.value !== 0).sort((left, right) => Math.abs(right.value) - Math.abs(left.value));
+  const groupBreakdownTotal = groupBreakdown.reduce((sum, group) => sum + Math.abs(group.value), 0);
   const pending = state.events.filter((event) => event.status === "expected");
   const capitalTrend = state.valuations.map((value) => ({ key: value.date, start: `${value.date}T00:00:00Z`, end: `${value.date}T23:59:59Z`, value: Number(value.totalUsd), expenseCount: 1, unit: "day" as const }));
   const eventValue = (event: CapitalEvent) => event.type === "split" ? `${event.splitRatio}×` : event.type === "transfer" && event.quantity ? event.quantity : event.amount ? formatMoney(Number(event.amount), event.currency) : event.quantity ?? "";
@@ -86,7 +94,10 @@ export function CapitalPage({ ratesVersion }: { ratesVersion: number }) {
     </section>
 
     {state.groups.length > 1 || hasTypeFilters ? <section className="filters">{state.groups.length > 1 ? <div className="button-filter"><button aria-pressed={activeGroupFilter === "all"} className={activeGroupFilter === "all" ? "active" : ""} onClick={() => setGroupFilter("all")}>{t("capital.filters.allGroups")}</button>{state.groups.map((group) => <button aria-pressed={activeGroupFilter === group.id} className={activeGroupFilter === group.id ? "active" : ""} key={group.id} onClick={() => setGroupFilter(group.id)}>{group.name}</button>)}</div> : null}{hasTypeFilters ? <div className="button-filter">{(["all","market","crypto","cash"] as TypeFilter[]).map((type) => <button aria-pressed={typeFilter === type} className={typeFilter === type ? "active" : ""} key={type} onClick={() => setTypeFilter(type)}>{t(`capital.filters.${type}`)}</button>)}</div> : null}</section> : null}
-    {capitalTrend.length ? <div className="analytics-grid"><section className="panel chart-panel"><h2>{t("capital.chart")}{state.historyLoading ? <RefreshCw className="spin" size={14}/> : null}</h2><SpendingChart buckets={capitalTrend} currency="USD" locale={locale} label={t("capital.chartLabel")}/></section></div> : null}
+    {capitalTrend.length || groupBreakdown.length ? <div className="analytics-grid">
+      {capitalTrend.length ? <section className="panel chart-panel"><h2>{t("capital.chart")}{state.historyLoading ? <RefreshCw className="spin" size={14}/> : null}</h2><SpendingChart buckets={capitalTrend} currency="USD" locale={locale} label={t("capital.chartLabel")}/></section> : null}
+      {groupBreakdown.length ? <section className="panel category-panel"><h2>{t("capital.byGroup")}</h2>{groupBreakdown.map((group) => { const share = groupBreakdownTotal > 0 ? Math.round(Math.abs(group.value) / groupBreakdownTotal * 100) : 0; return <button type="button" key={group.id} onClick={() => setGroupFilter(group.id)}><i style={{ background: group.color }}/><span>{group.name}</span><strong>{formatMoney(group.value, "USD")}</strong><small>{share}%</small></button>; })}</section> : null}
+    </div> : null}
     {pending.length ? <section className="panel pending-events"><h2>{t("capital.pending")}</h2>{pending.map((event) => <div key={event.id}><span>{state.items.find((item) => item.id === event.itemId)?.name} · {getCapitalEventLabel(event.type, locale)} · {eventValue(event)}</span><button aria-label={t("actions.edit")} onClick={() => setEditor({ kind: "event", value: event })}><Pencil size={15}/></button><button aria-label={t("capital.confirm")} onClick={() => void runAction(() => state.setEventStatus(event.id, "confirmed"), t("capital.confirmed"))}><Check size={15}/></button><button aria-label={t("capital.ignore")} onClick={() => void runAction(() => state.setEventStatus(event.id, "ignored"), t("capital.ignored"))}><X size={15}/></button></div>)}</section> : null}
     <section className="history-section capital-list"><div className="section-heading"><h2>{t("capital.assets")}</h2><span>{visible.length}</span></div>{visible.map((position) => <button type="button" className="capital-row capital-row-detailed" key={position.item.id} onClick={() => setSelectedItemId(position.item.id)}><div><strong>{position.item.name}</strong><span>{state.groups.find((group) => group.id === position.item.groupId)?.name} · {position.item.symbol || getCapitalItemLabel(position.item.type, locale).toLocaleLowerCase(locale)}</span><small>{t("capital.asset.quantity")}: {position.quantity} · {t("capital.average")}: {formatMoney(Number(position.averageCost), position.item.quoteCurrency)}</small>{position.netIncome !== "0" ? <small>{t("capital.income")}: {formatMoney(Number(position.netIncome), position.item.quoteCurrency)}</small> : null}</div><div><strong>{formatMoney(position.value, position.item.quoteCurrency)}</strong>{state.unavailableQuoteItemIds.includes(position.item.id) || position.priceSource === "missing" ? <small className="negative">{t("capital.quoteStale")}</small> : null}<small className={position.profit < 0 ? "negative" : "positive"}>{t("capital.result")}: {formatMoney(position.profit, position.item.quoteCurrency)}</small></div><ChevronRight size={16}/></button>)}</section>
   </>;
