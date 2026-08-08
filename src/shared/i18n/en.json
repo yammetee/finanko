@@ -78,6 +78,7 @@
   "expense.trend": "Spending trend",
   "expense.count": "{count} expenses",
   "expense.itemRequired": "Add at least one item",
+  "expense.loadingEditor": "Opening editor…",
   "expense.nameRequired": "Enter an item name",
   "expense.textRequired": "Enter an expense description",
   "expense.untitled": "Expense",

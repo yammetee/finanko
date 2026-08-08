@@ -78,6 +78,7 @@
   "expense.trend": "Динамика расходов",
   "expense.count": "Расходов: {count}",
   "expense.itemRequired": "Добавьте хотя бы одну позицию",
+  "expense.loadingEditor": "Открываю редактор…",
   "expense.nameRequired": "Введите название позиции",
   "expense.textRequired": "Введите описание расхода",
   "expense.untitled": "Расход",

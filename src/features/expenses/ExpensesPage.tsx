@@ -2,7 +2,7 @@ import AntApp from "antd/es/app";
 import DatePicker from "antd/es/date-picker";
 import dayjs from "dayjs";
 import { Camera, FileText, LogOut, PenLine } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { CURRENCIES, DEFAULT_CURRENCY } from "../../shared/constants/expenses";
 import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
@@ -16,7 +16,7 @@ import { detectAmountInText, detectCurrencyInText, parseTextInputLocally, type P
 import { prepareReceiptImage } from "../receipts/receiptImage";
 import { isDefaultExpenseCategory, sortDefaultExpenseCategories } from "./categoryData";
 import { ExpenseDetailsPage } from "./ExpenseDetailsPage";
-import { ExpenseFormPage, type ExpenseFormMode } from "./ExpenseFormPage";
+import type { ExpenseFormMode } from "./ExpenseFormPage";
 import { ExpenseRows } from "./ExpenseRows";
 import { SpendingChart } from "./SpendingChart";
 import {
@@ -33,6 +33,7 @@ import { createEmptyExpenseDraft, expenseFormToInputs, type ExpenseDraft, type E
 import { useExpenseStore } from "./expenseStore";
 
 const { RangePicker } = DatePicker;
+const ExpenseFormPage = lazy(() => import("./ExpenseFormPage").then((module) => ({ default: module.ExpenseFormPage })));
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
 const MOBILE_CATEGORY_LIMIT = 5;
 const HISTORY_LIMIT = 8;
@@ -239,7 +240,7 @@ export function ExpensesPage() {
       <input ref={receiptInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
       <header className="app-header"><div className="brand"><span>F</span>Finanko</div><div className="header-actions"><button className="currency-button" type="button" title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })} onClick={() => setCurrencyMode(nextCurrency)}>{currencyMode === "native" ? <NativeCurrencyIcon size={15} /> : <CurrencyIcon currency={currencyMode} size={15} />}{currentCurrencyLabel}</button><button type="button" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>{locale.toUpperCase()}</button><button type="button" aria-label={t("actions.signOut")} onClick={() => void signOut()}><LogOut size={17} /></button></div></header>
       <main className="main-content">
-        {formMode ? <ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /> : selected ? <ExpenseDetailsPage expense={selected} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
+        {formMode ? <Suspense fallback={<div className="parsing-state">{t("expense.loadingEditor")}</div>}><ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /></Suspense> : selected ? <ExpenseDetailsPage expense={selected} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
       </main>
     </div>
   );
