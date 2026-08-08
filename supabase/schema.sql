@@ -1,4 +1,4 @@
--- Minimal Finanko schema. Apply only after reviewing and running reset-public-schema.sql.
+-- Minimal Finanko schema.
 create schema if not exists finanko_private;
 revoke all on schema finanko_private from public, anon, authenticated;
 
@@ -96,7 +96,6 @@ grant usage on schema public to authenticated;
 grant select, insert on public.categories to authenticated;
 grant select, insert, update on public.expenses to authenticated;
 -- Saves a batch of independent expenses in one transaction.
-drop function if exists public.save_expense(jsonb, jsonb);
 create or replace function public.save_expenses(expense_rows jsonb)
 returns void
 language plpgsql

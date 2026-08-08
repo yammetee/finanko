@@ -41,9 +41,7 @@ interface ParseTextExpenseInput {
 
 export interface ParseReceiptInput {
   fileName: string;
-  fileType?: string;
   fileDataUrl?: string;
-  text?: string;
   currency: Currency;
   categories: Category[];
 }

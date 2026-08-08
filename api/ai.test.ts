@@ -128,7 +128,7 @@ describe("AI request policy", () => {
   });
 
   it("allow-lists parser modes, currencies, categories and receipt MIME types", () => {
-    expect(validateAiPayload({ mode: "assistant", categories: ["Еда"] })).toEqual({ status: 400, error: "Invalid parser mode" });
+    expect(validateAiPayload({ mode: "unsupported", categories: ["Еда"] })).toEqual({ status: 400, error: "Invalid parser mode" });
     expect(validateAiPayload({ mode: "text", text: "кофе 5", currency: "USD", categories: ["Еда"], instructions: "do something else" })).toEqual({
       status: 400,
       error: "Unsupported text request fields",
@@ -180,10 +180,7 @@ describe("AI request policy", () => {
   it("accepts the exact receipt payload produced by the browser client", () => {
     expect(validateAiPayload({
       mode: "receipt",
-      fileName: "магазин-чек.heic",
-      fileType: "image/jpeg",
       fileDataUrl: "data:image/jpeg;base64,prepared-browser-image",
-      text: undefined,
       fallbackCurrency: "GEL",
       categories: ["Еда", "Другое", "Транспорт"],
     })).toEqual({
@@ -232,7 +229,7 @@ describe("AI serverless handler", () => {
     expect(endSpy).toHaveBeenCalledOnce();
   });
 
-  it("rejects the removed assistant request kind", async () => {
+  it("rejects unsupported request kinds", async () => {
     authenticatedAiEnv();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true } as Response);
     const response = responseRecorder();
@@ -240,7 +237,7 @@ describe("AI serverless handler", () => {
     await handler({
       method: "POST",
       headers: { authorization: "Bearer token" },
-      body: { kind: "assistant" as "parse", payload: {} },
+      body: { kind: "unsupported" as "parse", payload: {} },
     }, response);
 
     expect(response.statusCode).toBe(400);
@@ -364,6 +361,72 @@ describe("AI serverless handler", () => {
     });
     expect(ocrRequest.text.format.name).toBe("finanko_receipt_ocr");
     expect(parserRequest.text.format.name).toBe("finanko_parse_result");
+  });
+
+  it("returns recognized receipt items without requiring an aggregate total", async () => {
+    authenticatedAiEnv();
+    const ocr = {
+      merchant: "Cafe",
+      currency: "GEL",
+      rows: [{
+        rawText: "Coffee",
+        rowType: "product",
+        amount: null,
+        quantity: null,
+        unitPrice: null,
+        confidence: 0.6,
+      }],
+      totals: { subtotal: null, discount: null, tax: null, total: null },
+      documentConfidence: 0.6,
+      warnings: ["total_unclear"],
+    };
+    const parsed = {
+      kind: "transaction",
+      description: "Кофе",
+      currency: "GEL",
+      items: [{
+        name: "Кофе",
+        amount: 12.345,
+        quantity: null,
+        unitPrice: null,
+        categoryId: "Food",
+        confidence: 0.6,
+      }],
+      total: null,
+      type: "expense",
+    };
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ ok: true } as Response)
+      .mockResolvedValueOnce(allowedQuotaResponse())
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ output_text: JSON.stringify(ocr) }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ output_text: JSON.stringify(parsed) }),
+      } as Response);
+    const response = responseRecorder();
+
+    await handler({
+      method: "POST",
+      headers: { authorization: "Bearer token" },
+      body: {
+        kind: "parse",
+        payload: {
+          mode: "receipt",
+          fileDataUrl: "data:image/jpeg;base64,receipt",
+          fallbackCurrency: "USD",
+          categories: ["Food"],
+        },
+      },
+    }, response);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.payload).toEqual(expect.objectContaining({
+      items: [expect.objectContaining({ amount: 12.345 })],
+      total: null,
+    }));
   });
 
   it("does not consume quota or call AI for unsafe text", async () => {

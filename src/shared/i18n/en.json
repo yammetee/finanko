@@ -77,7 +77,6 @@
   "expense.itemRequired": "Add at least one item",
   "expense.untitled": "Expense",
   "expense.updated": "Expense updated",
-  "feedback.invalidMoneyAmount": "Enter a valid amount with no more than two decimal places",
   "feedback.loadFailed": "Could not load expenses. Reload the app and try again.",
   "feedback.saveFailed": "Could not save changes. Please try again.",
   "form.currency": "Currency",

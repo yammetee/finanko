@@ -77,7 +77,6 @@
   "expense.itemRequired": "Добавьте хотя бы одну позицию",
   "expense.untitled": "Расход",
   "expense.updated": "Расход обновлён",
-  "feedback.invalidMoneyAmount": "Введите корректную сумму не более чем с двумя знаками после запятой",
   "feedback.loadFailed": "Не удалось загрузить расходы. Перезагрузите приложение и попробуйте снова.",
   "feedback.saveFailed": "Не удалось сохранить изменения. Попробуйте ещё раз.",
   "form.currency": "Валюта",

@@ -4,6 +4,7 @@ import {
   detectCurrencyInText,
   normalizeParsedExpense,
   parseTextInputLocally,
+  type ParseReceiptInput,
   type ParsedExpense,
 } from "./expenseParser";
 
@@ -13,22 +14,10 @@ interface ParseTextInput {
   categories: Category[];
 }
 
-interface ParseReceiptInput {
-  fileName: string;
-  fileType?: string;
-  fileDataUrl?: string;
-  text?: string;
-  currency: Currency;
-  categories: Category[];
-}
-
 export function buildReceiptAiPayload(input: ParseReceiptInput) {
   return {
     mode: "receipt",
-    fileName: input.fileName,
-    fileType: input.fileType,
     fileDataUrl: input.fileDataUrl,
-    text: input.text,
     fallbackCurrency: input.currency,
     categories: input.categories.map((category) => category.name),
   };
@@ -46,7 +35,7 @@ async function requestAiParser<T>(payload: unknown, strict = false): Promise<T |
       throw new Error("ai_daily_limit");
     }
     if (strict) {
-      throw new Error(error?.error === "Receipt recognition was incomplete" ? "receipt_incomplete" : "receipt_request_failed");
+      throw new Error("receipt_request_failed");
     }
     return null;
   } catch (error) {

@@ -28,19 +28,6 @@ The runtime uses two browser-accessible tables: `categories` and `expenses`. Eve
 
 AI administrator roles and daily usage counters live in the non-exposed `finanko_private` schema. The authenticated quota RPC is the only browser-role entry point to that data.
 
-### Destructive reset and rebuild
-
-The current project can be rebuilt without creating another Supabase project:
-
-1. Back up the database and review [supabase/reset-public-schema.sql](./supabase/reset-public-schema.sql).
-2. Run that reset SQL in the Supabase SQL editor. It drops the Finanko-owned `finanko_private` schema and non-extension-owned objects in `public` only.
-3. Inspect the reset notices, then run [supabase/schema.sql](./supabase/schema.sql) to create the minimal Finanko schema.
-4. Register the administrator account and assign its role with the SQL below.
-
-The reset does not target Supabase-managed `auth`, `storage`, `extensions`, `realtime`, `vault`, GraphQL, Functions, or migration schemas. It is intentionally review-only in this repository and is never run by application code.
-
-For an existing Finanko database where both `expenses` and `expense_items` still exist, review and run [supabase/migrate-expense-items-to-expenses.sql](./supabase/migrate-expense-items-to-expenses.sql) once before applying [supabase/schema.sql](./supabase/schema.sql). The migration preserves every old item as an independent expense and removes its duplicated parent transaction and the obsolete item table. If the reset already removed those tables, skip the migration and apply `schema.sql` directly; the migration also detects this state and exits without changing the database.
-
 ## Analyzer boundary
 
 The receipt and text recognition algorithms are intentionally isolated in `src/features/receipts` and the parse branch of `api/ai.ts`.
@@ -54,7 +41,7 @@ The receipt and text recognition algorithms are intentionally isolated in `src/f
 
 Text and receipt recognition share one server-enforced allowance. Regular users can make up to five AI requests per UTC day; administrators are unrestricted. Text requests are accepted only for concrete money-related input and are rejected before model execution when they contain links, credential requests, phishing language, prompt-injection language, unsupported fields, or oversized content.
 
-Apply [supabase/schema.sql](./supabase/schema.sql) before deploying the matching API code. After registering the administrator account, assign its role from the Supabase SQL editor (replace the placeholder email):
+Apply [supabase/schema.sql](./supabase/schema.sql) before deploying matching application changes. After registering the administrator account, assign its role from the Supabase SQL editor (replace the placeholder email):
 
 ```sql
 insert into finanko_private.user_roles (user_id, role)

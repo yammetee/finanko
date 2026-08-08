@@ -28,9 +28,18 @@ const categories: Category[] = [
 
 describe("normalizeParsedExpense", () => {
   it("sends the selected currency only as a receipt fallback", () => {
-    const payload = buildReceiptAiPayload({ fileName: "thai-receipt.jpg", currency: "GEL", categories });
-    expect(payload).toMatchObject({ fallbackCurrency: "GEL" });
-    expect(payload).not.toHaveProperty("currency");
+    const payload = buildReceiptAiPayload({
+      fileName: "thai-receipt.jpg",
+      fileDataUrl: "data:image/jpeg;base64,receipt",
+      currency: "GEL",
+      categories,
+    });
+    expect(payload).toEqual({
+      mode: "receipt",
+      fileDataUrl: "data:image/jpeg;base64,receipt",
+      fallbackCurrency: "GEL",
+      categories: ["Food", "Health", "Bills", "Transport"],
+    });
   });
 
   it("rejects empty AI transaction payloads", () => {

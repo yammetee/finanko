@@ -109,7 +109,7 @@ export function validateAiPayload(value: unknown): PayloadValidationResult {
   }
 
   if (raw.mode === "receipt") {
-    if (!hasOnlyKeys(raw, new Set(["mode", "fileName", "fileType", "fileDataUrl", "text", "fallbackCurrency", "categories"]))) {
+    if (!hasOnlyKeys(raw, new Set(["mode", "fileDataUrl", "fallbackCurrency", "categories"]))) {
       return { status: 400, error: "Unsupported receipt request fields" };
     }
     const fallbackCurrency = validatedCurrency(raw.fallbackCurrency);
@@ -383,12 +383,6 @@ function attachReceiptReview(value: unknown, ocr: ReceiptOcrResult) {
   return receipt;
 }
 
-function hasUsableReceipt(value: unknown) {
-  if (!value || typeof value !== "object") return false;
-  const receipt = value as { kind?: unknown; total?: unknown };
-  return receipt.kind === "transaction" && typeof receipt.total === "number" && receipt.total > 0;
-}
-
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (request.method === "OPTIONS") {
     response.setHeader("Allow", "POST, OPTIONS");
@@ -472,12 +466,8 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         parsed = fallbackReceipt(ocr, payload);
       }
       let reviewed = attachReceiptReview(normalizeReceiptResult(recoverReceiptTotal(parsed, ocr)), ocr);
-      if (!hasUsableReceipt(reviewed)) {
+      if (!reviewed || typeof reviewed !== "object" || (reviewed as { kind?: unknown }).kind !== "transaction") {
         reviewed = attachReceiptReview(fallbackReceipt(ocr, payload), ocr);
-      }
-      if (!hasUsableReceipt(reviewed)) {
-        response.status(502).json({ error: "Receipt recognition was incomplete" });
-        return;
       }
       response.status(200).json(reviewed);
       return;

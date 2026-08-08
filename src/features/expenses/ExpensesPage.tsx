@@ -8,7 +8,6 @@ import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
 import { formatMoney } from "../../shared/lib/format";
-import { isValidMoneyDecimal } from "../../shared/lib/money";
 import { CurrencyIcon, NativeCurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import type { Currency, Expense } from "../../shared/types/expense";
 import { useAuthStore } from "../auth/authStore";
@@ -145,7 +144,7 @@ export function ExpensesPage() {
   async function handleReceipt(file: File) {
     setEditing(null); setFormMode("receipt"); setDraft(null); setParseError(null); setParsing(true);
     try {
-      const parsed = await parseReceiptInput({ fileName: file.name, fileType: "image/jpeg", fileDataUrl: await prepareReceiptImage(file), currency: baseCurrency, categories: primaryCategories });
+      const parsed = await parseReceiptInput({ fileName: file.name, fileDataUrl: await prepareReceiptImage(file), currency: baseCurrency, categories: primaryCategories });
       const items = parsed.items.map((item) => ({ ...item, currency: item.currency ?? parsed.currency }));
       setDraft(parsed.items.length > 0
         ? { currency: parsed.currency, occurredAt: dayjs(), source: "receipt_ai", items, receiptReview: parsed.receiptReview }
@@ -181,7 +180,6 @@ export function ExpensesPage() {
   async function saveExpense(values: ExpenseFormValues) {
     if (formCategories.length === 0) { message.error(t("expense.contextUnavailable")); return; }
     const inputs = expenseFormToInputs(values);
-    if (inputs.length === 0 || inputs.some((input) => !isValidMoneyDecimal(input.amount, input.currency) || input.amount === 0)) { message.error(t("feedback.invalidMoneyAmount")); return; }
     setSaving(true);
     try {
       if (editing) { await expenseState.updateExpense(editing.id, inputs[0]); message.success(t("expense.updated")); }
