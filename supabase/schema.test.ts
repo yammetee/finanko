@@ -16,7 +16,11 @@ describe("minimal Finanko schema", () => {
       expect(schema).toContain(`alter table public.${table} enable row level security;`);
       expect(schema).toContain(`create policy owner_access on public.${table}`);
     }
-    expect(schema.match(/owner_id = \(select auth\.uid\(\)\)/g)).toHaveLength(4);
+    const exposedPolicies = schema.slice(
+      schema.indexOf("drop policy if exists owner_access on public.categories"),
+      schema.indexOf("revoke all on all tables in schema public"),
+    );
+    expect(exposedPolicies.match(/owner_id = \(select auth\.uid\(\)\)/g)).toHaveLength(4);
     expect(schema).toContain("expenses_owner_occurred_active_idx");
     expect(schema).toContain("where deleted_at is null");
   });
@@ -40,5 +44,21 @@ describe("minimal Finanko schema", () => {
     expect(schema).toContain("revoke all on all tables in schema finanko_private from public, anon, authenticated");
     expect(schema).toContain("revoke all on function public.consume_ai_daily_quota() from public, anon");
     expect(schema).toContain("grant execute on function public.consume_ai_daily_quota() to authenticated");
+  });
+
+  it("keeps capital data private and independent from expenses", () => {
+    for (const table of ["capital_groups", "capital_items", "capital_events", "market_quotes", "market_actions", "capital_snapshots"]) {
+      expect(schema).toContain(`create table if not exists finanko_private.${table}`);
+      expect(schema).toContain(`alter table finanko_private.${table} enable row level security;`);
+    }
+    expect(schema).toContain("create or replace function public.get_capital_snapshot()");
+    expect(schema).toContain("create or replace function public.save_capital_snapshot(capital_data jsonb)");
+    expect(schema).toContain("security definer\nset search_path = ''");
+    expect(schema).toContain("capital_events_external_unique_idx");
+    expect(schema).toContain("capital_events_required_values_check");
+    expect(schema).toContain("related_item_id is null or related_item_id <> item_id");
+    const capitalSchema = schema.slice(schema.indexOf("create table if not exists finanko_private.capital_groups"));
+    expect(capitalSchema).not.toContain("references public.expenses");
+    expect(capitalSchema).not.toContain("references public.categories");
   });
 });

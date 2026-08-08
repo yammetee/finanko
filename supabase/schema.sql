@@ -44,11 +44,121 @@ create table if not exists finanko_private.ai_usage_daily (
   primary key (user_id, usage_date)
 );
 
+create table if not exists finanko_private.capital_groups (
+  id text primary key,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  name text not null check (char_length(btrim(name)) between 1 and 120),
+  archived_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (id, owner_id)
+);
+
+create table if not exists finanko_private.capital_items (
+  id text primary key,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  group_id text not null,
+  name text not null check (char_length(btrim(name)) between 1 and 160),
+  item_type text not null check (item_type in ('stock', 'fund', 'crypto', 'cash', 'deposit')),
+  symbol text,
+  quote_currency text not null check (quote_currency in ('USD', 'GEL', 'RUB', 'THB')),
+  manual_price numeric(30,10) check (manual_price is null or manual_price >= 0),
+  primary_provider text,
+  primary_asset_id text,
+  fallback_provider text,
+  fallback_asset_id text,
+  default_tax_rate numeric(9,6) check (default_tax_rate is null or default_tax_rate between 0 and 1),
+  archived_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (id, owner_id),
+  foreign key (group_id, owner_id)
+    references finanko_private.capital_groups(id, owner_id) on delete restrict
+);
+
+create table if not exists finanko_private.capital_events (
+  id text primary key,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  item_id text not null,
+  related_item_id text,
+  event_type text not null check (event_type in ('buy', 'sell', 'deposit', 'withdrawal', 'transfer', 'dividend', 'interest', 'staking', 'fee', 'tax', 'split', 'adjustment')),
+  status text not null check (status in ('expected', 'confirmed', 'ignored')),
+  occurred_at timestamptz not null,
+  quantity numeric(38,18),
+  unit_price numeric(30,10),
+  amount numeric(30,10),
+  fee numeric(30,10) check (fee is null or fee >= 0),
+  tax numeric(30,10) check (tax is null or tax >= 0),
+  currency text not null check (currency in ('USD', 'GEL', 'RUB', 'THB')),
+  split_ratio numeric(30,18) check (split_ratio is null or split_ratio > 0),
+  source text not null check (source in ('manual', 'automatic')),
+  external_provider text,
+  external_id text,
+  notes text check (char_length(notes) <= 2000),
+  deleted_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (id, owner_id),
+  foreign key (item_id, owner_id)
+    references finanko_private.capital_items(id, owner_id) on delete restrict,
+  foreign key (related_item_id, owner_id)
+    references finanko_private.capital_items(id, owner_id) on delete restrict,
+  check (related_item_id is null or related_item_id <> item_id)
+);
+
+do $$
+begin
+  alter table finanko_private.capital_events add constraint capital_events_required_values_check check (
+    (event_type in ('buy', 'sell', 'staking') and quantity > 0 and (amount > 0 or unit_price > 0))
+    or (event_type in ('deposit', 'withdrawal', 'transfer') and (quantity > 0 or amount > 0))
+    or (event_type in ('dividend', 'interest', 'fee', 'tax') and amount > 0)
+    or (event_type = 'split' and split_ratio > 0)
+    or (event_type = 'adjustment' and (quantity <> 0 or amount <> 0))
+  );
+exception when duplicate_object then null;
+end $$;
+
+create table if not exists finanko_private.market_quotes (
+  provider text not null,
+  asset_id text not null,
+  quote_currency text not null,
+  quoted_at timestamptz not null,
+  price numeric(30,10) not null check (price >= 0),
+  retrieved_at timestamptz not null default now(),
+  primary key (provider, asset_id, quote_currency, quoted_at)
+);
+
+create table if not exists finanko_private.market_actions (
+  provider text not null,
+  external_id text not null,
+  asset_id text not null,
+  action_type text not null check (action_type in ('dividend', 'split')),
+  payload jsonb not null,
+  occurred_at timestamptz not null,
+  retrieved_at timestamptz not null default now(),
+  primary key (provider, external_id)
+);
+
+create table if not exists finanko_private.capital_snapshots (
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  snapshot_date date not null,
+  reporting_currency text not null default 'USD' check (reporting_currency = 'USD'),
+  total_value numeric(30,10) not null,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (owner_id, snapshot_date, reporting_currency)
+);
+
 create index if not exists expenses_owner_occurred_active_idx
   on public.expenses(owner_id, occurred_at desc)
   where deleted_at is null;
 create index if not exists expenses_category_owner_idx
   on public.expenses(category_id, owner_id);
+create index if not exists capital_groups_owner_idx on finanko_private.capital_groups(owner_id, archived_at);
+create index if not exists capital_items_owner_group_idx on finanko_private.capital_items(owner_id, group_id, archived_at);
+create index if not exists capital_events_owner_item_date_idx on finanko_private.capital_events(owner_id, item_id, occurred_at, id) where deleted_at is null;
+create index if not exists capital_events_owner_status_idx on finanko_private.capital_events(owner_id, status, occurred_at) where deleted_at is null;
+create unique index if not exists capital_events_external_unique_idx on finanko_private.capital_events(owner_id, external_provider, external_id) where external_provider is not null and external_id is not null and deleted_at is null;
 
 create or replace function finanko_private.set_updated_at()
 returns trigger
@@ -77,6 +187,12 @@ alter table public.categories enable row level security;
 alter table public.expenses enable row level security;
 alter table finanko_private.user_roles enable row level security;
 alter table finanko_private.ai_usage_daily enable row level security;
+alter table finanko_private.capital_groups enable row level security;
+alter table finanko_private.capital_items enable row level security;
+alter table finanko_private.capital_events enable row level security;
+alter table finanko_private.market_quotes enable row level security;
+alter table finanko_private.market_actions enable row level security;
+alter table finanko_private.capital_snapshots enable row level security;
 
 drop policy if exists owner_access on public.categories;
 create policy owner_access on public.categories
@@ -194,3 +310,69 @@ end;
 $$;
 revoke all on function public.consume_ai_daily_quota() from public, anon;
 grant execute on function public.consume_ai_daily_quota() to authenticated;
+
+create or replace function public.get_capital_snapshot()
+returns jsonb
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select case when (select auth.uid()) is null then
+    null
+  else jsonb_build_object(
+    'groups', coalesce((select jsonb_agg(to_jsonb(g) - 'owner_id' - 'created_at' - 'updated_at' order by g.created_at) from finanko_private.capital_groups g where g.owner_id = (select auth.uid())), '[]'::jsonb),
+    'items', coalesce((select jsonb_agg(to_jsonb(i) - 'owner_id' - 'created_at' - 'updated_at' order by i.created_at) from finanko_private.capital_items i where i.owner_id = (select auth.uid())), '[]'::jsonb),
+    'events', coalesce((select jsonb_agg(to_jsonb(e) - 'owner_id' - 'created_at' - 'updated_at' order by e.occurred_at, e.id) from finanko_private.capital_events e where e.owner_id = (select auth.uid()) and e.deleted_at is null), '[]'::jsonb)
+  ) end;
+$$;
+revoke all on function public.get_capital_snapshot() from public, anon;
+grant execute on function public.get_capital_snapshot() to authenticated;
+
+create or replace function public.save_capital_snapshot(capital_data jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare requester_id uuid := (select auth.uid());
+begin
+  if requester_id is null then raise exception 'Authentication required' using errcode = '42501'; end if;
+  if jsonb_typeof(capital_data) <> 'object' then raise exception 'Invalid capital payload' using errcode = '22023'; end if;
+  if exists (
+    select 1 from finanko_private.capital_groups g
+    join jsonb_array_elements(coalesce(capital_data->'groups', '[]'::jsonb)) rows(row) on g.id = row->>'id'
+    where g.owner_id <> requester_id
+  ) or exists (
+    select 1 from finanko_private.capital_items i
+    join jsonb_array_elements(coalesce(capital_data->'items', '[]'::jsonb)) rows(row) on i.id = row->>'id'
+    where i.owner_id <> requester_id
+  ) or exists (
+    select 1 from finanko_private.capital_events e
+    join jsonb_array_elements(coalesce(capital_data->'events', '[]'::jsonb)) rows(row) on e.id = row->>'id'
+    where e.owner_id <> requester_id
+  ) then
+    raise exception 'Capital record belongs to another owner' using errcode = '42501';
+  end if;
+
+  insert into finanko_private.capital_groups (id, owner_id, name, archived_at)
+  select row->>'id', requester_id, row->>'name', (row->>'archived_at')::timestamptz
+  from jsonb_array_elements(coalesce(capital_data->'groups', '[]'::jsonb)) rows(row)
+  on conflict (id) do update set name = excluded.name, archived_at = excluded.archived_at, updated_at = now()
+  where finanko_private.capital_groups.owner_id = requester_id;
+
+  insert into finanko_private.capital_items (id, owner_id, group_id, name, item_type, symbol, quote_currency, manual_price, primary_provider, primary_asset_id, fallback_provider, fallback_asset_id, archived_at)
+  select row->>'id', requester_id, row->>'group_id', row->>'name', row->>'item_type', nullif(row->>'symbol', ''), row->>'quote_currency', nullif(row->>'manual_price', '')::numeric, nullif(row->>'primary_provider', ''), nullif(row->>'primary_asset_id', ''), nullif(row->>'fallback_provider', ''), nullif(row->>'fallback_asset_id', ''), (row->>'archived_at')::timestamptz
+  from jsonb_array_elements(coalesce(capital_data->'items', '[]'::jsonb)) rows(row)
+  on conflict (id) do update set group_id = excluded.group_id, name = excluded.name, item_type = excluded.item_type, symbol = excluded.symbol, quote_currency = excluded.quote_currency, manual_price = excluded.manual_price, primary_provider = excluded.primary_provider, primary_asset_id = excluded.primary_asset_id, fallback_provider = excluded.fallback_provider, fallback_asset_id = excluded.fallback_asset_id, archived_at = excluded.archived_at, updated_at = now()
+  where finanko_private.capital_items.owner_id = requester_id;
+
+  insert into finanko_private.capital_events (id, owner_id, item_id, related_item_id, event_type, status, occurred_at, quantity, unit_price, amount, fee, tax, currency, split_ratio, source, notes, deleted_at)
+  select row->>'id', requester_id, row->>'item_id', nullif(row->>'related_item_id', ''), row->>'event_type', row->>'status', (row->>'occurred_at')::timestamptz, nullif(row->>'quantity', '')::numeric, nullif(row->>'unit_price', '')::numeric, nullif(row->>'amount', '')::numeric, nullif(row->>'fee', '')::numeric, nullif(row->>'tax', '')::numeric, row->>'currency', nullif(row->>'split_ratio', '')::numeric, row->>'source', row->>'notes', (row->>'deleted_at')::timestamptz
+  from jsonb_array_elements(coalesce(capital_data->'events', '[]'::jsonb)) rows(row)
+  on conflict (id) do update set item_id = excluded.item_id, related_item_id = excluded.related_item_id, event_type = excluded.event_type, status = excluded.status, occurred_at = excluded.occurred_at, quantity = excluded.quantity, unit_price = excluded.unit_price, amount = excluded.amount, fee = excluded.fee, tax = excluded.tax, currency = excluded.currency, split_ratio = excluded.split_ratio, source = excluded.source, notes = excluded.notes, deleted_at = excluded.deleted_at, updated_at = now()
+  where finanko_private.capital_events.owner_id = requester_id;
+end;
+$$;
+revoke all on function public.save_capital_snapshot(jsonb) from public, anon;
+grant execute on function public.save_capital_snapshot(jsonb) to authenticated;

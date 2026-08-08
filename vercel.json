@@ -3,6 +3,9 @@
   "functions": {
     "api/ai.ts": {
       "maxDuration": 60
+    },
+    "api/market.ts": {
+      "maxDuration": 15
     }
   }
 }

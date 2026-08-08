@@ -1,0 +1,104 @@
+import AntApp from "antd/es/app";
+import { Archive, ArrowLeft, Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CURRENCIES } from "../../shared/constants/expenses";
+import { useI18n } from "../../shared/i18n/i18nContext";
+import { formatMoney } from "../../shared/lib/format";
+import type { Currency } from "../../shared/types/expense";
+import { buildCapitalPositions } from "./capitalView";
+import { useCapitalStore } from "./capitalStore";
+import type { CapitalEvent, CapitalEventStatus, CapitalEventType, CapitalGroup, CapitalItem, CapitalItemType } from "./capitalTypes";
+
+interface Props { onBack: () => void }
+type Editor = "group" | "item" | "event" | null;
+type TypeFilter = "all" | "market" | "crypto" | "cash";
+const EVENT_TYPES: CapitalEventType[] = ["buy", "sell", "deposit", "withdrawal", "transfer", "dividend", "interest", "staking", "fee", "tax", "split", "adjustment"];
+const ITEM_TYPES: CapitalItemType[] = ["stock", "fund", "crypto", "cash", "deposit"];
+
+const eventUsesQuantity = (type: CapitalEventType) => ["buy", "sell", "deposit", "withdrawal", "transfer", "staking", "adjustment"].includes(type);
+const eventUsesPrice = (type: CapitalEventType) => ["buy", "sell", "staking"].includes(type);
+const eventUsesAmount = (type: CapitalEventType) => type !== "split";
+const typeMatches = (type: CapitalItemType, filter: TypeFilter) => filter === "all" || (filter === "market" && (type === "stock" || type === "fund")) || type === filter || (filter === "cash" && type === "deposit");
+
+export function CapitalPage({ onBack }: Props) {
+  const { message } = AntApp.useApp();
+  const { locale } = useI18n();
+  const ru = locale === "ru";
+  const state = useCapitalStore();
+  const [editor, setEditor] = useState<Editor>(null);
+  const [editingId, setEditingId] = useState<string>();
+  const [saving, setSaving] = useState(false);
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [groupId, setGroupId] = useState("");
+  const [itemId, setItemId] = useState("");
+  const [relatedItemId, setRelatedItemId] = useState("");
+  const [name, setName] = useState("");
+  const [symbol, setSymbol] = useState("");
+  const [provider, setProvider] = useState<CapitalItem["primaryProvider"]>();
+  const [providerAssetId, setProviderAssetId] = useState("");
+  const [fallbackProvider, setFallbackProvider] = useState<CapitalItem["fallbackProvider"]>();
+  const [fallbackAssetId, setFallbackAssetId] = useState("");
+  const [itemType, setItemType] = useState<CapitalItemType>("stock");
+  const [eventType, setEventType] = useState<CapitalEventType>("buy");
+  const [status, setStatus] = useState<CapitalEventStatus>("confirmed");
+  const [currency, setCurrency] = useState<Currency>("USD");
+  const [quantity, setQuantity] = useState("");
+  const [amount, setAmount] = useState("");
+  const [price, setPrice] = useState("");
+  const [fee, setFee] = useState("");
+  const [tax, setTax] = useState("");
+  const [splitRatio, setSplitRatio] = useState("");
+  const [occurredAt, setOccurredAt] = useState(new Date().toISOString().slice(0, 10));
+
+  const activeGroups = state.groups.filter((group) => !group.archivedAt);
+  const activeItems = state.items.filter((item) => !item.archivedAt);
+  const positions = useMemo(() => buildCapitalPositions(activeItems, state.events, state.quotes), [activeItems, state.events, state.quotes]);
+  const visible = positions.filter(({ item }) => (groupFilter === "all" || item.groupId === groupFilter) && typeMatches(item.type, typeFilter));
+  const total = positions.reduce((sum, value) => sum + value.valueUsd, 0);
+  const invested = visible.reduce((sum, value) => sum + value.costBasisUsd, 0);
+  const result = visible.reduce((sum, value) => sum + value.profitUsd, 0);
+  const income = visible.reduce((sum, value) => sum + value.incomeUsd, 0);
+  const pending = state.events.filter((event) => event.status === "expected" && !event.deletedAt);
+
+  const reset = () => { setEditor(null); setEditingId(undefined); setName(""); setSymbol(""); setProvider(undefined); setProviderAssetId(""); setFallbackProvider(undefined); setFallbackAssetId(""); setQuantity(""); setAmount(""); setPrice(""); setFee(""); setTax(""); setSplitRatio(""); setRelatedItemId(""); setStatus("confirmed"); };
+  const openGroup = (value?: CapitalGroup) => { reset(); setEditingId(value?.id); setName(value?.name ?? ""); setEditor("group"); };
+  const openItem = (value?: CapitalItem) => { reset(); setEditingId(value?.id); setGroupId(value?.groupId ?? activeGroups[0]?.id ?? ""); setName(value?.name ?? ""); setSymbol(value?.symbol ?? ""); setProvider(value?.primaryProvider); setProviderAssetId(value?.primaryAssetId ?? ""); setFallbackProvider(value?.fallbackProvider); setFallbackAssetId(value?.fallbackAssetId ?? ""); setItemType(value?.type ?? "stock"); setCurrency(value?.quoteCurrency ?? "USD"); setPrice(value?.manualPrice ?? ""); setEditor("item"); };
+  const openEvent = (value?: CapitalEvent) => { reset(); setEditingId(value?.id); setItemId(value?.itemId ?? activeItems[0]?.id ?? ""); setRelatedItemId(value?.relatedItemId ?? ""); setEventType(value?.type ?? "buy"); setStatus(value?.status ?? "confirmed"); setOccurredAt((value?.occurredAt ?? new Date().toISOString()).slice(0, 10)); setQuantity(value?.quantity ?? ""); setAmount(value?.amount ?? ""); setPrice(value?.unitPrice ?? ""); setFee(value?.fee ?? ""); setTax(value?.tax ?? ""); setSplitRatio(value?.splitRatio ?? ""); setCurrency(value?.currency ?? "USD"); setEditor("event"); };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault(); setSaving(true);
+    try {
+      if (editor === "group") await state.saveGroup({ id: editingId, name });
+      if (editor === "item") await state.saveItem({ id: editingId, groupId, name, symbol: symbol || undefined, type: itemType, quoteCurrency: currency, manualPrice: price || (itemType === "cash" || itemType === "deposit" ? "1" : undefined), primaryProvider: provider, primaryAssetId: providerAssetId || undefined, fallbackProvider, fallbackAssetId: fallbackAssetId || undefined });
+      if (editor === "event") await state.saveEvent({ id: editingId, itemId, relatedItemId: relatedItemId || undefined, type: eventType, status, occurredAt: new Date(`${occurredAt}T12:00:00`).toISOString(), quantity: quantity || undefined, amount: amount || undefined, unitPrice: price || undefined, fee: fee || undefined, tax: tax || undefined, splitRatio: splitRatio || undefined, currency, source: status === "expected" ? "automatic" : "manual" });
+      reset(); message.success(ru ? "Сохранено" : "Saved");
+    } catch { message.error(ru ? "Не удалось сохранить" : "Could not save"); }
+    finally { setSaving(false); }
+  };
+
+  return <div className="capital-page">
+    <div className="page-heading"><button type="button" aria-label={ru ? "Назад" : "Back"} onClick={onBack}><ArrowLeft /></button><h1>{ru ? "Капитал" : "Capital"}</h1></div>
+    <section className="capital-summary"><span>{ru ? "Общий капитал" : "Total capital"}</span><strong>{formatMoney(total, "USD")}</strong><div className="capital-stats"><small>{ru ? "Вложено" : "Invested"}<b>{formatMoney(invested, "USD")}</b></small><small>{ru ? "Результат" : "Result"}<b className={result < 0 ? "negative" : "positive"}>{formatMoney(result, "USD")}</b></small><small>{ru ? "Доход" : "Income"}<b>{formatMoney(income, "USD")}</b></small></div></section>
+    {state.loadState === "loading" ? <div className="capital-notice">{ru ? "Загружаю капитал…" : "Loading capital…"}</div> : null}
+    {state.loadState === "error" ? <div className="capital-notice"><span>{ru ? "Капитал пока недоступен. Расходы продолжают работать." : "Capital is unavailable. Expenses still work."}</span><button type="button" onClick={() => void state.initialize()}>{ru ? "Повторить" : "Retry"}</button></div> : null}
+    <div className="capital-actions"><button type="button" onClick={() => openGroup()}><Plus size={16}/>{ru ? "Группа" : "Group"}</button><button type="button" disabled={!activeGroups.length} onClick={() => openItem()}><Plus size={16}/>{ru ? "Актив" : "Asset"}</button><button type="button" disabled={!activeItems.length} onClick={() => openEvent()}><Plus size={16}/>{ru ? "Операция" : "Event"}</button><button type="button" disabled={state.quotesLoading || !activeItems.some((item) => item.symbol)} onClick={() => void state.refreshQuotes()}><RefreshCw className={state.quotesLoading ? "spin" : ""} size={16}/>{ru ? "Цены" : "Prices"}</button></div>
+
+    {editor ? <form className="capital-editor panel" onSubmit={submit}>
+      <h2>{editingId ? (ru ? "Редактирование" : "Edit") : editor === "group" ? (ru ? "Новая группа" : "New group") : editor === "item" ? (ru ? "Новый актив" : "New asset") : (ru ? "Новая операция" : "New event")}</h2>
+      {editor !== "event" ? <label>{ru ? "Название" : "Name"}<input required value={name} onChange={(e) => setName(e.target.value)} /></label> : null}
+      {editor === "item" ? <><label>{ru ? "Группа" : "Group"}<select value={groupId} onChange={(e) => setGroupId(e.target.value)}>{activeGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label><label>{ru ? "Тип" : "Type"}<select value={itemType} onChange={(e) => setItemType(e.target.value as CapitalItemType)}>{ITEM_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label><label>{ru ? "Тикер или символ" : "Ticker or symbol"}<input value={symbol} onChange={(e) => setSymbol(e.target.value)} /></label>{itemType !== "cash" && itemType !== "deposit" ? <><label>{ru ? "Основной источник" : "Primary source"}<select value={provider ?? ""} onChange={(e) => setProvider((e.target.value || undefined) as CapitalItem["primaryProvider"])}><option value="">{ru ? "Только вручную" : "Manual only"}</option>{itemType === "crypto" ? <><option value="bybit">Bybit</option><option value="coingecko">CoinGecko</option></> : <option value="twelve_data">Twelve Data</option>}</select></label><label>{ru ? "ID у основного источника" : "Primary asset ID"}<input value={providerAssetId} placeholder={itemType === "crypto" && provider === "coingecko" ? "bitcoin" : itemType === "crypto" ? "BTCUSDT" : "AAPL"} onChange={(e) => setProviderAssetId(e.target.value)} /></label><label>{ru ? "Запасной источник" : "Fallback source"}<select value={fallbackProvider ?? ""} onChange={(e) => setFallbackProvider((e.target.value || undefined) as CapitalItem["fallbackProvider"])}><option value="">—</option>{itemType === "crypto" ? <><option value="bybit">Bybit</option><option value="coingecko">CoinGecko</option></> : <option value="twelve_data">Twelve Data</option>}</select></label><label>{ru ? "ID у запасного источника" : "Fallback asset ID"}<input value={fallbackAssetId} placeholder={fallbackProvider === "coingecko" ? "bitcoin" : fallbackProvider === "bybit" ? "BTCUSDT" : "AAPL"} onChange={(e) => setFallbackAssetId(e.target.value)} /></label></> : null}</> : null}
+      {editor === "event" ? <><label>{ru ? "Актив" : "Asset"}<select value={itemId} onChange={(e) => setItemId(e.target.value)}>{activeItems.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>{ru ? "Операция" : "Event"}<select value={eventType} onChange={(e) => setEventType(e.target.value as CapitalEventType)}>{EVENT_TYPES.map((type) => <option key={type}>{type}</option>)}</select></label><label>{ru ? "Дата" : "Date"}<input required type="date" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} /></label><label>{ru ? "Связанный актив (необязательно)" : "Related asset (optional)"}<select value={relatedItemId} onChange={(e) => setRelatedItemId(e.target.value)}><option value="">—</option>{activeItems.filter((item) => item.id !== itemId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{eventUsesQuantity(eventType) ? <label>{ru ? "Количество" : "Quantity"}<input value={quantity} inputMode="decimal" onChange={(e) => setQuantity(e.target.value)} /></label> : null}{eventUsesAmount(eventType) ? <label>{ru ? "Сумма" : "Amount"}<input value={amount} inputMode="decimal" onChange={(e) => setAmount(e.target.value)} /></label> : null}</> : null}
+      {editor !== "group" ? <><label>{ru ? "Валюта" : "Currency"}<select value={currency} onChange={(e) => setCurrency(e.target.value as Currency)}>{CURRENCIES.map((value) => <option key={value}>{value}</option>)}</select></label>{editor === "item" || eventUsesPrice(eventType) ? <label>{editor === "item" ? (ru ? "Текущая цена" : "Current price") : (ru ? "Цена за единицу" : "Unit price")}<input value={price} inputMode="decimal" onChange={(e) => setPrice(e.target.value)} /></label> : null}</> : null}
+      {editor === "event" ? <>{eventType === "split" ? <label>{ru ? "Коэффициент сплита" : "Split ratio"}<input required value={splitRatio} inputMode="decimal" onChange={(e) => setSplitRatio(e.target.value)} /></label> : null}<label>{ru ? "Комиссия" : "Fee"}<input value={fee} inputMode="decimal" onChange={(e) => setFee(e.target.value)} /></label><label>{ru ? "Налог" : "Tax"}<input value={tax} inputMode="decimal" onChange={(e) => setTax(e.target.value)} /></label></> : null}
+      <div><button type="button" onClick={reset}>{ru ? "Отмена" : "Cancel"}</button><button className="primary" disabled={saving} type="submit">{ru ? "Сохранить" : "Save"}</button></div>
+    </form> : null}
+
+    {pending.length ? <section className="panel pending-events"><h2>{ru ? "Ожидают подтверждения" : "Pending confirmation"}</h2>{pending.map((event) => <div key={event.id}><span>{activeItems.find((item) => item.id === event.itemId)?.name} · {event.type} · {event.amount ?? event.quantity}</span><button aria-label={ru ? "Изменить" : "Edit"} onClick={() => openEvent(event)}><Pencil size={15}/></button><button aria-label={ru ? "Подтвердить" : "Confirm"} onClick={() => void state.setEventStatus(event.id, "confirmed")}><Check size={15}/></button><button aria-label={ru ? "Игнорировать" : "Ignore"} onClick={() => void state.setEventStatus(event.id, "ignored")}><X size={15}/></button></div>)}</section> : null}
+
+    {activeGroups.length > 1 || activeItems.length ? <section className="capital-filters"><div className="button-filter">{activeGroups.length > 1 ? <><button className={groupFilter === "all" ? "active" : ""} onClick={() => setGroupFilter("all")}>{ru ? "Все группы" : "All groups"}</button>{activeGroups.map((group) => <button className={groupFilter === group.id ? "active" : ""} key={group.id} onClick={() => setGroupFilter(group.id)}>{group.name}</button>)}</> : null}</div><div className="button-filter">{(["all","market","crypto","cash"] as TypeFilter[]).map((type) => <button className={typeFilter === type ? "active" : ""} key={type} onClick={() => setTypeFilter(type)}>{{ all: ru ? "Все" : "All", market: ru ? "Акции и фонды" : "Stocks & funds", crypto: ru ? "Крипта" : "Crypto", cash: ru ? "Деньги и вклады" : "Cash & deposits" }[type]}</button>)}</div></section> : null}
+
+    <section className="capital-list"><div className="section-heading"><h2>{ru ? "Активы" : "Assets"}</h2><span>{visible.length}</span></div>{visible.length === 0 ? <div className="capital-empty">{activeItems.length ? (ru ? "Нет активов по выбранному фильтру" : "No matching assets") : (ru ? "Создай группу, затем добавь первый актив" : "Create a group, then add your first asset")}</div> : visible.map((position) => <article className="capital-row capital-row-detailed" key={position.item.id}><div><strong>{position.item.name}</strong><span>{activeGroups.find((group) => group.id === position.item.groupId)?.name} · {position.item.symbol || position.item.type}</span><small>{ru ? "Количество" : "Quantity"}: {position.quantity} · {ru ? "Средняя" : "Average"}: {formatMoney(Number(position.averageCost), position.item.quoteCurrency)}</small></div><div><strong>{formatMoney(position.value, position.item.quoteCurrency)}</strong><span>{ru ? "Цена" : "Price"}: {formatMoney(position.price, position.item.quoteCurrency)}</span><small>{position.priceSource === "market" ? `${position.quote?.provider} · ${new Date(position.quote!.quotedAt).toLocaleString()}` : position.priceSource === "manual" ? (ru ? "ручная цена" : "manual price") : (ru ? "цена не указана" : "price missing")}</small><small className={position.profit < 0 ? "negative" : "positive"}>{ru ? "Результат" : "Result"}: {formatMoney(position.profit, position.item.quoteCurrency)}</small></div><div className="capital-row-actions"><button aria-label={ru ? "Изменить" : "Edit"} onClick={() => openItem(position.item)}><Pencil size={15}/></button><button aria-label={ru ? "Архивировать" : "Archive"} onClick={() => void state.archiveItem(position.item.id)}><Archive size={15}/></button></div></article>)}</section>
+    {activeGroups.length ? <section className="capital-groups"><div className="section-heading"><h2>{ru ? "Группы" : "Groups"}</h2><span>{activeGroups.length}</span></div>{activeGroups.map((group) => <div key={group.id}><span>{group.name}</span><button onClick={() => openGroup(group)}><Pencil size={15}/></button><button onClick={() => void state.archiveGroup(group.id)}><Trash2 size={15}/></button></div>)}</section> : null}
+  </div>;
+}

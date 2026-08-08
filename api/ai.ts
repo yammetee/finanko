@@ -1,3 +1,5 @@
+import { isAuthenticatedUser } from "./serverAuth";
+
 interface ApiRequest {
   method?: string;
   headers: { authorization?: string };
@@ -264,16 +266,6 @@ async function requestStructuredOutput(apiKey: string, system: string, input: un
   const text = extractOutputText(result);
   if (!text) throw new Error("Empty AI response");
   return JSON.parse(text.replace(/^```json\s*|\s*```$/g, "")) as unknown;
-}
-
-async function isAuthenticatedUser(supabaseUrl: string, supabaseKey: string, token: string) {
-  const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      apikey: supabaseKey,
-      authorization: `Bearer ${token}`,
-    },
-  });
-  return authResponse.ok;
 }
 
 async function consumeAiDailyQuota(supabaseUrl: string, supabaseKey: string, token: string) {

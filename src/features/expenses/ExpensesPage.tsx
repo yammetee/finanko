@@ -1,16 +1,15 @@
 import AntApp from "antd/es/app";
 import DatePicker from "antd/es/date-picker";
 import dayjs from "dayjs";
-import { Camera, FileText, LogOut, PenLine } from "lucide-react";
+import { Camera, FileText, PenLine } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { CURRENCIES, DEFAULT_CURRENCY } from "../../shared/constants/expenses";
+import { DEFAULT_CURRENCY } from "../../shared/constants/expenses";
 import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
 import { formatMoney } from "../../shared/lib/format";
-import { CurrencyIcon, NativeCurrencyIcon } from "../../shared/ui/CurrencyIcon";
-import type { Currency, Expense } from "../../shared/types/expense";
-import { useAuthStore } from "../auth/authStore";
+import type { Expense } from "../../shared/types/expense";
+import type { DisplayCurrency } from "../../app/AppHeader";
 import { parseReceiptInput, parseTextInput } from "../receipts/aiParser";
 import { detectAmountInText, detectCurrencyInText, parseTextInputLocally, type ParsedExpense } from "../receipts/expenseParser";
 import { prepareReceiptImage } from "../receipts/receiptImage";
@@ -37,7 +36,6 @@ const ExpenseFormPage = lazy(() => import("./ExpenseFormPage").then((module) => 
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
 const MOBILE_CATEGORY_LIMIT = 5;
 const HISTORY_LIMIT = 8;
-type DisplayCurrency = Currency | "native";
 
 function receiptErrorKey(error: unknown) {
   const code = error instanceof Error ? error.message : "";
@@ -48,10 +46,11 @@ function receiptErrorKey(error: unknown) {
   return "receipt.parseError" as const;
 }
 
-export function ExpensesPage() {
+interface ExpensesPageProps { currencyMode: DisplayCurrency; capitalTotalUsd: number; capitalState: "idle" | "loading" | "ready" | "error"; onOpenCapital: () => void }
+
+export function ExpensesPage({ currencyMode, capitalTotalUsd, capitalState, onOpenCapital }: ExpensesPageProps) {
   const { message } = AntApp.useApp();
-  const { locale, setLocale, t } = useI18n();
-  const signOut = useAuthStore((state) => state.signOut);
+  const { locale, t } = useI18n();
   const expenseState = useExpenseStore();
   const receiptInput = useRef<HTMLInputElement>(null);
   const [formMode, setFormMode] = useState<ExpenseFormMode | null>(null);
@@ -62,7 +61,6 @@ export function ExpensesPage() {
   const [saving, setSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [ratesVersion, setRatesVersion] = useState(0);
-  const [currencyMode, setCurrencyMode] = useState<DisplayCurrency>("native");
   const [filters, setFilters] = useState<ExpenseFilters>({ period: "month", categoryKeys: [] });
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
@@ -84,10 +82,6 @@ export function ExpensesPage() {
   );
   const formCategories = primaryCategories;
   const baseCurrency = DEFAULT_CURRENCY;
-  const currencyModes: DisplayCurrency[] = ["native", ...CURRENCIES];
-  const nextCurrency = currencyModes[(currencyModes.indexOf(currencyMode) + 1) % currencyModes.length];
-  const currentCurrencyLabel = currencyMode === "native" ? t("currency.native") : currencyMode;
-  const nextCurrencyLabel = nextCurrency === "native" ? t("currency.native") : nextCurrency;
   const otherCategory = primaryCategories.find((category) => category.name.trim().toLocaleLowerCase() === "other");
   const analyticsCategories = useMemo(() => expenseCategories.map((category) => isDefaultExpenseCategory(category) ? category : { ...category, name: "Other", color: otherCategory?.color ?? "#8c8c8c" }), [expenseCategories, otherCategory?.color]);
   const categoryGroups = useMemo(() => buildExpenseCategoryGroups(analyticsCategories, (category) => getCategoryName(category, t)), [analyticsCategories, t]);
@@ -202,7 +196,7 @@ export function ExpensesPage() {
   const home = (
     <>
       <section className="summary-header">
-        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div>
+        <div className="home-metrics"><div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div><button className="capital-metric" type="button" onClick={onOpenCapital}><span>{locale === "ru" ? "Капитал" : "Capital"}</span><strong>{capitalState === "ready" ? formatMoney(capitalTotalUsd, "USD") : capitalState === "error" ? "—" : "…"}</strong></button></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>
@@ -236,12 +230,9 @@ export function ExpensesPage() {
   );
 
   return (
-    <div className="app-shell">
+    <>
       <input ref={receiptInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
-      <header className="app-header"><div className="brand"><span>F</span>Finanko</div><div className="header-actions"><button className="currency-button" type="button" title={t("currency.switch", { current: currentCurrencyLabel, next: nextCurrencyLabel })} onClick={() => setCurrencyMode(nextCurrency)}>{currencyMode === "native" ? <NativeCurrencyIcon size={15} /> : <CurrencyIcon currency={currencyMode} size={15} />}{currentCurrencyLabel}</button><button type="button" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>{locale.toUpperCase()}</button><button type="button" aria-label={t("actions.signOut")} onClick={() => void signOut()}><LogOut size={17} /></button></div></header>
-      <main className="main-content">
-        {formMode ? <Suspense fallback={<div className="parsing-state">{t("expense.loadingEditor")}</div>}><ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /></Suspense> : selected ? <ExpenseDetailsPage expense={selected} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
-      </main>
-    </div>
+      {formMode ? <Suspense fallback={<div className="parsing-state">{t("expense.loadingEditor")}</div>}><ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /></Suspense> : selected ? <ExpenseDetailsPage expense={selected} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
+    </>
   );
 }

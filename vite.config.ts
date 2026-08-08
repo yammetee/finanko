@@ -1,12 +1,13 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import aiHandler from "./api/ai";
+import marketHandler from "./api/market";
 
-function localAiPlugin(): Plugin {
+function localApiPlugin(): Plugin {
   return {
-    name: "finanko-local-ai",
+    name: "finanko-local-api",
     configureServer(server) {
-      server.middlewares.use("/api/ai", async (request, response) => {
+      const register = (path: string, handler: typeof aiHandler | typeof marketHandler) => server.middlewares.use(path, async (request, response) => {
         try {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -25,7 +26,7 @@ function localAiPlugin(): Plugin {
             setHeader(name: string, value: string) { response.setHeader(name, value); },
             end() { response.statusCode = statusCode; response.end(); },
           };
-          await aiHandler({
+          await handler({
             method: request.method,
             headers: { authorization },
             body: rawBody ? JSON.parse(rawBody) : undefined,
@@ -36,9 +37,11 @@ function localAiPlugin(): Plugin {
             response.statusCode = 500;
             response.setHeader("content-type", "application/json");
           }
-          if (!response.writableEnded) response.end(JSON.stringify({ error: "Local AI handler failed" }));
+          if (!response.writableEnded) response.end(JSON.stringify({ error: "Local API handler failed" }));
         }
       });
+      register("/api/ai", aiHandler);
+      register("/api/market", marketHandler);
     },
   };
 }
@@ -51,7 +54,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
-    plugins: [react(), localAiPlugin()],
+    plugins: [react(), localApiPlugin()],
     build: {
       rollupOptions: {
         output: {

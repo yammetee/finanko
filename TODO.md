@@ -118,57 +118,57 @@ Historical calculations use the FX rate for the event or valuation date. Current
 
 ## Stage 1: Database contract
 
-- [ ] Add owner-scoped capital groups, items, and events.
-- [ ] Keep capital tables private and expose only narrowly scoped authenticated RPCs or server endpoints.
-- [ ] Add direct owner checks to every read and write path.
-- [ ] Add constraints for event types, statuses, positive quantities, currencies, and valid related-item ownership.
-- [ ] Add indexes for owner/group, owner/item, event date, status, and external provider identifiers.
-- [ ] Add a unique idempotency constraint for automatically discovered events.
-- [ ] Add private normalized quote, market-action, and snapshot caches.
-- [ ] Update schema tests to prove ownership isolation, grants, and atomic writes.
-- [ ] Keep the local schema repeatable and reviewable before any separately authorized remote application.
+- [x] Add owner-scoped capital groups, items, and events.
+- [x] Keep capital tables private and expose only narrowly scoped authenticated RPCs or server endpoints.
+- [x] Add direct owner checks to every read and write path.
+- [x] Add constraints for event types, statuses, positive quantities, currencies, and valid related-item ownership.
+- [x] Add indexes for owner/group, owner/item, event date, status, and external provider identifiers.
+- [x] Add a unique idempotency constraint for automatically discovered events.
+- [x] Add private normalized quote, market-action, and snapshot caches.
+- [x] Update schema tests to prove ownership isolation, grants, and atomic writes.
+- [x] Keep the local schema repeatable and reviewable before any separately authorized remote application.
 
 Exit condition: the schema represents groups, independent items, linked capital-only events, and private technical caches without any reference to `expenses` or `categories`.
 
 ## Stage 2: Capital domain and calculations
 
-- [ ] Add capital domain types independent from expense types.
-- [ ] Implement event replay in chronological order with deterministic tie-breaking.
-- [ ] Calculate quantity, remaining cost basis, weighted average, current value, realized P/L, unrealized P/L, net income, and total result.
-- [ ] Implement cash items using the same item model.
-- [ ] Implement related-item effects for buys, dividends, and transfers.
-- [ ] Implement splits without changing total cost basis.
-- [ ] Implement USD conversion with dated and current FX rates.
-- [ ] Add decimal-safe arithmetic at every calculation and serialization boundary.
-- [ ] Add focused tests for buys, partial sales, fees, taxes, dividends, interest, transfers, splits, FX, fractional shares, and backdated events.
+- [x] Add capital domain types independent from expense types.
+- [x] Implement event replay in chronological order with deterministic tie-breaking.
+- [x] Calculate quantity, remaining cost basis, weighted average, current value, realized P/L, unrealized P/L, net income, and total result.
+- [x] Implement cash items using the same item model.
+- [x] Implement related-item effects for buys, sales, dividends, interest, and transfers.
+- [x] Implement splits without changing total cost basis.
+- [x] Implement USD conversion with dated event FX and current valuation FX rates.
+- [ ] Add decimal-safe arithmetic at every calculation and serialization boundary. Event replay and RPC transport are decimal-safe; aggregate UI conversion still needs the same representation.
+- [ ] Expand focused calculation coverage beyond the current weighted-average, partial-sale, expected-event, dividend-tax, fractional-quantity, and split cases.
 
 Exit condition: every displayed capital number can be rebuilt deterministically from confirmed events and market data.
 
 ## Stage 3: Persistence and state
 
-- [ ] Add a capital repository separate from the expense repository.
-- [ ] Add a capital Zustand store separate from the expense store.
-- [ ] Load groups, items, events, pending events, and latest quotes into a normalized snapshot.
-- [ ] Save multi-row effects atomically where one user action affects related items.
+- [x] Add a capital repository separate from the expense repository.
+- [x] Add a capital Zustand store separate from the expense store.
+- [x] Load groups, items, events, pending events, and latest in-session quotes into normalized state.
+- [x] Save linked events and group archival effects atomically.
 - [ ] Support create, edit, archive, restore, confirm, ignore, and safe correction workflows.
-- [ ] Keep expected events out of confirmed balances and performance.
-- [ ] Load capital independently after authentication.
-- [ ] Ensure capital load or save errors never block the expense page.
+- [x] Keep expected events out of confirmed balances and performance.
+- [x] Load capital independently after authentication.
+- [x] Ensure capital load or save errors never block the expense page.
 
 Exit condition: capital can operate end-to-end using manual data while expenses remain unchanged.
 
 ## Stage 4: Market identity and providers
 
-- [ ] Identify securities with a provider asset ID plus exchange/MIC or another stable identifier when available.
-- [ ] Identify listed crypto with a stable provider coin ID rather than ticker alone.
+- [x] Identify securities with an editable provider asset ID. Exchange/MIC support remains.
+- [x] Identify listed crypto with an editable stable provider coin ID rather than ticker alone.
 - [ ] Identify tokens with chain and contract address.
-- [ ] Store a primary and fallback price source on each item.
+- [x] Store a primary and fallback price source on each item.
 - [ ] Store an independent income/corporate-action source when needed.
-- [ ] Implement normalized provider adapters so vendor response shapes never enter domain or UI code.
-- [ ] Start with a free-first provider set for US stocks/funds, crypto, and FX.
+- [x] Implement normalized provider adapters so vendor response shapes never enter domain or UI code.
+- [x] Start with Bybit and CoinGecko for crypto, Twelve Data for US stocks/funds, and the existing FX source.
 - [ ] Batch unique instruments across user items to avoid repeated provider calls.
 - [ ] Cache normalized prices with provider and retrieval timestamp.
-- [ ] Fall back to the secondary provider, then the last known quote, then an explicit manual price.
+- [ ] Fall back to the secondary provider and then an explicit manual price. Persistent last-known quote caching remains.
 - [ ] Show stale-price state instead of failing the capital page.
 - [ ] Keep provider credentials server-side and configure them only through a separately authorized secret operation.
 
@@ -191,54 +191,54 @@ Exit condition: dividends, interest, staking, and splits arrive as editable expe
 
 ## Stage 6: Shared UI foundation
 
-- [ ] Move the application header out of the expense page without changing its appearance or behavior.
+- [x] Move the application header out of the expense page without changing its appearance or behavior.
 - [ ] Extract only genuinely neutral summary, panel, button, loading, and error primitives.
 - [ ] Generalize the existing line-chart foundation while preserving the expense chart output.
-- [ ] Keep expense-specific rows, forms, filters, analytics, and state inside the expense feature.
-- [ ] Reuse existing dark theme, spacing, typography, controls, and responsive breakpoints.
-- [ ] Avoid adding a routing dependency unless navigation requirements make it necessary.
+- [x] Keep expense-specific rows, forms, filters, analytics, and state inside the expense feature.
+- [x] Reuse existing dark theme, spacing, typography, controls, and responsive breakpoints.
+- [x] Avoid adding a routing dependency unless navigation requirements make it necessary.
 
 Exit condition: expenses look and behave the same, while capital can use the same visual language without importing expense-domain components.
 
 ## Stage 7: Home summary
 
-- [ ] Keep spending as the primary home workflow and retain all current expense controls.
-- [ ] Show spending for the selected expense period.
-- [ ] Show current total capital as a separate compact metric.
-- [ ] Make the capital metric open the capital page.
-- [ ] Do not show percentage change or detailed capital analytics on the home page.
-- [ ] Ensure expense period/category changes never alter the capital metric.
-- [ ] Render capital loading, unavailable, and stale states locally without disabling expense actions.
-- [ ] Stack the two metrics cleanly on small screens.
+- [x] Keep spending as the primary home workflow and retain all current expense controls.
+- [x] Show spending for the selected expense period.
+- [x] Show current total capital as a separate compact metric.
+- [x] Make the capital metric open the capital page.
+- [x] Do not show percentage change or detailed capital analytics on the home page.
+- [x] Ensure expense period/category changes never alter the capital metric.
+- [x] Render capital loading and unavailable states locally without disabling expense actions.
+- [x] Stack the two metrics cleanly on small screens.
 
 Exit condition: the home page shows independent spending and current-capital values without coupling their data flows.
 
 ## Stage 8: Capital page
 
-- [ ] Reuse the current page width, header, panels, rows, controls, and mobile layout.
-- [ ] Show current capital in USD as the headline metric.
-- [ ] Show invested amount, absolute result, and confirmed net income without requiring percentages.
+- [x] Reuse the current page width, header, panels, rows, controls, and mobile layout.
+- [x] Show current capital in USD as the headline metric.
+- [x] Show invested amount, absolute result, and confirmed net income without requiring percentages.
 - [ ] Add a line chart for all available capital history with no date filter.
 - [ ] Label the graph as capital dynamics rather than investment return because deposits also change the line.
-- [ ] Show a group filter only when more than one group exists.
-- [ ] Add one type filter: `All`, `Stocks and funds`, `Crypto`, `Cash and deposits`.
-- [ ] Do not add filters for date, provider, currency, income type, or performance until a real use case requires them.
-- [ ] Show each item independently with quantity, average cost, current price, value, absolute P/L, and confirmed income.
+- [x] Show a group filter only when more than one group exists.
+- [x] Add one type filter: `All`, `Stocks and funds`, `Crypto`, `Cash and deposits`.
+- [x] Do not add filters for date, provider, currency, income type, or performance until a real use case requires them.
+- [x] Show each item independently with quantity, average cost, current price, value, absolute P/L, and confirmed income.
 - [ ] Provide empty, loading, partial, stale, error, and retry states.
 
 Exit condition: the capital page is useful on mobile and desktop with no unnecessary controls.
 
 ## Stage 9: Capital editing flows
 
-- [ ] Add and rename a group.
+- [x] Add and rename a group.
 - [ ] Add an item by search or manual definition.
 - [ ] Let provider data prefill an item while keeping every field editable before save.
-- [ ] Add manual buy, sell, deposit, withdrawal, transfer, dividend, interest, fee, tax, split, and adjustment events.
+- [x] Add manual buy, sell, deposit, withdrawal, transfer, dividend, interest, staking, fee, tax, split, and adjustment events.
 - [ ] Add a fast opening-position flow using quantity and total invested amount.
-- [ ] Edit or void an incorrect event without destroying unrelated history.
+- [x] Edit or void an incorrect event without destroying unrelated history.
 - [ ] Archive closed items and groups without deleting their events.
-- [ ] Confirm, edit, or ignore automatic events in the same visual form pattern.
-- [ ] Never introduce capital controls into expense entry forms.
+- [x] Confirm, edit, or ignore expected events in the same visual form pattern.
+- [x] Never introduce capital controls into expense entry forms.
 
 Exit condition: all capital state can be created and corrected manually even when every provider is unavailable.
 
@@ -261,11 +261,11 @@ Exit condition: the all-history line graph remains correct after backdated opera
 - [ ] Test decimal precision across database, API, store, and UI boundaries.
 - [ ] Test that capital failures cannot block receipt, text, or manual expense entry.
 - [ ] Verify responsive layouts and accessibility states on supported viewports.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Run `npm run lint`.
-- [ ] Run `git diff --check`.
-- [ ] Search for duplicated implementations, stale documentation, unused exports, and replaced legacy code.
+- [x] Run `npm test` after the current development slice.
+- [x] Run `npm run build` after the current development slice.
+- [x] Run `npm run lint` after the current development slice.
+- [x] Run `git diff --check` after the current development slice.
+- [x] Search the current slice for duplicated implementations, stale documentation, unused exports, and replaced legacy code.
 - [ ] Apply remote schema changes only after separate explicit authorization and a reviewed deployment order.
 
 Exit condition: all checks pass, the two domains remain independent, and only one active implementation exists for each behavior.
