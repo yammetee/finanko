@@ -164,12 +164,12 @@ Exit condition: capital can operate end-to-end using manual data while expenses 
 - [x] Store a primary and fallback price source on each item.
 - [ ] Store an independent income/corporate-action source when needed.
 - [x] Implement normalized provider adapters so vendor response shapes never enter domain or UI code.
-- [x] Start with Bybit and CoinGecko for crypto, Twelve Data for US stocks/funds, and the existing FX source.
+- [x] Use Bybit and CoinGecko for crypto, no-key Nasdaq market data for US stocks/funds, and the existing FX source.
 - [x] Batch unique instruments across user items to avoid repeated provider calls.
 - [x] Cache normalized prices with provider and retrieval timestamp.
 - [x] Fall back to the secondary provider, then the last known quote, then an explicit manual price.
 - [x] Show stale-price state instead of failing the capital page.
-- [x] Keep provider credentials server-side and configure them only through a separately authorized secret operation.
+- [x] Keep integrations keyless where possible; market providers currently require no user credentials.
 
 Exit condition: every supported item can resolve a stable market identity and current value without depending on the name of its group.
 

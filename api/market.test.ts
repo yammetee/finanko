@@ -15,6 +15,11 @@ describe("market quote API", () => {
     await expect(fetchMarketQuotes([{ itemId: "btc", type: "crypto", symbol: "BTC", provider: "bybit" }])).resolves.toEqual([expect.objectContaining({ itemId: "btc", price: "67123.4500", currency: "USD", provider: "bybit" })]);
   });
 
+  it("normalizes a no-key Nasdaq security quote", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ data: { primaryData: { lastSalePrice: "$313.33", lastTradeTimestamp: "Aug 6, 2026" } }, status: { rCode: 200 } }) } as Response);
+    await expect(fetchMarketQuotes([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "nasdaq" }])).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "313.33", currency: "USD", provider: "nasdaq" })]);
+  });
+
   it("falls back from Bybit to CoinGecko", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce({ ok: false } as Response)
@@ -41,18 +46,18 @@ describe("market quote API", () => {
     await expect(fetchMarketHistory([{ itemId: "btc", type: "crypto", symbol: "BTC", provider: "bybit" }], "2026-08-01")).resolves.toEqual([expect.objectContaining({ itemId: "btc", price: "65000", provider: "bybit" })]);
   });
 
-  it("normalizes Twelve Data daily security history when its server key is configured", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ values: [{ datetime: "2026-08-07", close: "220.50" }] }) } as Response);
-    await expect(fetchMarketHistory([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "twelve_data" }], "2026-08-01", "server-key")).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "220.50", provider: "twelve_data", quotedAt: "2026-08-07T21:00:00.000Z" })]);
+  it("normalizes no-key Nasdaq daily security history", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ data: { tradesTable: { rows: [{ date: "08/07/2026", close: "$220.50" }] } }, status: { rCode: 200 } }) } as Response);
+    await expect(fetchMarketHistory([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "nasdaq" }], "2026-08-01")).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "220.50", provider: "nasdaq", quotedAt: "2026-08-07T21:00:00.000Z" })]);
   });
 
   it("normalizes editable crypto and security search suggestions", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce({ ok: true, json: async () => ({ coins: [{ id: "bitcoin", name: "Bitcoin", symbol: "btc", market_cap_rank: 1 }] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ symbol: "VT", instrument_name: "Vanguard Total World Stock ETF", instrument_type: "ETF", currency: "USD" }] }) } as Response);
-    await expect(searchMarketAssets("bt", "server-key")).resolves.toEqual([
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ symbol: "VT", name: " Vanguard Total World Stock ETF", asset: "ETF" }] }) } as Response);
+    await expect(searchMarketAssets("bt")).resolves.toEqual([
       { name: "Bitcoin", symbol: "BTC", type: "crypto", provider: "coingecko", providerAssetId: "bitcoin" },
-      { name: "Vanguard Total World Stock ETF", symbol: "VT", type: "fund", provider: "twelve_data", providerAssetId: "VT" },
+      { name: "Vanguard Total World Stock ETF", symbol: "VT", type: "fund", provider: "nasdaq", providerAssetId: "VT" },
     ]);
   });
 

@@ -15,6 +15,7 @@ interface CapitalState extends CapitalSnapshot {
   historyPending: boolean;
   quotesLoading: boolean;
   quotesPartial: boolean;
+  unavailableQuoteItemIds: string[];
   quotesError?: string;
   loadState: LoadState;
   error?: string;
@@ -48,7 +49,7 @@ async function generateExpectedInterest() {
 }
 
 export const useCapitalStore = create<CapitalState>()((set) => ({
-  groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], quotesLoading: false, quotesPartial: false, historyLoading: false, historyPending: false, loadState: "idle",
+  groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], quotesLoading: false, quotesPartial: false, unavailableQuoteItemIds: [], historyLoading: false, historyPending: false, loadState: "idle",
   initialize: async () => {
     set({ loadState: "loading", error: undefined });
     try {
@@ -143,9 +144,11 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
       await saveCapitalValuation(quotes, totalUsd);
       const today = new Date().toISOString().slice(0, 10);
       const resolved = new Set(quotes.map((quote) => quote.itemId));
-      set((state) => ({ quotes: merged, quotesPartial: marketItems.some((item) => !resolved.has(item.id)), valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
+      const unavailableQuoteItemIds = marketItems.filter((item) => !resolved.has(item.id)).map((item) => item.id);
+      set((state) => ({ quotes: merged, quotesPartial: unavailableQuoteItemIds.length > 0, unavailableQuoteItemIds, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
     } catch {
-      set({ quotesError: "Market quotes unavailable" });
+      const unavailableQuoteItemIds = useCapitalStore.getState().items.filter((item) => !item.archivedAt && item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id);
+      set({ quotesError: "Market quotes unavailable", unavailableQuoteItemIds });
     } finally { set({ quotesLoading: false }); }
   },
   rebuildHistory: async () => {

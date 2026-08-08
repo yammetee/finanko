@@ -5,7 +5,9 @@ interface MarketAsset { itemId: string; type: AssetType; symbol: string; provide
 interface ApiRequest { method?: string; headers: { authorization?: string }; body?: unknown }
 interface ApiResponse { status(code: number): ApiResponse; json(payload: unknown): void; setHeader(name: string, value: string): void; end(): void }
 export interface NormalizedQuote { itemId: string; price: string; currency: "USD"; provider: string; quotedAt: string }
-export interface MarketSearchResult { name: string; symbol: string; type: AssetType; provider: "coingecko" | "twelve_data"; providerAssetId: string }
+export interface MarketSearchResult { name: string; symbol: string; type: AssetType; provider: "coingecko" | "nasdaq"; providerAssetId: string }
+
+const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; Finanko/1.0)" };
 
 export function validateMarketAssets(value: unknown): MarketAsset[] | null {
   if (!value || typeof value !== "object" || !Array.isArray((value as { assets?: unknown }).assets)) return null;
@@ -17,9 +19,9 @@ export function validateMarketAssets(value: unknown): MarketAsset[] | null {
     return typeof row.itemId === "string" && row.itemId.length <= 100
       && ["stock", "fund", "crypto"].includes(String(row.type))
       && typeof row.symbol === "string" && /^[A-Za-z0-9._-]{1,32}$/.test(row.symbol)
-      && (row.provider === undefined || ["bybit", "coingecko", "twelve_data"].includes(String(row.provider)))
+      && (row.provider === undefined || ["bybit", "coingecko", "nasdaq"].includes(String(row.provider)))
       && (row.providerAssetId === undefined || (typeof row.providerAssetId === "string" && row.providerAssetId.length <= 100))
-      && (row.fallbackProvider === undefined || ["bybit", "coingecko", "twelve_data"].includes(String(row.fallbackProvider)))
+      && (row.fallbackProvider === undefined || ["bybit", "coingecko", "nasdaq"].includes(String(row.fallbackProvider)))
       && (row.fallbackAssetId === undefined || (typeof row.fallbackAssetId === "string" && row.fallbackAssetId.length <= 100));
   })) return null;
   return assets as MarketAsset[];
@@ -59,20 +61,33 @@ async function coinGeckoQuote(asset: MarketAsset): Promise<NormalizedQuote> {
   return { itemId: asset.itemId, price: String(quote.usd), currency: "USD", provider: "coingecko", quotedAt: new Date((quote.last_updated_at ?? Date.now() / 1000) * 1000).toISOString() };
 }
 
-async function twelveDataQuotes(assets: MarketAsset[], apiKey: string): Promise<NormalizedQuote[]> {
-  if (!assets.length) return [];
-  const symbols = [...new Set(assets.map((asset) => asset.providerAssetId || asset.symbol))];
-  const response = await fetch(`https://api.twelvedata.com/price?symbol=${encodeURIComponent(symbols.join(","))}`, { headers: { Authorization: `apikey ${apiKey}` } });
-  if (!response.ok) throw new Error("Twelve Data unavailable");
-  const body = await response.json() as Record<string, { price?: string }> | { price?: string };
-  return assets.flatMap((asset) => {
-    const symbol = asset.providerAssetId || asset.symbol;
-    const value = symbols.length === 1 ? (body as { price?: string }).price : (body as Record<string, { price?: string }>)[symbol]?.price;
-    return value && /^\d+(\.\d+)?$/.test(value) ? [{ itemId: asset.itemId, price: value, currency: "USD" as const, provider: "twelve_data", quotedAt: new Date().toISOString() }] : [];
-  });
+function nasdaqAssetClass(asset: MarketAsset) {
+  return asset.type === "fund" ? "etf" : "stocks";
 }
 
-export async function fetchMarketQuotes(assets: MarketAsset[], twelveDataKey?: string) {
+function parseNasdaqPrice(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.replace(/[$,\s]/g, "");
+  return /^\d+(\.\d+)?$/.test(normalized) ? normalized : undefined;
+}
+
+function parseNasdaqDate(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+}
+
+async function nasdaqQuote(asset: MarketAsset): Promise<NormalizedQuote> {
+  const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
+  const response = await fetch(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${nasdaqAssetClass(asset)}`, { headers: NASDAQ_HEADERS });
+  if (!response.ok) throw new Error("Nasdaq unavailable");
+  const body = await response.json() as { data?: { primaryData?: { lastSalePrice?: string; lastTradeTimestamp?: string } }; status?: { rCode?: number } };
+  const price = parseNasdaqPrice(body.data?.primaryData?.lastSalePrice);
+  if (body.status?.rCode !== 200 || !price) throw new Error("Invalid Nasdaq quote");
+  return { itemId: asset.itemId, price, currency: "USD", provider: "nasdaq", quotedAt: parseNasdaqDate(body.data?.primaryData?.lastTradeTimestamp) ?? new Date().toISOString() };
+}
+
+export async function fetchMarketQuotes(assets: MarketAsset[]) {
   const crypto = assets.filter((asset) => asset.type === "crypto");
   const securities = assets.filter((asset) => asset.type !== "crypto");
   const cryptoQuotes = await Promise.all(uniqueAssets(crypto).map(async (matching) => {
@@ -82,7 +97,9 @@ export async function fetchMarketQuotes(assets: MarketAsset[], twelveDataKey?: s
     const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
     try { return fanOutQuotes([await primary(asset)], matching); } catch { try { return fanOutQuotes([await fallback(fallbackAsset)], matching); } catch { return []; } }
   }));
-  const securityQuotes = twelveDataKey ? await twelveDataQuotes(securities, twelveDataKey).catch(() => []) : [];
+  const securityQuotes = (await Promise.all(uniqueAssets(securities).map(async (matching) => {
+    try { return fanOutQuotes([await nasdaqQuote(matching[0])], matching); } catch { return []; }
+  }))).flat();
   return [...cryptoQuotes.flat(), ...securityQuotes];
 }
 
@@ -110,19 +127,22 @@ async function coinGeckoHistory(asset: MarketAsset, startDate: string): Promise<
   return [...byDay.values()];
 }
 
-async function twelveDataHistory(asset: MarketAsset, startDate: string, apiKey: string): Promise<NormalizedQuote[]> {
-  const symbol = asset.providerAssetId || asset.symbol;
+async function nasdaqHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+  const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
   const endDate = new Date().toISOString().slice(0, 10);
-  const response = await fetch(`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1day&start_date=${startDate}&end_date=${endDate}&order=ASC`, { headers: { Authorization: `apikey ${apiKey}` } });
-  if (!response.ok) throw new Error("Twelve Data history unavailable");
-  const body = await response.json() as { status?: string; values?: Array<{ datetime?: string; close?: string }> };
-  if (body.status === "error" || !Array.isArray(body.values)) throw new Error("Invalid Twelve Data history");
-  return body.values.flatMap((row) => row.datetime && row.close && /^\d+(\.\d+)?$/.test(row.close)
-    ? [{ itemId: asset.itemId, price: row.close, currency: "USD" as const, provider: "twelve_data", quotedAt: new Date(`${row.datetime.slice(0, 10)}T21:00:00.000Z`).toISOString() }]
-    : []);
+  const response = await fetch(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${nasdaqAssetClass(asset)}&fromdate=${startDate}&todate=${endDate}&limit=5000`, { headers: NASDAQ_HEADERS });
+  if (!response.ok) throw new Error("Nasdaq history unavailable");
+  const body = await response.json() as { data?: { tradesTable?: { rows?: Array<{ date?: string; close?: string }> | null } }; status?: { rCode?: number } };
+  if (body.status?.rCode !== 200) throw new Error("Invalid Nasdaq history");
+  return (body.data?.tradesTable?.rows ?? []).flatMap((row) => {
+    const price = parseNasdaqPrice(row.close);
+    if (!row.date || !price) return [];
+    const [month, day, year] = row.date.split("/");
+    return year && month && day ? [{ itemId: asset.itemId, price, currency: "USD" as const, provider: "nasdaq", quotedAt: `${year}-${month}-${day}T21:00:00.000Z` }] : [];
+  });
 }
 
-export async function fetchMarketHistory(assets: MarketAsset[], startDate: string, twelveDataKey?: string) {
+export async function fetchMarketHistory(assets: MarketAsset[], startDate: string) {
   const crypto = assets.filter((asset) => asset.type === "crypto");
   const securities = assets.filter((asset) => asset.type !== "crypto");
   const cryptoHistory = (await Promise.all(uniqueAssets(crypto).map(async (matching) => {
@@ -132,25 +152,21 @@ export async function fetchMarketHistory(assets: MarketAsset[], startDate: strin
     const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
     try { return fanOutQuotes(await primary(asset, startDate), matching); } catch { try { return fanOutQuotes(await fallback(fallbackAsset, startDate), matching); } catch { return []; } }
   }))).flat();
-  const securityHistory = twelveDataKey
-    ? (await Promise.all(uniqueAssets(securities).map(async (matching) => fanOutQuotes(await twelveDataHistory(matching[0], startDate, twelveDataKey).catch(() => []), matching)))).flat()
-    : [];
+  const securityHistory = (await Promise.all(uniqueAssets(securities).map(async (matching) => fanOutQuotes(await nasdaqHistory(matching[0], startDate).catch(() => []), matching)))).flat();
   return [...cryptoHistory, ...securityHistory];
 }
 
-export async function searchMarketAssets(query: string, twelveDataKey?: string): Promise<MarketSearchResult[]> {
+export async function searchMarketAssets(query: string): Promise<MarketSearchResult[]> {
   const cryptoRequest = fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`).then(async (response) => {
     if (!response.ok) return [];
     const body = await response.json() as { coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number }> };
     return (body.coins ?? []).filter((coin) => coin.id && coin.name && coin.symbol).slice(0, 6).map((coin) => ({ name: coin.name!, symbol: coin.symbol!.toUpperCase(), type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id!, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }));
   }).catch(() => []);
-  const securityRequest = twelveDataKey
-    ? fetch(`https://api.twelvedata.com/symbol_search?symbol=${encodeURIComponent(query)}&outputsize=8`, { headers: { Authorization: `apikey ${twelveDataKey}` } }).then(async (response) => {
-      if (!response.ok) return [];
-      const body = await response.json() as { data?: Array<{ symbol?: string; instrument_name?: string; instrument_type?: string; currency?: string }> };
-      return (body.data ?? []).filter((asset) => asset.symbol && asset.instrument_name && asset.currency === "USD").map((asset) => ({ name: asset.instrument_name!, symbol: asset.symbol!, type: /etf|fund/i.test(asset.instrument_type ?? "") ? "fund" as const : "stock" as const, provider: "twelve_data" as const, providerAssetId: asset.symbol! }));
-    }).catch(() => [])
-    : Promise.resolve([]);
+  const securityRequest = fetch(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS }).then(async (response) => {
+    if (!response.ok) return [];
+    const body = await response.json() as { data?: Array<{ symbol?: string; name?: string; asset?: string }> };
+    return (body.data ?? []).filter((asset) => asset.symbol && asset.name && ["STOCKS", "ETF", "MUTUALFUNDS"].includes(asset.asset ?? "")).map((asset) => ({ name: asset.name!.trim(), symbol: asset.symbol!, type: asset.asset === "STOCKS" ? "stock" as const : "fund" as const, provider: "nasdaq" as const, providerAssetId: asset.symbol! }));
+  }).catch(() => []);
   const [crypto, securities] = await Promise.all([cryptoRequest, securityRequest]);
   const rankedCrypto = crypto.sort((a, b) => a.rank - b.rank).map((asset) => ({ name: asset.name, symbol: asset.symbol, type: asset.type, provider: asset.provider, providerAssetId: asset.providerAssetId }));
   return [...rankedCrypto, ...securities].slice(0, 10);
@@ -169,7 +185,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   if (mode === "search") {
     const query = (request.body as { query?: unknown }).query;
     if (typeof query !== "string" || query.trim().length < 2 || query.trim().length > 50) { response.status(400).json({ error: "Invalid search query" }); return; }
-    response.status(200).json({ assets: await searchMarketAssets(query.trim(), process.env.TWELVE_DATA_API_KEY) });
+    response.status(200).json({ assets: await searchMarketAssets(query.trim()) });
     return;
   }
   const assets = validateMarketAssets(request.body);
@@ -177,9 +193,9 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   const startDate = (request.body as { startDate?: unknown }).startDate;
   if (mode === "history") {
     if (typeof startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { response.status(400).json({ error: "Invalid history range" }); return; }
-    response.status(200).json({ quotes: await fetchMarketHistory(assets, startDate, process.env.TWELVE_DATA_API_KEY) });
+    response.status(200).json({ quotes: await fetchMarketHistory(assets, startDate) });
     return;
   }
-  const quotes = await fetchMarketQuotes(assets, process.env.TWELVE_DATA_API_KEY);
+  const quotes = await fetchMarketQuotes(assets);
   response.status(200).json({ quotes });
 }

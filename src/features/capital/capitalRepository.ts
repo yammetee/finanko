@@ -16,12 +16,18 @@ function group(row: Row): CapitalGroup {
 }
 
 function item(row: Row): CapitalItem {
+  const type = row.item_type as CapitalItem["type"];
+  const normalizeProvider = (value: unknown): CapitalItem["primaryProvider"] => {
+    if (!value) return undefined;
+    if (type === "stock" || type === "fund") return "nasdaq";
+    return value === "coingecko" ? "coingecko" : "bybit";
+  };
   return {
     id: String(row.id), groupId: String(row.group_id), name: String(row.name),
-    type: row.item_type as CapitalItem["type"], symbol: optional(row.symbol),
+    type, symbol: optional(row.symbol),
     quoteCurrency: row.quote_currency as CapitalItem["quoteCurrency"],
-    manualPrice: optional(row.manual_price), primaryProvider: optional(row.primary_provider) as CapitalItem["primaryProvider"],
-    primaryAssetId: optional(row.primary_asset_id), fallbackProvider: optional(row.fallback_provider) as CapitalItem["fallbackProvider"],
+    manualPrice: optional(row.manual_price), primaryProvider: normalizeProvider(row.primary_provider),
+    primaryAssetId: optional(row.primary_asset_id), fallbackProvider: normalizeProvider(row.fallback_provider),
     fallbackAssetId: optional(row.fallback_asset_id), archivedAt: optional(row.archived_at),
     annualInterestRate: optional(row.annual_interest_rate), interestCadence: optional(row.interest_cadence) as CapitalItem["interestCadence"],
     interestEffectiveFrom: optional(row.interest_effective_from), interestCompounding: Boolean(row.interest_compounding),

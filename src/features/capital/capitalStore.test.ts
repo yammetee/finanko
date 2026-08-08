@@ -9,7 +9,7 @@ import { useCapitalStore } from "./capitalStore";
 describe("capital store", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useCapitalStore.setState({ groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], historyLoading: false, historyPending: false, loadState: "ready" });
+    useCapitalStore.setState({ groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], unavailableQuoteItemIds: [], historyLoading: false, historyPending: false, loadState: "ready" });
   });
 
   it("saves an item and its opening event in one repository call", async () => {
@@ -30,7 +30,7 @@ describe("capital store", () => {
     loadMarketQuotes.mockRejectedValueOnce(new Error("offline"));
     useCapitalStore.setState({ items: [{ id: "btc", groupId: "group", name: "Bitcoin", type: "crypto", quoteCurrency: "USD", symbol: "BTC" }] });
     await expect(useCapitalStore.getState().refreshQuotes()).resolves.toBeUndefined();
-    expect(useCapitalStore.getState()).toMatchObject({ quotesLoading: false, quotesError: "Market quotes unavailable" });
+    expect(useCapitalStore.getState()).toMatchObject({ quotesLoading: false, quotesError: "Market quotes unavailable", unavailableQuoteItemIds: ["btc"] });
   });
 
   it("marks a successful response as partial when an instrument has no quote", async () => {
@@ -38,6 +38,7 @@ describe("capital store", () => {
     useCapitalStore.setState({ items: [{ id: "btc", groupId: "group", name: "Bitcoin", type: "crypto", quoteCurrency: "USD", symbol: "BTC" }] });
     await useCapitalStore.getState().refreshQuotes();
     expect(useCapitalStore.getState().quotesPartial).toBe(true);
+    expect(useCapitalStore.getState().unavailableQuoteItemIds).toEqual(["btc"]);
   });
 
   it("contains capital initialization failures instead of rejecting into the expense shell", async () => {
