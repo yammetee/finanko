@@ -2,7 +2,7 @@ import { convertMoney } from "../../shared/lib/currency";
 import { replayCapitalEvents } from "./capitalMath";
 import type { CapitalEvent, CapitalItem, CapitalQuote } from "./capitalTypes";
 
-export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent[], quotes: Record<string, CapitalQuote> = {}) {
+export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent[], quotes: Record<string, CapitalQuote> = {}, valuationDate?: string) {
   return items.filter((item) => !item.archivedAt).map((item) => {
     const itemEvents = events.map((event) => {
       if (event.currency === item.quoteCurrency) return event;
@@ -22,7 +22,7 @@ export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent
       ...position,
       price,
       value,
-      valueUsd: convertMoney(value, item.quoteCurrency, "USD"),
+      valueUsd: convertMoney(value, item.quoteCurrency, "USD", valuationDate),
       profit: Number(position.totalResult),
       costBasisUsd,
       profitUsd,

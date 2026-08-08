@@ -22,6 +22,12 @@ export interface CapitalItem {
   primaryAssetId?: string;
   fallbackProvider?: "bybit" | "coingecko" | "twelve_data";
   fallbackAssetId?: string;
+  annualInterestRate?: string;
+  interestCadence?: "monthly" | "quarterly" | "yearly";
+  interestEffectiveFrom?: string;
+  interestCompounding?: boolean;
+  incomeDestinationItemId?: string;
+  defaultTaxRate?: string;
   archivedAt?: string;
 }
 
@@ -49,6 +55,9 @@ export interface CapitalEvent {
   splitRatio?: string;
   source: "manual" | "automatic";
   notes?: string;
+  reinvest?: boolean;
+  externalProvider?: string;
+  externalId?: string;
   deletedAt?: string;
 }
 
@@ -56,7 +65,12 @@ export interface CapitalSnapshot {
   groups: CapitalGroup[];
   items: CapitalItem[];
   events: CapitalEvent[];
+  latestQuotes?: CapitalQuote[];
+  quoteHistory?: CapitalQuote[];
+  valuations?: CapitalValuation[];
 }
+
+export interface CapitalValuation { date: string; totalUsd: string }
 
 export interface CapitalPosition {
   itemId: string;

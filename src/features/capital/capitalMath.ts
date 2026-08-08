@@ -71,6 +71,7 @@ export function replayCapitalEvents(itemId: string, events: CapitalEvent[], curr
       case "dividend":
       case "interest":
         netIncome += amount - tax;
+        if (event.reinvest) { quantity += amount - tax; costBasis += amount - tax; }
         break;
       case "fee":
       case "tax":

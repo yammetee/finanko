@@ -47,18 +47,43 @@ describe("minimal Finanko schema", () => {
   });
 
   it("keeps capital data private and independent from expenses", () => {
-    for (const table of ["capital_groups", "capital_items", "capital_events", "market_quotes", "market_actions", "capital_snapshots"]) {
+    for (const table of ["capital_groups", "capital_items", "capital_events", "market_quotes", "market_actions", "capital_snapshots", "capital_item_quotes"]) {
       expect(schema).toContain(`create table if not exists finanko_private.${table}`);
       expect(schema).toContain(`alter table finanko_private.${table} enable row level security;`);
     }
     expect(schema).toContain("create or replace function public.get_capital_snapshot()");
     expect(schema).toContain("create or replace function public.save_capital_snapshot(capital_data jsonb)");
+    expect(schema).toContain("create or replace function public.save_capital_valuation(quote_rows jsonb, value_usd numeric)");
+    expect(schema).toContain("create or replace function public.rebuild_capital_history(quote_rows jsonb, snapshot_rows jsonb)");
+    expect(schema).toContain("'quoteHistory'");
+    expect(schema).toContain("capital_item_quotes_latest_idx");
     expect(schema).toContain("security definer\nset search_path = ''");
     expect(schema).toContain("capital_events_external_unique_idx");
     expect(schema).toContain("capital_events_required_values_check");
+    expect(schema).toContain("annual_interest_rate");
+    expect(schema).toContain("interest_compounding");
+    expect(schema).toContain("external_provider = excluded.external_provider");
     expect(schema).toContain("related_item_id is null or related_item_id <> item_id");
     const capitalSchema = schema.slice(schema.indexOf("create table if not exists finanko_private.capital_groups"));
     expect(capitalSchema).not.toContain("references public.expenses");
     expect(capitalSchema).not.toContain("references public.categories");
+  });
+
+  it("rejects unauthenticated and cross-owner capital writes", () => {
+    expect(schema.match(/if requester_id is null then raise exception 'Authentication required'/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(schema).toContain("raise exception 'Capital record belongs to another owner'");
+    expect(schema).toContain("where g.owner_id <> requester_id");
+    expect(schema).toContain("where i.owner_id <> requester_id");
+    expect(schema).toContain("where e.owner_id <> requester_id");
+    for (const signature of ["get_capital_snapshot()", "save_capital_snapshot(jsonb)", "save_capital_valuation(jsonb, numeric)", "rebuild_capital_history(jsonb, jsonb)"]) {
+      expect(schema).toContain(`revoke all on function public.${signature} from public, anon;`);
+      expect(schema).toContain(`grant execute on function public.${signature} to authenticated;`);
+    }
+  });
+
+  it("enforces idempotent automatic events at the database boundary", () => {
+    expect(schema).toContain("capital_events_external_unique_idx");
+    expect(schema).toContain("on finanko_private.capital_events(owner_id, external_provider, external_id)");
+    expect(schema).toContain("on conflict (id) do update set item_id = excluded.item_id");
   });
 });

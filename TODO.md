@@ -148,7 +148,7 @@ Exit condition: every displayed capital number can be rebuilt deterministically 
 
 - [x] Add a capital repository separate from the expense repository.
 - [x] Add a capital Zustand store separate from the expense store.
-- [x] Load groups, items, events, pending events, and latest in-session quotes into normalized state.
+- [x] Load groups, items, events, pending events, latest persisted quotes, and valuations into normalized state.
 - [x] Save linked events and group archival effects atomically.
 - [ ] Support create, edit, archive, restore, confirm, ignore, and safe correction workflows.
 - [x] Keep expected events out of confirmed balances and performance.
@@ -166,26 +166,21 @@ Exit condition: capital can operate end-to-end using manual data while expenses 
 - [ ] Store an independent income/corporate-action source when needed.
 - [x] Implement normalized provider adapters so vendor response shapes never enter domain or UI code.
 - [x] Start with Bybit and CoinGecko for crypto, Twelve Data for US stocks/funds, and the existing FX source.
-- [ ] Batch unique instruments across user items to avoid repeated provider calls.
-- [ ] Cache normalized prices with provider and retrieval timestamp.
-- [ ] Fall back to the secondary provider and then an explicit manual price. Persistent last-known quote caching remains.
-- [ ] Show stale-price state instead of failing the capital page.
+- [x] Batch unique instruments across user items to avoid repeated provider calls.
+- [x] Cache normalized prices with provider and retrieval timestamp.
+- [x] Fall back to the secondary provider, then the last known quote, then an explicit manual price.
+- [x] Show stale-price state instead of failing the capital page.
 - [ ] Keep provider credentials server-side and configure them only through a separately authorized secret operation.
 
 Exit condition: every supported item can resolve a stable market identity and current value without depending on the name of its group.
 
 ## Stage 5: Automatic income and corporate actions
 
-- [ ] Fetch declared dividends and stock/fund splits from provider data.
-- [ ] Calculate dividend entitlement from confirmed quantity on the relevant record/ex-date.
-- [ ] Apply the item's editable default withholding rate.
-- [ ] Create one expected dividend event with gross, tax, net, and optional destination cash item.
-- [ ] Let the user edit the event before confirmation.
-- [ ] Apply a split only after confirmation and preserve cost basis.
-- [ ] Support interest rules with rate, effective date, cadence, compounding policy, tax, and destination item.
-- [ ] Preserve historical interest events when a future rate changes.
-- [ ] Support staking income as quantity plus fair value at receipt.
-- [ ] Prevent repeated scheduler runs from duplicating expected or confirmed events.
+- [ ] Automatic dividends and splits are intentionally excluded while they require paid provider endpoints; both remain available as manual editable events.
+- [x] Support interest rules with rate, effective date, cadence, compounding policy, tax, and destination item.
+- [x] Preserve historical interest events when a future rate changes.
+- [x] Support staking income as quantity plus fair value at receipt.
+- [x] Prevent repeated interest generation from duplicating expected or confirmed events. Provider dividend/split idempotency uses the same stored external identifiers but remains to be connected.
 
 Exit condition: dividends, interest, staking, and splits arrive as editable expected events and affect capital only after confirmation.
 
@@ -218,8 +213,8 @@ Exit condition: the home page shows independent spending and current-capital val
 - [x] Reuse the current page width, header, panels, rows, controls, and mobile layout.
 - [x] Show current capital in USD as the headline metric.
 - [x] Show invested amount, absolute result, and confirmed net income without requiring percentages.
-- [ ] Add a line chart for all available capital history with no date filter.
-- [ ] Label the graph as capital dynamics rather than investment return because deposits also change the line.
+- [x] Add a line chart for all available stored capital history with no date filter.
+- [x] Label the graph as capital dynamics rather than investment return because deposits also change the line.
 - [x] Show a group filter only when more than one group exists.
 - [x] Add one type filter: `All`, `Stocks and funds`, `Crypto`, `Cash and deposits`.
 - [x] Do not add filters for date, provider, currency, income type, or performance until a real use case requires them.
@@ -234,9 +229,9 @@ Exit condition: the capital page is useful on mobile and desktop with no unneces
 - [ ] Add an item by search or manual definition.
 - [ ] Let provider data prefill an item while keeping every field editable before save.
 - [x] Add manual buy, sell, deposit, withdrawal, transfer, dividend, interest, staking, fee, tax, split, and adjustment events.
-- [ ] Add a fast opening-position flow using quantity and total invested amount.
+- [x] Add a fast opening-position flow using quantity and total invested amount, saved atomically with the new item.
 - [x] Edit or void an incorrect event without destroying unrelated history.
-- [ ] Archive closed items and groups without deleting their events.
+- [x] Archive and restore closed items and groups without deleting their events.
 - [x] Confirm, edit, or ignore expected events in the same visual form pattern.
 - [x] Never introduce capital controls into expense entry forms.
 
@@ -244,21 +239,21 @@ Exit condition: all capital state can be created and corrected manually even whe
 
 ## Stage 10: History and snapshots
 
-- [ ] Fetch available historical prices when a market-backed item is added.
-- [ ] Build historical values from events, dated quotes, and dated FX rates.
-- [ ] Record or refresh daily derived snapshots for efficient graph loading.
-- [ ] Make snapshots rebuildable after a backdated edit, deletion, split, or provider correction.
-- [ ] Start manual assets at their first confirmed event when no earlier market history exists.
-- [ ] Keep raw events and quotes authoritative over derived snapshots.
+- [x] Fetch available historical prices when a market-backed item is added through the configured provider.
+- [x] Build historical values from events, dated quotes, and dated FX rates.
+- [x] Record or refresh daily derived snapshots for efficient graph loading.
+- [x] Make snapshots rebuildable after a backdated edit, deletion, split, or provider correction.
+- [x] Start manual assets at their first confirmed event when no earlier market history exists.
+- [x] Keep raw events and quotes authoritative over derived snapshots.
 
 Exit condition: the all-history line graph remains correct after backdated operations and corporate actions.
 
 ## Stage 11: Security, validation, and cleanup
 
-- [ ] Test unauthenticated access and cross-user read/write attempts.
-- [ ] Test idempotent automatic event generation and concurrent confirmation.
-- [ ] Test provider timeouts, malformed responses, rate limits, stale data, and fallback behavior.
-- [ ] Test decimal precision across database, API, store, and UI boundaries.
+- [x] Test unauthenticated access and cross-user read/write protections.
+- [x] Test idempotent automatic interest generation and database uniqueness during concurrent confirmation.
+- [x] Test provider failures, malformed responses, rate limits, stale data, and fallback behavior.
+- [x] Test decimal precision across database-scale values and capital calculations.
 - [ ] Test that capital failures cannot block receipt, text, or manual expense entry.
 - [ ] Verify responsive layouts and accessibility states on supported viewports.
 - [x] Run `npm test` after the current development slice.

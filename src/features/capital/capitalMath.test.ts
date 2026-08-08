@@ -65,4 +65,14 @@ describe("capital event replay", () => {
     expect(result.quantity).toBe("0");
     expect(result.realizedProfit).toBe("50");
   });
+
+  it("preserves database-scale decimal precision without floating-point drift", () => {
+    const result = replayCapitalEvents("btc", [
+      event({ id: "1", type: "buy", quantity: "0.0000000001", unitPrice: "1234567890.1234567890" }),
+      event({ id: "2", type: "buy", quantity: "0.0000000002", unitPrice: "1234567890.1234567890" }),
+    ], "1234567890.1234567890");
+    expect(result.quantity).toBe("0.0000000003");
+    expect(result.currentValue).toBe("0.370370367037037036");
+    expect(result.totalResult).toBe("0.000000000000000001");
+  });
 });

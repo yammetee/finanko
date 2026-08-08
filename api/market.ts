@@ -24,6 +24,19 @@ export function validateMarketAssets(value: unknown): MarketAsset[] | null {
   return assets as MarketAsset[];
 }
 
+function uniqueAssets(assets: MarketAsset[]) {
+  const groups = new Map<string, MarketAsset[]>();
+  for (const asset of assets) {
+    const key = [asset.type, asset.provider ?? "", asset.providerAssetId ?? asset.symbol, asset.fallbackProvider ?? "", asset.fallbackAssetId ?? ""].join(":").toLowerCase();
+    groups.set(key, [...(groups.get(key) ?? []), asset]);
+  }
+  return [...groups.values()];
+}
+
+function fanOutQuotes(quotes: NormalizedQuote[], assets: MarketAsset[]) {
+  return assets.flatMap((asset) => quotes.map((quote) => ({ ...quote, itemId: asset.itemId })));
+}
+
 async function bybitQuote(asset: MarketAsset): Promise<NormalizedQuote> {
   const symbol = (asset.providerAssetId || `${asset.symbol}USDT`).toUpperCase();
   const response = await fetch(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${encodeURIComponent(symbol)}`);
@@ -61,14 +74,67 @@ async function twelveDataQuotes(assets: MarketAsset[], apiKey: string): Promise<
 export async function fetchMarketQuotes(assets: MarketAsset[], twelveDataKey?: string) {
   const crypto = assets.filter((asset) => asset.type === "crypto");
   const securities = assets.filter((asset) => asset.type !== "crypto");
-  const cryptoQuotes = await Promise.all(crypto.map(async (asset) => {
+  const cryptoQuotes = await Promise.all(uniqueAssets(crypto).map(async (matching) => {
+    const asset = matching[0];
     const primary = asset.provider === "coingecko" ? coinGeckoQuote : bybitQuote;
     const fallback = asset.provider === "coingecko" ? bybitQuote : coinGeckoQuote;
     const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
-    try { return await primary(asset); } catch { try { return await fallback(fallbackAsset); } catch { return null; } }
+    try { return fanOutQuotes([await primary(asset)], matching); } catch { try { return fanOutQuotes([await fallback(fallbackAsset)], matching); } catch { return []; } }
   }));
   const securityQuotes = twelveDataKey ? await twelveDataQuotes(securities, twelveDataKey).catch(() => []) : [];
-  return [...cryptoQuotes.filter((quote): quote is NormalizedQuote => quote !== null), ...securityQuotes];
+  return [...cryptoQuotes.flat(), ...securityQuotes];
+}
+
+async function bybitHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+  const symbol = (asset.providerAssetId || `${asset.symbol}USDT`).toUpperCase();
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const response = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${encodeURIComponent(symbol)}&interval=D&start=${start}&limit=1000`);
+  if (!response.ok) throw new Error("Bybit history unavailable");
+  const body = await response.json() as { retCode?: number; result?: { list?: string[][] } };
+  if (body.retCode !== 0 || !Array.isArray(body.result?.list)) throw new Error("Invalid Bybit history");
+  return body.result.list.flatMap((row) => row[0] && row[4] && /^\d+(\.\d+)?$/.test(row[4]) ? [{ itemId: asset.itemId, price: row[4], currency: "USD" as const, provider: "bybit", quotedAt: new Date(Number(row[0])).toISOString() }] : []);
+}
+
+async function coinGeckoHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+  const knownIds: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
+  const id = asset.providerAssetId || knownIds[asset.symbol.toUpperCase()] || asset.symbol.toLowerCase();
+  const from = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
+  const to = Math.floor(Date.now() / 1000);
+  const response = await fetch(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`);
+  if (!response.ok) throw new Error("CoinGecko history unavailable");
+  const body = await response.json() as { prices?: Array<[number, number]> };
+  if (!Array.isArray(body.prices)) throw new Error("Invalid CoinGecko history");
+  const byDay = new Map<string, NormalizedQuote>();
+  for (const [timestamp, price] of body.prices) if (Number.isFinite(price)) byDay.set(new Date(timestamp).toISOString().slice(0, 10), { itemId: asset.itemId, price: String(price), currency: "USD", provider: "coingecko", quotedAt: new Date(timestamp).toISOString() });
+  return [...byDay.values()];
+}
+
+async function twelveDataHistory(asset: MarketAsset, startDate: string, apiKey: string): Promise<NormalizedQuote[]> {
+  const symbol = asset.providerAssetId || asset.symbol;
+  const endDate = new Date().toISOString().slice(0, 10);
+  const response = await fetch(`https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(symbol)}&interval=1day&start_date=${startDate}&end_date=${endDate}&order=ASC`, { headers: { Authorization: `apikey ${apiKey}` } });
+  if (!response.ok) throw new Error("Twelve Data history unavailable");
+  const body = await response.json() as { status?: string; values?: Array<{ datetime?: string; close?: string }> };
+  if (body.status === "error" || !Array.isArray(body.values)) throw new Error("Invalid Twelve Data history");
+  return body.values.flatMap((row) => row.datetime && row.close && /^\d+(\.\d+)?$/.test(row.close)
+    ? [{ itemId: asset.itemId, price: row.close, currency: "USD" as const, provider: "twelve_data", quotedAt: new Date(`${row.datetime.slice(0, 10)}T21:00:00.000Z`).toISOString() }]
+    : []);
+}
+
+export async function fetchMarketHistory(assets: MarketAsset[], startDate: string, twelveDataKey?: string) {
+  const crypto = assets.filter((asset) => asset.type === "crypto");
+  const securities = assets.filter((asset) => asset.type !== "crypto");
+  const cryptoHistory = (await Promise.all(uniqueAssets(crypto).map(async (matching) => {
+    const asset = matching[0];
+    const primary = asset.provider === "coingecko" ? coinGeckoHistory : bybitHistory;
+    const fallback = asset.provider === "coingecko" ? bybitHistory : coinGeckoHistory;
+    const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
+    try { return fanOutQuotes(await primary(asset, startDate), matching); } catch { try { return fanOutQuotes(await fallback(fallbackAsset, startDate), matching); } catch { return []; } }
+  }))).flat();
+  const securityHistory = twelveDataKey
+    ? (await Promise.all(uniqueAssets(securities).map(async (matching) => fanOutQuotes(await twelveDataHistory(matching[0], startDate, twelveDataKey).catch(() => []), matching)))).flat()
+    : [];
+  return [...cryptoHistory, ...securityHistory];
 }
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
@@ -82,6 +148,13 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   if (!token || !url || !key || !await isAuthenticatedUser(url, key, token)) { response.status(401).json({ error: "Unauthorized" }); return; }
   const assets = validateMarketAssets(request.body);
   if (!assets) { response.status(400).json({ error: "Invalid market request" }); return; }
+  const mode = (request.body as { mode?: unknown }).mode;
+  const startDate = (request.body as { startDate?: unknown }).startDate;
+  if (mode === "history") {
+    if (typeof startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { response.status(400).json({ error: "Invalid history range" }); return; }
+    response.status(200).json({ quotes: await fetchMarketHistory(assets, startDate, process.env.TWELVE_DATA_API_KEY) });
+    return;
+  }
   const quotes = await fetchMarketQuotes(assets, process.env.TWELVE_DATA_API_KEY);
   response.status(200).json({ quotes });
 }
