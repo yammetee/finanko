@@ -20,7 +20,7 @@ type TypeFilter = "all" | "market" | "crypto" | "cash";
 const GROUP_COLORS = ["#5a9feb", "#58b6ad", "#e8b94c", "#9b82e6", "#f07f86", "#c69b58", "#65a9d8", "#e58aa8"];
 const typeMatches = (type: CapitalItemType, filter: TypeFilter) => filter === "all" || (filter === "market" && (type === "stock" || type === "fund")) || type === filter || (filter === "cash" && type === "deposit");
 
-export function CapitalPage({ ratesVersion }: { ratesVersion: number }) {
+export function CapitalPage({ ratesVersion, debtTotalUsd }: { ratesVersion: number; debtTotalUsd?: number }) {
   const { message } = AntApp.useApp();
   const { locale, t } = useI18n();
   const state = useCapitalStore();
@@ -89,7 +89,7 @@ export function CapitalPage({ ratesVersion }: { ratesVersion: number }) {
 
   return <>
     <section className="summary-header">
-      <div className="summary-copy"><span>{t("capital.total")}</span><strong>{formatMoney(Number(total), "USD")}</strong><small><span>{t("capital.invested")} {formatMoney(Number(invested), "USD")}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(Number(result), "USD")}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(Number(income), "USD")}</span></small></div>
+      <div className="summary-copy"><span>{t("capital.total")}</span><strong>{formatMoney(Number(total), "USD")}</strong><small><span>{t("capital.invested")} {formatMoney(Number(invested), "USD")}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(Number(result), "USD")}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(Number(income), "USD")}</span><b aria-hidden="true">·</b><span>{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(debtTotalUsd, "USD")}</span></small></div>
       <div className="quick-actions"><button type="button" onClick={() => setEditor({ kind: "group" })}><Plus size={16}/>{t("capital.group.title")}</button><button className="primary" type="button" disabled={!state.groups.length} onClick={() => setEditor({ kind: "item" })}><Plus size={16}/>{t("capital.asset.title")}</button><button type="button" disabled={!state.items.length} onClick={() => setEditor({ kind: "event" })}><Plus size={16}/>{t("capital.event.title")}</button></div>
     </section>
 

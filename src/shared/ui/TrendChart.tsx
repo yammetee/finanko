@@ -59,15 +59,16 @@ export function TrendChart({ buckets, currency, locale, label }: TrendChartProps
     axisLabel: dateLabel(bucket, locale, buckets.length),
     tooltipLabel: fullDateLabel(bucket, locale),
   }));
+  const showDots = data.length <= 12;
 
   return <div className="chart" role="img" aria-label={label}>
     <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-      <AreaChart accessibilityLayer data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+      <AreaChart accessibilityLayer data={data} margin={{ top: 2, right: 2, bottom: 0, left: 0 }}>
         <CartesianGrid vertical={false} stroke="var(--border)"/>
-        <XAxis dataKey="axisLabel" axisLine={false} tickLine={false} minTickGap={18} tick={{ fill: "var(--text-muted)", fontSize: 10 }}/>
-        <YAxis axisLine={false} tickLine={false} width={66} domain={[0, "auto"]} tickFormatter={(value: number) => money(value, currency, locale, true)} tick={{ fill: "var(--text-muted)", fontSize: 10 }}/>
+        <XAxis dataKey="axisLabel" axisLine={false} tickLine={false} height={22} minTickGap={18} tick={{ fill: "var(--text-muted)", fontSize: 10 }}/>
+        <YAxis axisLine={false} tickLine={false} width={48} domain={[0, "auto"]} tickFormatter={(value: number) => money(value, currency, locale, true)} tick={{ fill: "var(--text-muted)", fontSize: 10 }}/>
         <Tooltip cursor={{ stroke: "var(--border-strong)" }} labelFormatter={(_, payload) => payload[0]?.payload.tooltipLabel ?? ""} formatter={(value) => [money(Number(value), currency, locale), label]} contentStyle={{ background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: 8, color: "var(--text)", fontSize: 12 }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text-secondary)", marginBottom: 4 }}/>
-        <Area type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2.5} fill="var(--primary)" fillOpacity={0.12} dot={{ r: 2.5, fill: "var(--surface)", stroke: "var(--primary)", strokeWidth: 2 }} activeDot={{ r: 4, fill: "var(--surface)", stroke: "var(--primary)", strokeWidth: 2 }} isAnimationActive={false}/>
+        <Area type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2.5} fill="var(--primary)" fillOpacity={0.12} dot={showDots ? { r: 2.5, fill: "var(--surface)", stroke: "var(--primary)", strokeWidth: 2 } : false} activeDot={{ r: 4, fill: "var(--surface)", stroke: "var(--primary)", strokeWidth: 2 }} isAnimationActive={false}/>
       </AreaChart>
     </ResponsiveContainer>
   </div>;

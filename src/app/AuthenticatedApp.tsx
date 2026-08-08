@@ -7,6 +7,7 @@ import { useAuthStore } from "../features/auth/authStore";
 import { AppHeader, type DisplayCurrency } from "./AppHeader";
 import { refreshLiveExchangeRates } from "../shared/lib/exchangeRates";
 import { useDebtStore } from "../features/debts/debtStore";
+import { getOutstandingDebt } from "../features/debts/debtView";
 import type { AppPage } from "./AppHeader";
 
 const CapitalPage = lazy(() => import("../features/capital/CapitalPage").then((module) => ({ default: module.CapitalPage })));
@@ -48,10 +49,12 @@ export function AuthenticatedApp() {
     if (nextPage === "debts" && userId && (debt.ownerId !== userId || debt.loadState === "idle" || debt.loadState === "error")) void initializeDebt(userId);
   };
   const capitalReady = Boolean(userId && capital.ownerId === userId && capitalLoadState === "ready");
+  const debtReady = Boolean(userId && debt.ownerId === userId && debt.loadState === "ready");
   const capitalTotalUsd = capitalReady ? getCapitalTotalUsd(capital.items, capital.events, capital.quotes) : undefined;
+  const debtTotalUsd = debtReady ? getOutstandingDebt(debt.debts, debt.events, "USD") : undefined;
   return (
     <AppThemeProvider>
-      <div className="app-shell"><AppHeader page={page} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} /> : page === "capital" ? <Suspense fallback={null}>{capitalReady ? <CapitalPage ratesVersion={ratesVersion} /> : null}</Suspense> : <Suspense fallback={null}>{debt.ownerId === userId && debt.loadState === "ready" ? <DebtPage currencyMode={currencyMode} ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
+      <div className="app-shell"><AppHeader page={page} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} debtTotalUsd={debtTotalUsd} /> : page === "capital" ? <Suspense fallback={null}>{capitalReady ? <CapitalPage ratesVersion={ratesVersion} debtTotalUsd={debtTotalUsd} /> : null}</Suspense> : <Suspense fallback={null}>{debtReady ? <DebtPage currencyMode={currencyMode} ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
     </AppThemeProvider>
   );
 }
