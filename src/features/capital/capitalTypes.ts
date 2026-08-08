@@ -7,7 +7,6 @@ export type CapitalEventStatus = "expected" | "confirmed" | "ignored";
 export interface CapitalGroup {
   id: string;
   name: string;
-  archivedAt?: string;
 }
 
 export interface CapitalItem {
@@ -28,7 +27,6 @@ export interface CapitalItem {
   interestCompounding?: boolean;
   incomeDestinationItemId?: string;
   defaultTaxRate?: string;
-  archivedAt?: string;
 }
 
 export interface CapitalQuote {
@@ -66,7 +64,6 @@ export interface CapitalEvent {
   reinvest?: boolean;
   externalProvider?: string;
   externalId?: string;
-  deletedAt?: string;
 }
 
 export interface CapitalSnapshot {

@@ -8,7 +8,7 @@ const cadencePeriods = { monthly: 12, quarterly: 4, yearly: 1 } as const;
 export function buildExpectedInterestEvents(items: CapitalItem[], events: CapitalEvent[], today = new Date()): CapitalEvent[] {
   const result: CapitalEvent[] = [];
   for (const item of items) {
-    if (item.archivedAt || !item.annualInterestRate || !item.interestCadence || !item.interestEffectiveFrom) continue;
+    if (!item.annualInterestRate || !item.interestCadence || !item.interestEffectiveFrom) continue;
     const due = new Date(`${item.interestEffectiveFrom.slice(0, 10)}T12:00:00Z`);
     const step = cadenceMonths[item.interestCadence];
     due.setUTCMonth(due.getUTCMonth() + step);

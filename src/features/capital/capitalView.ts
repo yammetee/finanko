@@ -3,8 +3,7 @@ import { replayCapitalEvents } from "./capitalMath";
 import type { CapitalEvent, CapitalItem, CapitalQuote } from "./capitalTypes";
 
 export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent[], quotes: Record<string, CapitalQuote> = {}, valuationDate?: string) {
-  const valuationEnd = valuationDate ? `${valuationDate}T23:59:59.999Z` : undefined;
-  return items.filter((item) => !item.archivedAt || (valuationEnd !== undefined && item.archivedAt > valuationEnd)).map((item) => {
+  return items.map((item) => {
     const itemEvents = events.map((event) => {
       if (event.currency === item.quoteCurrency) return event;
       const convert = (value?: string) => value === undefined ? undefined : convertCapitalMoney(value, event.currency, item.quoteCurrency, event.occurredAt);

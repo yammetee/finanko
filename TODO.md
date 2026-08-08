@@ -139,7 +139,7 @@ Exit condition: the schema represents groups, independent items, linked capital-
 - [x] Implement splits without changing total cost basis.
 - [x] Implement USD conversion with dated event FX and current valuation FX rates.
 - [x] Add decimal-safe arithmetic at every accounting, aggregation, FX, and serialization boundary; convert to numbers only for formatting and chart coordinates.
-- [x] Expand focused calculation coverage across aggregation, FX, archival history, provider failures, interest, fractional quantities, and split cases.
+- [x] Expand focused calculation coverage across aggregation, FX, deletion, provider failures, interest, fractional quantities, and split cases.
 
 Exit condition: every displayed capital number can be rebuilt deterministically from confirmed events and market data.
 
@@ -148,8 +148,8 @@ Exit condition: every displayed capital number can be rebuilt deterministically 
 - [x] Add a capital repository separate from the expense repository.
 - [x] Add a capital Zustand store separate from the expense store.
 - [x] Load groups, items, events, pending events, latest persisted quotes, and valuations into normalized state.
-- [x] Save linked events and group archival effects atomically.
-- [x] Support create, edit, archive, restore, confirm, ignore, and safe correction workflows.
+- [x] Save linked events and physical group deletion atomically.
+- [x] Support create, edit, permanent delete, confirm, ignore, and safe correction workflows.
 - [x] Keep expected events out of confirmed balances and performance.
 - [x] Load capital independently after authentication.
 - [x] Ensure capital load or save errors never block the expense page.

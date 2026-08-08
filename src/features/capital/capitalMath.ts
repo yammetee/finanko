@@ -8,7 +8,7 @@ export function replayCapitalEvents(itemId: string, events: CapitalEvent[], curr
   let netIncome = 0n;
 
   const confirmed = events
-    .filter((event) => (event.itemId === itemId || event.relatedItemId === itemId) && event.status === "confirmed" && !event.deletedAt)
+    .filter((event) => (event.itemId === itemId || event.relatedItemId === itemId) && event.status === "confirmed")
     .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt) || left.id.localeCompare(right.id));
 
   for (const event of confirmed) {

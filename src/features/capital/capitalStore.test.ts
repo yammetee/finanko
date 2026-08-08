@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation, loadMarketHistory, loadMarketQuotes } = vi.hoisted(() => ({ loadCapitalData: vi.fn(), saveCapitalData: vi.fn(), saveCapitalHistory: vi.fn(), saveCapitalValuation: vi.fn(), loadMarketHistory: vi.fn().mockResolvedValue([]), loadMarketQuotes: vi.fn() }));
-vi.mock("./capitalRepository", () => ({ loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation }));
+const { loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation, deleteCapitalGroup, deleteCapitalItem, deleteCapitalEvent, loadMarketHistory, loadMarketQuotes } = vi.hoisted(() => ({ loadCapitalData: vi.fn(), saveCapitalData: vi.fn(), saveCapitalHistory: vi.fn(), saveCapitalValuation: vi.fn(), deleteCapitalGroup: vi.fn(), deleteCapitalItem: vi.fn(), deleteCapitalEvent: vi.fn(), loadMarketHistory: vi.fn().mockResolvedValue([]), loadMarketQuotes: vi.fn() }));
+vi.mock("./capitalRepository", () => ({ loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation, deleteCapitalGroup, deleteCapitalItem, deleteCapitalEvent }));
 vi.mock("./marketRepository", () => ({ loadMarketHistory, loadMarketQuotes }));
 
 import { useCapitalStore } from "./capitalStore";
@@ -19,11 +19,12 @@ describe("capital store", () => {
     expect(useCapitalStore.getState().events).toHaveLength(1);
   });
 
-  it("restores only items archived together with their group", async () => {
-    useCapitalStore.setState({ groups: [{ id: "group", name: "Portfolio", archivedAt: "same" }], items: [{ id: "together", groupId: "group", name: "A", type: "stock", quoteCurrency: "USD", archivedAt: "same" }, { id: "separate", groupId: "group", name: "B", type: "stock", quoteCurrency: "USD", archivedAt: "earlier" }] });
-    await useCapitalStore.getState().archiveGroup("group");
-    expect(useCapitalStore.getState().items.find((item) => item.id === "together")?.archivedAt).toBeUndefined();
-    expect(useCapitalStore.getState().items.find((item) => item.id === "separate")?.archivedAt).toBe("earlier");
+  it("physically deletes a group through the repository and reloads state", async () => {
+    loadCapitalData.mockResolvedValue({ groups: [], items: [], events: [], latestQuotes: [], quoteHistory: [], valuations: [] });
+    useCapitalStore.setState({ groups: [{ id: "group", name: "Portfolio" }] });
+    await useCapitalStore.getState().deleteGroup("group");
+    expect(deleteCapitalGroup).toHaveBeenCalledWith("group");
+    expect(useCapitalStore.getState().groups).toEqual([]);
   });
 
   it("keeps capital usable and exposes retry state when quote refresh fails", async () => {

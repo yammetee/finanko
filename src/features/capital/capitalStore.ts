@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation } from "./capitalRepository";
+import { deleteCapitalEvent, deleteCapitalGroup, deleteCapitalItem, loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation } from "./capitalRepository";
 import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalQuote, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
 import { loadMarketHistory, loadMarketQuotes } from "./marketRepository";
 import { getCapitalTotalUsd } from "./capitalView";
@@ -24,9 +24,9 @@ interface CapitalState extends CapitalSnapshot {
   saveItem: (value: Omit<CapitalItem, "id"> & { id?: string }) => Promise<CapitalItem>;
   saveOpeningPosition: (item: Omit<CapitalItem, "id">, quantity: string, invested: string, occurredAt: string) => Promise<CapitalItem>;
   saveEvent: (value: Omit<CapitalEvent, "id"> & { id?: string }) => Promise<CapitalEvent>;
-  archiveGroup: (id: string) => Promise<void>;
-  archiveItem: (id: string) => Promise<void>;
-  voidEvent: (id: string) => Promise<void>;
+  deleteGroup: (id: string) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
   setEventStatus: (id: string, status: CapitalEvent["status"]) => Promise<void>;
   refreshQuotes: () => Promise<void>;
   rebuildHistory: () => Promise<void>;
@@ -93,36 +93,9 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
     return value;
   },
-  archiveGroup: async (id) => {
-    const current = useCapitalStore.getState();
-    const value = current.groups.find((entry) => entry.id === id);
-    if (!value) return;
-    const previousArchive = value.archivedAt;
-    const updated = { ...value, archivedAt: previousArchive ? undefined : new Date().toISOString() };
-    const items = current.items.filter((entry) => entry.groupId === id && (previousArchive ? entry.archivedAt === previousArchive : !entry.archivedAt)).map((entry) => ({ ...entry, archivedAt: updated.archivedAt }));
-    await saveCapitalData({ groups: [updated], items });
-    const changedIds = new Set(items.map((entry) => entry.id));
-    set((state) => ({ groups: state.groups.map((entry) => entry.id === id ? updated : entry), items: state.items.map((entry) => changedIds.has(entry.id) ? { ...entry, archivedAt: updated.archivedAt } : entry) }));
-    void persistCurrentValuation().catch(() => undefined);
-    void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
-  },
-  archiveItem: async (id) => {
-    const value = useCapitalStore.getState().items.find((entry) => entry.id === id);
-    if (!value) return;
-    const updated = { ...value, archivedAt: value.archivedAt ? undefined : new Date().toISOString() };
-    await saveCapitalData({ items: [updated] });
-    set((state) => ({ items: state.items.map((entry) => entry.id === id ? updated : entry) }));
-    void persistCurrentValuation().catch(() => undefined);
-    void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
-  },
-  voidEvent: async (id) => {
-    const value = useCapitalStore.getState().events.find((entry) => entry.id === id);
-    if (!value) return;
-    await saveCapitalData({ events: [{ ...value, deletedAt: new Date().toISOString() }] });
-    set((state) => ({ events: state.events.filter((entry) => entry.id !== id) }));
-    void persistCurrentValuation().catch(() => undefined);
-    void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
-  },
+  deleteGroup: async (id) => { await deleteCapitalGroup(id); await useCapitalStore.getState().initialize(); },
+  deleteItem: async (id) => { await deleteCapitalItem(id); await useCapitalStore.getState().initialize(); },
+  deleteEvent: async (id) => { await deleteCapitalEvent(id); await useCapitalStore.getState().initialize(); },
   setEventStatus: async (id, status) => {
     const value = useCapitalStore.getState().events.find((entry) => entry.id === id);
     if (!value) return;
@@ -136,7 +109,7 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
   refreshQuotes: async () => {
     set({ quotesLoading: true, quotesError: undefined });
     try {
-      const marketItems = useCapitalStore.getState().items.filter((item) => !item.archivedAt && item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto"));
+      const marketItems = useCapitalStore.getState().items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto"));
       const quotes = await loadMarketQuotes(marketItems);
       const current = useCapitalStore.getState();
       const merged = { ...current.quotes, ...Object.fromEntries(quotes.map((quote) => [quote.itemId, quote])) };
@@ -147,7 +120,7 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
       const unavailableQuoteItemIds = marketItems.filter((item) => !resolved.has(item.id)).map((item) => item.id);
       set((state) => ({ quotes: merged, quotesPartial: unavailableQuoteItemIds.length > 0, unavailableQuoteItemIds, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
     } catch {
-      const unavailableQuoteItemIds = useCapitalStore.getState().items.filter((item) => !item.archivedAt && item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id);
+      const unavailableQuoteItemIds = useCapitalStore.getState().items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id);
       set({ quotesError: "Market quotes unavailable", unavailableQuoteItemIds });
     } finally { set({ quotesLoading: false }); }
   },
@@ -159,7 +132,7 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     set({ historyLoading: true, historyPending: false });
     try {
       const current = useCapitalStore.getState();
-      const startDate = current.events.filter((event) => event.status === "confirmed" && !event.deletedAt).map((event) => event.occurredAt.slice(0, 10)).sort()[0];
+      const startDate = current.events.filter((event) => event.status === "confirmed").map((event) => event.occurredAt.slice(0, 10)).sort()[0];
       if (!startDate) return;
       const fetched = await loadMarketHistory(current.items, startDate).catch(() => []);
       const keyed = new Map([...current.quoteHistory, ...fetched].map((quote) => [`${quote.itemId}:${quote.provider}:${quote.quotedAt}`, quote]));

@@ -4,7 +4,7 @@ import type { CapitalEvent, CapitalItem, CapitalQuote, CapitalValuation } from "
 
 export function rebuildCapitalHistory(items: CapitalItem[], events: CapitalEvent[], history: CapitalQuote[]): CapitalValuation[] {
   const dates = new Set<string>();
-  for (const event of events) if (event.status === "confirmed" && !event.deletedAt) dates.add(event.occurredAt.slice(0, 10));
+  for (const event of events) if (event.status === "confirmed") dates.add(event.occurredAt.slice(0, 10));
   for (const quote of history) dates.add(quote.quotedAt.slice(0, 10));
   return [...dates].sort().map((date) => {
     const end = `${date}T23:59:59.999Z`;
