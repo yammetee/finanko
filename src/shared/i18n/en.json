@@ -141,6 +141,7 @@
   "capital.asset.title": "Asset",
   "capital.asset.new": "New asset",
   "capital.asset.edit": "Edit asset",
+  "capital.asset.details": "Asset details",
   "capital.asset.search": "Find a stock, fund, or cryptocurrency",
   "capital.asset.type": "Asset type",
   "capital.asset.group": "Group",
@@ -154,6 +155,7 @@
   "capital.asset.compounding": "Add interest to this deposit",
   "capital.asset.quantity": "Quantity",
   "capital.asset.balance": "Balance",
+  "capital.asset.price": "Price",
   "capital.event.title": "Event",
   "capital.event.new": "New event",
   "capital.event.edit": "Edit event",
@@ -175,7 +177,6 @@
   "capital.validation.positive": "Enter a number greater than zero",
   "capital.validation.destination": "Select a destination asset",
   "capital.validation.split": "Enter the split ratio",
-  "capital.prices": "Prices",
   "capital.pending": "Pending confirmation",
   "capital.confirm": "Confirm",
   "capital.ignore": "Ignore",
@@ -193,5 +194,6 @@
   "capital.quoteStale": "Price is stale",
   "capital.delete.group.title": "Delete group?",
   "capital.delete.item.title": "Delete asset?",
+  "capital.delete.item.description": "{name} will be removed from capital together with its events.",
   "capital.delete.event.title": "Delete event?"
 }

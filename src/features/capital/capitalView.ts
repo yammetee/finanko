@@ -28,7 +28,6 @@ export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent
       profitUsd,
       incomeUsd,
       priceSource: marketPrice ? "market" as const : item.manualPrice ? "manual" as const : "missing" as const,
-      quoteStale: quotes[item.id] ? Date.now() - new Date(quotes[item.id].quotedAt).getTime() > 24 * 60 * 60 * 1000 : false,
     };
   });
 }

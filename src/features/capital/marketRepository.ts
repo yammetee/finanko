@@ -75,8 +75,8 @@ export function loadMarketHistory(items: CapitalItem[], startDate: string) {
   return loadMarketData(items, "history", startDate);
 }
 
-export async function searchMarketAssets(query: string): Promise<CapitalAssetSuggestion[]> {
+export async function searchMarketAssets(query: string, type: CapitalAssetSuggestion["type"]): Promise<CapitalAssetSuggestion[]> {
   const token = await marketAccessToken();
-  const body = await marketRequest<{ assets?: CapitalAssetSuggestion[] }>(token, { mode: "search", query }, "Asset search unavailable");
+  const body = await marketRequest<{ assets?: CapitalAssetSuggestion[] }>(token, { mode: "search", query, type }, "Asset search unavailable");
   return Array.isArray(body.assets) ? body.assets : [];
 }

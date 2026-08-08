@@ -44,13 +44,13 @@ export function CapitalAssetForm({ item, groups, items, saving, onBack, onSave }
     if (item || !market || query.trim().length < 2) { setSuggestions([]); return; }
     let active = true;
     const timer = window.setTimeout(() => {
-      void searchMarketAssets(query.trim()).then((values) => { if (active) setSuggestions(values); }).catch(() => { if (active) setSuggestions([]); });
+      void searchMarketAssets(query.trim(), type).then((values) => { if (active) setSuggestions(values); }).catch(() => { if (active) setSuggestions([]); });
     }, 300);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [item, market, query]);
+  }, [item, market, query, type]);
 
   const chooseSuggestion = (value: CapitalAssetSuggestion) => {
-    form.setFieldsValue({ type: value.type, name: value.name, symbol: value.symbol, currency: "USD" });
+    form.setFieldsValue({ name: value.name, symbol: value.symbol, currency: "USD" });
     setProvider(value.provider); setProviderAssetId(value.providerAssetId); setQuery(""); setSuggestions([]);
   };
 

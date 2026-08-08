@@ -41,7 +41,7 @@ export interface CapitalAssetSuggestion {
   name: string;
   symbol: string;
   type: "stock" | "fund" | "crypto";
-  provider: "coingecko" | "nasdaq";
+  provider: "coingecko" | "nasdaq" | "yahoo";
   providerAssetId: string;
 }
 

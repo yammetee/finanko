@@ -141,6 +141,7 @@
   "capital.asset.title": "Актив",
   "capital.asset.new": "Новый актив",
   "capital.asset.edit": "Изменить актив",
+  "capital.asset.details": "Детали актива",
   "capital.asset.search": "Найти акцию, фонд или криптовалюту",
   "capital.asset.type": "Что добавляем",
   "capital.asset.group": "Группа",
@@ -154,6 +155,7 @@
   "capital.asset.compounding": "Добавлять проценты к этому вкладу",
   "capital.asset.quantity": "Количество",
   "capital.asset.balance": "Баланс",
+  "capital.asset.price": "Цена",
   "capital.event.title": "Операция",
   "capital.event.new": "Новая операция",
   "capital.event.edit": "Изменить операцию",
@@ -175,7 +177,6 @@
   "capital.validation.positive": "Введите число больше нуля",
   "capital.validation.destination": "Выберите актив назначения",
   "capital.validation.split": "Введите коэффициент сплита",
-  "capital.prices": "Цены",
   "capital.pending": "Ожидают подтверждения",
   "capital.confirm": "Подтвердить",
   "capital.ignore": "Игнорировать",
@@ -193,5 +194,6 @@
   "capital.quoteStale": "Цена неактуальна",
   "capital.delete.group.title": "Удалить группу?",
   "capital.delete.item.title": "Удалить актив?",
+  "capital.delete.item.description": "{name} будет удалён из капитала вместе с его операциями.",
   "capital.delete.event.title": "Удалить операцию?"
 }
