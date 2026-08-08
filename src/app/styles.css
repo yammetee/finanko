@@ -191,6 +191,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .capital-stats small { display: grid; gap: 3px; }
 .capital-stats b { color: var(--text); font-size: 13px; }
 .capital-page .chart-panel h2 { align-items: center; display: flex; gap: 7px; }
+.capital-chart { grid-template-columns: 1fr; }
+.capital-chart .chart-panel { border-right: 0; }
 .positive { color: #52c41a !important; }
 .negative { color: var(--danger) !important; }
 .capital-actions { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
@@ -207,17 +209,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .capital-row-detailed { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(190px, auto) 76px; }
 .capital-row-detailed > div:nth-child(2) { text-align: right; }
 .capital-row-actions { display: flex !important; flex-direction: row; gap: 3px !important; }
-.capital-row-actions button, .pending-events button, .capital-groups button { align-items: center; background: transparent; border: 0; border-radius: 6px; color: var(--text-muted); cursor: pointer; display: inline-flex; height: 34px; justify-content: center; width: 34px; }
-.capital-row-actions button:hover, .pending-events button:hover, .capital-groups button:hover { background: var(--surface-hover); color: var(--text); }
+.capital-row-actions button, .pending-events button { align-items: center; background: transparent; border: 0; border-radius: 6px; color: var(--text-muted); cursor: pointer; display: inline-flex; height: 34px; justify-content: center; width: 34px; }
+.capital-row-actions button:hover, .pending-events button:hover { background: var(--surface-hover); color: var(--text); }
 .capital-filters { border-block: 1px solid var(--border); display: grid; gap: 8px; padding: 12px 0; }
 .pending-events h2 { font-size: 15px; margin: 0 0 8px; }
-.pending-events > div, .capital-groups > div:not(.section-heading) { align-items: center; border-top: 1px solid var(--border); display: flex; min-height: 46px; }
-.pending-events > div > span, .capital-groups > div > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.capital-event-row { align-items: center; border-top: 1px solid var(--border); display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto 34px 34px; min-height: 52px; }
-.capital-event-row > div { display: grid; gap: 3px; min-width: 0; }
-.capital-event-row > b { overflow-wrap: anywhere; }
-.capital-event-row span { color: var(--text-muted); font-size: 11px; }
-.capital-event-row button { align-items: center; background: transparent; border: 0; color: var(--text-muted); cursor: pointer; display: flex; height: 34px; justify-content: center; }
+.pending-events > div { align-items: center; border-top: 1px solid var(--border); display: flex; min-height: 46px; }
+.pending-events > div > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .draft-total { border-bottom: 1px solid var(--border); margin-bottom: 14px; padding: 0 2px 14px; }
 .draft-total span { color: var(--text-muted); display: block; font-size: 12px; }
 .draft-total strong { display: block; font-size: 30px; font-variant-numeric: tabular-nums; letter-spacing: -.035em; margin-top: 4px; }
@@ -328,8 +325,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .quick-actions { gap: 6px; }
   .quick-actions button { font-size: 12px; gap: 4px; }
   .capital-stats { grid-template-columns: 1fr; }
-  .capital-event-row { grid-template-columns: minmax(0, 1fr) 34px 34px; }
-  .capital-event-row > b { grid-column: 1 / -1; grid-row: 2; }
 }
 
 @media (max-width: 420px) {

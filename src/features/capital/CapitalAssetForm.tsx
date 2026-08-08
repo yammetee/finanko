@@ -1,8 +1,7 @@
-import Button from "antd/es/button";
+import AutoComplete from "antd/es/auto-complete";
 import DatePicker from "antd/es/date-picker";
 import Form from "antd/es/form";
 import Input from "antd/es/input";
-import List from "antd/es/list";
 import Select from "antd/es/select";
 import dayjs from "dayjs";
 import { ArrowLeft } from "lucide-react";
@@ -12,7 +11,7 @@ import { ChoiceGroup } from "../../shared/ui/ChoiceGroup";
 import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import { buildCapitalAssetSubmission, type AssetFormValues, type CapitalAssetSubmission } from "./capitalAssetSubmission";
 import { getCapitalCadenceLabel, getCapitalItemLabel } from "./capitalLabels";
-import { isCapitalPercent, isNonNegativeCapitalDecimal, isPositiveCapitalDecimal, rateToPercentInput } from "./capitalFormNumbers";
+import { isCapitalPercent, isPositiveCapitalDecimal, rateToPercentInput } from "./capitalFormNumbers";
 import { isMarketSymbol } from "./marketContract";
 import { searchMarketAssets } from "./marketRepository";
 import { CAPITAL_CURRENCIES, type CapitalAssetSuggestion, type CapitalGroup, type CapitalItem, type CapitalItemType } from "./capitalTypes";
@@ -55,11 +54,16 @@ export function CapitalAssetForm({ item, groups, items, saving, onBack, onSave }
     setProvider(value.provider); setProviderAssetId(value.providerAssetId); setQuery(""); setSuggestions([]);
   };
 
+  const suggestionOptions = suggestions.map((value) => ({
+    label: `${value.name} · ${value.symbol} · ${getCapitalItemLabel(value.type, locale)}`,
+    value: `${value.provider}:${value.providerAssetId}`,
+  }));
+
   const submit = (values: AssetFormValues) => onSave(buildCapitalAssetSubmission(values, { item, groups, provider, providerAssetId }));
 
   const initialValues: AssetFormValues = {
     type: item?.type ?? "stock", name: item?.name ?? "", groupId: item?.groupId ?? groups[0]?.id ?? "", symbol: item?.symbol,
-    currency: item?.quoteCurrency ?? "USD", manualPrice: item?.manualPrice, occurredAt: dayjs(),
+    currency: item?.quoteCurrency ?? "USD", occurredAt: dayjs(),
     interestRate: rateToPercentInput(item?.annualInterestRate) || undefined,
     interestCadence: item?.interestCadence ?? "monthly", interestEffectiveFrom: dayjs(item?.interestEffectiveFrom ?? undefined),
     interestCompounding: item?.interestCompounding ? "yes" : "no", incomeDestinationItemId: item?.incomeDestinationItemId,
@@ -70,13 +74,12 @@ export function CapitalAssetForm({ item, groups, items, saving, onBack, onSave }
   return <section className="form-page">
     <header className="page-heading"><button type="button" onClick={onBack} aria-label={t("actions.back")}><ArrowLeft size={19}/></button><h1>{t(item ? "capital.asset.edit" : "capital.asset.new")}</h1></header>
     <Form className="expense-form" form={form} layout="vertical" initialValues={initialValues} onFinish={submit}>
-      {!item ? <Form.Item name="type" noStyle><ChoiceGroup label={t("capital.asset.type")} options={ITEM_TYPES.map((value) => ({ value, label: getCapitalItemLabel(value, locale) }))} onChange={(value) => { if (value !== type) form.setFieldsValue({ symbol: undefined, manualPrice: undefined }); setProvider(undefined); setProviderAssetId(undefined); }}/></Form.Item> : null}
-      {!item && market ? <Form.Item label={t("capital.asset.search")}><Input autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)}/>{suggestions.length ? <List dataSource={suggestions} renderItem={(value) => <List.Item><Button block type="text" onClick={() => chooseSuggestion(value)}><strong>{value.name}</strong> · {value.symbol} · {getCapitalItemLabel(value.type, locale)}</Button></List.Item>}/>: null}</Form.Item> : null}
+      {!item ? <Form.Item name="type" noStyle><ChoiceGroup label={t("capital.asset.type")} options={ITEM_TYPES.map((value) => ({ value, label: getCapitalItemLabel(value, locale) }))} onChange={(value) => { if (value !== type) form.setFieldsValue({ symbol: undefined, openingPrice: undefined }); setProvider(undefined); setProviderAssetId(undefined); }}/></Form.Item> : null}
+      {!item && market ? <Form.Item label={t("capital.asset.search")}><AutoComplete autoFocus filterOption={false} options={suggestionOptions} value={query} onChange={setQuery} onSelect={(key) => { const selected = suggestions.find((value) => `${value.provider}:${value.providerAssetId}` === key); if (selected) chooseSuggestion(selected); }}/></Form.Item> : null}
       <Form.Item name="name" label={t("form.name")} rules={[{ required: true, whitespace: true, message: t("capital.validation.name") }]}><Input maxLength={120}/></Form.Item>
       {groups.length > 1 ? <Form.Item name="groupId" label={t("capital.asset.group")} rules={[{ required: true }]}><Select options={groups.map((value) => ({ value: value.id, label: value.name }))}/></Form.Item> : null}
       {market && !item ? <Form.Item name="symbol" label={t("capital.asset.symbol")} rules={[{ validator: (_, value) => isMarketSymbol(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.symbol"))) }]}><Input autoCapitalize="characters" maxLength={32} onChange={() => { setProvider(undefined); setProviderAssetId(undefined); }}/></Form.Item> : null}
       {!item ? <Form.Item name="currency" noStyle><ChoiceGroup label={t("form.currency")} options={CAPITAL_CURRENCIES.map((value) => ({ value, label: <><CurrencyIcon currency={value} size={12}/>{value}</> }))}/></Form.Item> : null}
-      {market ? <Form.Item name="manualPrice" label={t("capital.asset.manualPrice")} rules={[{ validator: (_, value) => isNonNegativeCapitalDecimal(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.nonNegative"))) }]}><Input inputMode="decimal"/></Form.Item> : null}
       {type === "deposit" ? <>
         <Form.Item name="interestRate" label={t("capital.asset.interestRate")} rules={[{ validator: (_, value) => isCapitalPercent(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.percent"))) }]}><Input inputMode="decimal"/></Form.Item>
         {interestRate ? <>
@@ -88,8 +91,7 @@ export function CapitalAssetForm({ item, groups, items, saving, onBack, onSave }
         </> : null}
       </> : null}
       {!item ? <>
-        {market ? <Form.Item name="openingQuantity" label={t("capital.asset.quantity")} dependencies={["openingInvested"]} rules={[({ getFieldValue }) => ({ validator(_, value) { if (value && !isPositiveCapitalDecimal(value)) return Promise.reject(new Error(t("capital.validation.positive"))); return getFieldValue("openingInvested") && !value ? Promise.reject(new Error(t("capital.validation.quantityPair"))) : Promise.resolve(); } })]}><Input inputMode="decimal"/></Form.Item> : null}
-        <Form.Item name="openingInvested" label={market ? t("capital.asset.invested") : t("capital.asset.balance")} dependencies={["openingQuantity"]} rules={[({ getFieldValue }) => ({ validator(_, value) { if (value && !isPositiveCapitalDecimal(value)) return Promise.reject(new Error(t("capital.validation.positive"))); return market && getFieldValue("openingQuantity") && !value ? Promise.reject(new Error(t("capital.validation.investedPair"))) : Promise.resolve(); } })]}><Input inputMode="decimal"/></Form.Item>
+        {market ? <><Form.Item name="openingPrice" label={t("capital.asset.purchasePrice")} rules={[{ validator: (_, value) => isPositiveCapitalDecimal(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.positive"))) }]}><Input inputMode="decimal"/></Form.Item><Form.Item name="openingQuantity" label={t("capital.asset.quantity")} rules={[{ validator: (_, value) => isPositiveCapitalDecimal(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.positive"))) }]}><Input inputMode="decimal"/></Form.Item></> : <Form.Item name="openingInvested" label={t("capital.asset.balance")} rules={[{ validator: (_, value) => isPositiveCapitalDecimal(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.positive"))) }]}><Input inputMode="decimal"/></Form.Item>}
         <Form.Item name="occurredAt" label={t("form.date")}><DatePicker allowClear={false}/></Form.Item>
       </> : null}
       <button className="primary-action" disabled={saving} type="submit">{t("capital.save")}</button>

@@ -1,5 +1,6 @@
 import dayjs, { type Dayjs } from "dayjs";
 import { isPositiveCapitalDecimal, normalizeCapitalDecimal, percentInputToRate } from "./capitalFormNumbers";
+import { decimal, decimalString, multiply } from "./decimal";
 import { normalizeMarketSymbol } from "./marketContract";
 import type { CapitalCurrency, CapitalGroup, CapitalItem, CapitalItemType } from "./capitalTypes";
 
@@ -9,7 +10,7 @@ export interface AssetFormValues {
   groupId?: string;
   symbol?: string;
   currency: CapitalCurrency;
-  manualPrice?: string;
+  openingPrice?: string;
   openingQuantity?: string;
   openingInvested?: string;
   occurredAt: Dayjs;
@@ -49,11 +50,16 @@ export function buildCapitalAssetSubmission(values: AssetFormValues, context: Su
   const fallbackProvider = context.item?.fallbackProvider ?? (type === "crypto" ? (primaryProvider === "coingecko" ? "bybit" : "coingecko") : market ? "yahoo" : undefined);
   const fallbackAssetId = context.item?.fallbackAssetId ?? (type === "crypto" ? (fallbackProvider === "bybit" && symbol ? `${symbol}USDT` : undefined) : symbol);
   const hasInterest = type === "deposit" && isPositiveCapitalDecimal(values.interestRate);
+  const openingQuantity = normalizeCapitalDecimal(values.openingQuantity);
+  const openingPrice = normalizeCapitalDecimal(values.openingPrice);
+  const openingInvested = market && openingQuantity && openingPrice
+    ? decimalString(multiply(decimal(openingQuantity), decimal(openingPrice)))
+    : normalizeCapitalDecimal(values.openingInvested);
 
   return {
     item: {
       groupId, name: values.name.trim(), type, symbol: symbol || undefined,
-      quoteCurrency: currency, manualPrice: market ? normalizeCapitalDecimal(values.manualPrice) : "1",
+      quoteCurrency: currency, manualPrice: market ? context.item?.manualPrice : "1",
       primaryProvider, primaryAssetId, fallbackProvider, fallbackAssetId,
       annualInterestRate: type === "deposit" ? percentInputToRate(normalizeCapitalDecimal(values.interestRate)) : undefined,
       interestCadence: hasInterest ? values.interestCadence ?? "monthly" : undefined,
@@ -62,8 +68,8 @@ export function buildCapitalAssetSubmission(values: AssetFormValues, context: Su
       incomeDestinationItemId: hasInterest ? values.incomeDestinationItemId || undefined : undefined,
       defaultTaxRate: hasInterest ? percentInputToRate(normalizeCapitalDecimal(values.defaultTaxPercent)) : undefined,
     },
-    openingQuantity: normalizeCapitalDecimal(values.openingQuantity),
-    openingInvested: normalizeCapitalDecimal(values.openingInvested),
+    openingQuantity,
+    openingInvested,
     occurredAt: values.occurredAt.format("YYYY-MM-DD"),
   };
 }
