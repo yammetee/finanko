@@ -152,26 +152,8 @@ begin
 exception when duplicate_object then null;
 end $$;
 
-create table if not exists finanko_private.market_quotes (
-  provider text not null,
-  asset_id text not null,
-  quote_currency text not null,
-  quoted_at timestamptz not null,
-  price numeric(30,10) not null check (price >= 0),
-  retrieved_at timestamptz not null default now(),
-  primary key (provider, asset_id, quote_currency, quoted_at)
-);
-
-create table if not exists finanko_private.market_actions (
-  provider text not null,
-  external_id text not null,
-  asset_id text not null,
-  action_type text not null check (action_type in ('dividend', 'split')),
-  payload jsonb not null,
-  occurred_at timestamptz not null,
-  retrieved_at timestamptz not null default now(),
-  primary key (provider, external_id)
-);
+drop table if exists finanko_private.market_actions;
+drop table if exists finanko_private.market_quotes;
 
 create table if not exists finanko_private.capital_snapshots (
   owner_id uuid not null references auth.users(id) on delete cascade,
@@ -238,8 +220,6 @@ alter table finanko_private.ai_usage_daily enable row level security;
 alter table finanko_private.capital_groups enable row level security;
 alter table finanko_private.capital_items enable row level security;
 alter table finanko_private.capital_events enable row level security;
-alter table finanko_private.market_quotes enable row level security;
-alter table finanko_private.market_actions enable row level security;
 alter table finanko_private.capital_snapshots enable row level security;
 alter table finanko_private.capital_item_quotes enable row level security;
 

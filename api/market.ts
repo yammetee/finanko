@@ -5,6 +5,7 @@ interface MarketAsset { itemId: string; type: AssetType; symbol: string; provide
 interface ApiRequest { method?: string; headers: { authorization?: string }; body?: unknown }
 interface ApiResponse { status(code: number): ApiResponse; json(payload: unknown): void; setHeader(name: string, value: string): void; end(): void }
 export interface NormalizedQuote { itemId: string; price: string; currency: "USD"; provider: string; quotedAt: string }
+export interface MarketSearchResult { name: string; symbol: string; type: AssetType; provider: "coingecko" | "twelve_data"; providerAssetId: string }
 
 export function validateMarketAssets(value: unknown): MarketAsset[] | null {
   if (!value || typeof value !== "object" || !Array.isArray((value as { assets?: unknown }).assets)) return null;
@@ -137,6 +138,24 @@ export async function fetchMarketHistory(assets: MarketAsset[], startDate: strin
   return [...cryptoHistory, ...securityHistory];
 }
 
+export async function searchMarketAssets(query: string, twelveDataKey?: string): Promise<MarketSearchResult[]> {
+  const cryptoRequest = fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`).then(async (response) => {
+    if (!response.ok) return [];
+    const body = await response.json() as { coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number }> };
+    return (body.coins ?? []).filter((coin) => coin.id && coin.name && coin.symbol).slice(0, 6).map((coin) => ({ name: coin.name!, symbol: coin.symbol!.toUpperCase(), type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id!, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }));
+  }).catch(() => []);
+  const securityRequest = twelveDataKey
+    ? fetch(`https://api.twelvedata.com/symbol_search?symbol=${encodeURIComponent(query)}&outputsize=8`, { headers: { Authorization: `apikey ${twelveDataKey}` } }).then(async (response) => {
+      if (!response.ok) return [];
+      const body = await response.json() as { data?: Array<{ symbol?: string; instrument_name?: string; instrument_type?: string; currency?: string }> };
+      return (body.data ?? []).filter((asset) => asset.symbol && asset.instrument_name && asset.currency === "USD").map((asset) => ({ name: asset.instrument_name!, symbol: asset.symbol!, type: /etf|fund/i.test(asset.instrument_type ?? "") ? "fund" as const : "stock" as const, provider: "twelve_data" as const, providerAssetId: asset.symbol! }));
+    }).catch(() => [])
+    : Promise.resolve([]);
+  const [crypto, securities] = await Promise.all([cryptoRequest, securityRequest]);
+  const rankedCrypto = crypto.sort((a, b) => a.rank - b.rank).map((asset) => ({ name: asset.name, symbol: asset.symbol, type: asset.type, provider: asset.provider, providerAssetId: asset.providerAssetId }));
+  return [...rankedCrypto, ...securities].slice(0, 10);
+}
+
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
@@ -146,9 +165,15 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!token || !url || !key || !await isAuthenticatedUser(url, key, token)) { response.status(401).json({ error: "Unauthorized" }); return; }
+  const mode = request.body && typeof request.body === "object" ? (request.body as { mode?: unknown }).mode : undefined;
+  if (mode === "search") {
+    const query = (request.body as { query?: unknown }).query;
+    if (typeof query !== "string" || query.trim().length < 2 || query.trim().length > 50) { response.status(400).json({ error: "Invalid search query" }); return; }
+    response.status(200).json({ assets: await searchMarketAssets(query.trim(), process.env.TWELVE_DATA_API_KEY) });
+    return;
+  }
   const assets = validateMarketAssets(request.body);
   if (!assets) { response.status(400).json({ error: "Invalid market request" }); return; }
-  const mode = (request.body as { mode?: unknown }).mode;
   const startDate = (request.body as { startDate?: unknown }).startDate;
   if (mode === "history") {
     if (typeof startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { response.status(400).json({ error: "Invalid history range" }); return; }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchMarketHistory, fetchMarketQuotes, validateMarketAssets } from "./market";
+import { fetchMarketHistory, fetchMarketQuotes, searchMarketAssets, validateMarketAssets } from "./market";
 
 describe("market quote API", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -44,6 +44,16 @@ describe("market quote API", () => {
   it("normalizes Twelve Data daily security history when its server key is configured", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => ({ values: [{ datetime: "2026-08-07", close: "220.50" }] }) } as Response);
     await expect(fetchMarketHistory([{ itemId: "apple", type: "stock", symbol: "AAPL", provider: "twelve_data" }], "2026-08-01", "server-key")).resolves.toEqual([expect.objectContaining({ itemId: "apple", price: "220.50", provider: "twelve_data", quotedAt: "2026-08-07T21:00:00.000Z" })]);
+  });
+
+  it("normalizes editable crypto and security search suggestions", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ coins: [{ id: "bitcoin", name: "Bitcoin", symbol: "btc", market_cap_rank: 1 }] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ symbol: "VT", instrument_name: "Vanguard Total World Stock ETF", instrument_type: "ETF", currency: "USD" }] }) } as Response);
+    await expect(searchMarketAssets("bt", "server-key")).resolves.toEqual([
+      { name: "Bitcoin", symbol: "BTC", type: "crypto", provider: "coingecko", providerAssetId: "bitcoin" },
+      { name: "Vanguard Total World Stock ETF", symbol: "VT", type: "fund", provider: "twelve_data", providerAssetId: "VT" },
+    ]);
   });
 
   it("does not fail history rebuild when every provider rejects the request", async () => {

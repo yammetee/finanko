@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { saveCapitalData, saveCapitalHistory, saveCapitalValuation, loadMarketHistory } = vi.hoisted(() => ({ saveCapitalData: vi.fn(), saveCapitalHistory: vi.fn(), saveCapitalValuation: vi.fn(), loadMarketHistory: vi.fn().mockResolvedValue([]) }));
-vi.mock("./capitalRepository", () => ({ loadCapitalData: vi.fn(), saveCapitalData, saveCapitalHistory, saveCapitalValuation }));
-vi.mock("./marketRepository", () => ({ loadMarketHistory, loadMarketQuotes: vi.fn() }));
+const { loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation, loadMarketHistory, loadMarketQuotes } = vi.hoisted(() => ({ loadCapitalData: vi.fn(), saveCapitalData: vi.fn(), saveCapitalHistory: vi.fn(), saveCapitalValuation: vi.fn(), loadMarketHistory: vi.fn().mockResolvedValue([]), loadMarketQuotes: vi.fn() }));
+vi.mock("./capitalRepository", () => ({ loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation }));
+vi.mock("./marketRepository", () => ({ loadMarketHistory, loadMarketQuotes }));
 
 import { useCapitalStore } from "./capitalStore";
 
@@ -24,5 +24,25 @@ describe("capital store", () => {
     await useCapitalStore.getState().archiveGroup("group");
     expect(useCapitalStore.getState().items.find((item) => item.id === "together")?.archivedAt).toBeUndefined();
     expect(useCapitalStore.getState().items.find((item) => item.id === "separate")?.archivedAt).toBe("earlier");
+  });
+
+  it("keeps capital usable and exposes retry state when quote refresh fails", async () => {
+    loadMarketQuotes.mockRejectedValueOnce(new Error("offline"));
+    useCapitalStore.setState({ items: [{ id: "btc", groupId: "group", name: "Bitcoin", type: "crypto", quoteCurrency: "USD", symbol: "BTC" }] });
+    await expect(useCapitalStore.getState().refreshQuotes()).resolves.toBeUndefined();
+    expect(useCapitalStore.getState()).toMatchObject({ quotesLoading: false, quotesError: "Market quotes unavailable" });
+  });
+
+  it("marks a successful response as partial when an instrument has no quote", async () => {
+    loadMarketQuotes.mockResolvedValueOnce([]);
+    useCapitalStore.setState({ items: [{ id: "btc", groupId: "group", name: "Bitcoin", type: "crypto", quoteCurrency: "USD", symbol: "BTC" }] });
+    await useCapitalStore.getState().refreshQuotes();
+    expect(useCapitalStore.getState().quotesPartial).toBe(true);
+  });
+
+  it("contains capital initialization failures instead of rejecting into the expense shell", async () => {
+    loadCapitalData.mockRejectedValueOnce(new Error("capital offline"));
+    await expect(useCapitalStore.getState().initialize()).resolves.toBeUndefined();
+    expect(useCapitalStore.getState()).toMatchObject({ loadState: "error", error: "capital offline" });
   });
 });

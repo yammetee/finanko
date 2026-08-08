@@ -47,7 +47,7 @@ describe("minimal Finanko schema", () => {
   });
 
   it("keeps capital data private and independent from expenses", () => {
-    for (const table of ["capital_groups", "capital_items", "capital_events", "market_quotes", "market_actions", "capital_snapshots", "capital_item_quotes"]) {
+    for (const table of ["capital_groups", "capital_items", "capital_events", "capital_snapshots", "capital_item_quotes"]) {
       expect(schema).toContain(`create table if not exists finanko_private.${table}`);
       expect(schema).toContain(`alter table finanko_private.${table} enable row level security;`);
     }
@@ -67,6 +67,8 @@ describe("minimal Finanko schema", () => {
     const capitalSchema = schema.slice(schema.indexOf("create table if not exists finanko_private.capital_groups"));
     expect(capitalSchema).not.toContain("references public.expenses");
     expect(capitalSchema).not.toContain("references public.categories");
+    expect(schema).toContain("drop table if exists finanko_private.market_actions");
+    expect(schema).toContain("drop table if exists finanko_private.market_quotes");
   });
 
   it("rejects unauthenticated and cross-owner capital writes", () => {

@@ -19,6 +19,11 @@ function getRateRow(date?: string) {
   return sortedRates.find((row) => !dayjs(row.date).isAfter(target, "day")) ?? sortedRates[sortedRates.length - 1];
 }
 
+export function getConversionRates(from: Currency, to: Currency, date?: string) {
+  const row = getRateRow(date);
+  return { from: String(row[from]), to: String(row[to]) };
+}
+
 export function convertMoney(
   amount: number,
   from: Currency,

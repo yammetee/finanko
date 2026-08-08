@@ -5,7 +5,7 @@
 - [x] The expense flow is usable and remains the product's primary workflow.
 - [x] Every expense position is stored independently with its own amount, currency, and category.
 - [x] The capital model and its boundary from expenses have been agreed.
-- [ ] Implement capital tracking without regressing or coupling the expense flow.
+- [x] Implement capital tracking without regressing or coupling the expense flow.
 
 ## Non-negotiable boundaries
 
@@ -38,9 +38,8 @@ capital_groups
 ### Technical data
 
 ```text
-market_quotes
-market_actions
 capital_snapshots
+capital_item_quotes
 ```
 
 These are rebuildable caches or normalized provider data, not additional user-facing financial entities.
@@ -124,7 +123,7 @@ Historical calculations use the FX rate for the event or valuation date. Current
 - [x] Add constraints for event types, statuses, positive quantities, currencies, and valid related-item ownership.
 - [x] Add indexes for owner/group, owner/item, event date, status, and external provider identifiers.
 - [x] Add a unique idempotency constraint for automatically discovered events.
-- [x] Add private normalized quote, market-action, and snapshot caches.
+- [x] Add private owner-scoped quote and snapshot caches; remove unused global market cache tables.
 - [x] Update schema tests to prove ownership isolation, grants, and atomic writes.
 - [x] Keep the local schema repeatable and reviewable before any separately authorized remote application.
 
@@ -139,8 +138,8 @@ Exit condition: the schema represents groups, independent items, linked capital-
 - [x] Implement related-item effects for buys, sales, dividends, interest, and transfers.
 - [x] Implement splits without changing total cost basis.
 - [x] Implement USD conversion with dated event FX and current valuation FX rates.
-- [ ] Add decimal-safe arithmetic at every calculation and serialization boundary. Event replay and RPC transport are decimal-safe; aggregate UI conversion still needs the same representation.
-- [ ] Expand focused calculation coverage beyond the current weighted-average, partial-sale, expected-event, dividend-tax, fractional-quantity, and split cases.
+- [x] Add decimal-safe arithmetic at every accounting, aggregation, FX, and serialization boundary; convert to numbers only for formatting and chart coordinates.
+- [x] Expand focused calculation coverage across aggregation, FX, archival history, provider failures, interest, fractional quantities, and split cases.
 
 Exit condition: every displayed capital number can be rebuilt deterministically from confirmed events and market data.
 
@@ -150,7 +149,7 @@ Exit condition: every displayed capital number can be rebuilt deterministically 
 - [x] Add a capital Zustand store separate from the expense store.
 - [x] Load groups, items, events, pending events, latest persisted quotes, and valuations into normalized state.
 - [x] Save linked events and group archival effects atomically.
-- [ ] Support create, edit, archive, restore, confirm, ignore, and safe correction workflows.
+- [x] Support create, edit, archive, restore, confirm, ignore, and safe correction workflows.
 - [x] Keep expected events out of confirmed balances and performance.
 - [x] Load capital independently after authentication.
 - [x] Ensure capital load or save errors never block the expense page.
@@ -170,7 +169,7 @@ Exit condition: capital can operate end-to-end using manual data while expenses 
 - [x] Cache normalized prices with provider and retrieval timestamp.
 - [x] Fall back to the secondary provider, then the last known quote, then an explicit manual price.
 - [x] Show stale-price state instead of failing the capital page.
-- [ ] Keep provider credentials server-side and configure them only through a separately authorized secret operation.
+- [x] Keep provider credentials server-side and configure them only through a separately authorized secret operation.
 
 Exit condition: every supported item can resolve a stable market identity and current value without depending on the name of its group.
 
@@ -219,15 +218,15 @@ Exit condition: the home page shows independent spending and current-capital val
 - [x] Add one type filter: `All`, `Stocks and funds`, `Crypto`, `Cash and deposits`.
 - [x] Do not add filters for date, provider, currency, income type, or performance until a real use case requires them.
 - [x] Show each item independently with quantity, average cost, current price, value, absolute P/L, and confirmed income.
-- [ ] Provide empty, loading, partial, stale, error, and retry states.
+- [x] Provide empty, loading, partial, stale, error, and retry states.
 
 Exit condition: the capital page is useful on mobile and desktop with no unnecessary controls.
 
 ## Stage 9: Capital editing flows
 
 - [x] Add and rename a group.
-- [ ] Add an item by search or manual definition.
-- [ ] Let provider data prefill an item while keeping every field editable before save.
+- [x] Add an item by provider search or manual definition.
+- [x] Let provider data prefill an item while keeping every field editable before save.
 - [x] Add manual buy, sell, deposit, withdrawal, transfer, dividend, interest, staking, fee, tax, split, and adjustment events.
 - [x] Add a fast opening-position flow using quantity and total invested amount, saved atomically with the new item.
 - [x] Edit or void an incorrect event without destroying unrelated history.
@@ -254,8 +253,8 @@ Exit condition: the all-history line graph remains correct after backdated opera
 - [x] Test idempotent automatic interest generation and database uniqueness during concurrent confirmation.
 - [x] Test provider failures, malformed responses, rate limits, stale data, and fallback behavior.
 - [x] Test decimal precision across database-scale values and capital calculations.
-- [ ] Test that capital failures cannot block receipt, text, or manual expense entry.
-- [ ] Verify responsive layouts and accessibility states on supported viewports.
+- [x] Test that capital failures cannot block receipt, text, or manual expense entry.
+- [x] Verify responsive layouts and accessibility states on supported viewports.
 - [x] Run `npm test` after the current development slice.
 - [x] Run `npm run build` after the current development slice.
 - [x] Run `npm run lint` after the current development slice.

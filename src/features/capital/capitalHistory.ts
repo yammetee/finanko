@@ -1,4 +1,5 @@
 import { buildCapitalPositions } from "./capitalView";
+import { sumCapitalValues } from "./capitalCurrency";
 import type { CapitalEvent, CapitalItem, CapitalQuote, CapitalValuation } from "./capitalTypes";
 
 export function rebuildCapitalHistory(items: CapitalItem[], events: CapitalEvent[], history: CapitalQuote[]): CapitalValuation[] {
@@ -10,7 +11,7 @@ export function rebuildCapitalHistory(items: CapitalItem[], events: CapitalEvent
     const quotes: Record<string, CapitalQuote> = {};
     for (const quote of history.filter((value) => value.quotedAt <= end).sort((a, b) => a.quotedAt.localeCompare(b.quotedAt))) quotes[quote.itemId] = quote;
     const relevantEvents = events.filter((event) => event.occurredAt <= end);
-    const total = buildCapitalPositions(items, relevantEvents, quotes, date).reduce((sum, position) => sum + position.valueUsd, 0);
-    return { date, totalUsd: String(total) };
+    const total = sumCapitalValues(buildCapitalPositions(items, relevantEvents, quotes, date).map((position) => position.valueUsd));
+    return { date, totalUsd: total };
   });
 }

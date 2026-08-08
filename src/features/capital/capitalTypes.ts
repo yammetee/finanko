@@ -39,6 +39,14 @@ export interface CapitalQuote {
   quotedAt: string;
 }
 
+export interface CapitalAssetSuggestion {
+  name: string;
+  symbol: string;
+  type: "stock" | "fund" | "crypto";
+  provider: "coingecko" | "twelve_data";
+  providerAssetId: string;
+}
+
 export interface CapitalEvent {
   id: string;
   itemId: string;

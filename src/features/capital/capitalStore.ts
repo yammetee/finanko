@@ -14,6 +14,8 @@ interface CapitalState extends CapitalSnapshot {
   historyLoading: boolean;
   historyPending: boolean;
   quotesLoading: boolean;
+  quotesPartial: boolean;
+  quotesError?: string;
   loadState: LoadState;
   error?: string;
   initialize: () => Promise<void>;
@@ -32,7 +34,7 @@ interface CapitalState extends CapitalSnapshot {
 const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 async function persistCurrentValuation(quotes: CapitalQuote[] = []) {
   const state = useCapitalStore.getState();
-  const totalUsd = String(getCapitalTotalUsd(state.items, state.events, state.quotes));
+  const totalUsd = getCapitalTotalUsd(state.items, state.events, state.quotes);
   await saveCapitalValuation(quotes, totalUsd);
   const date = new Date().toISOString().slice(0, 10);
   useCapitalStore.setState((current) => ({ valuations: [...current.valuations.filter((value) => value.date !== date), { date, totalUsd }] }));
@@ -46,7 +48,7 @@ async function generateExpectedInterest() {
 }
 
 export const useCapitalStore = create<CapitalState>()((set) => ({
-  groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], quotesLoading: false, historyLoading: false, historyPending: false, loadState: "idle",
+  groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [], quotesLoading: false, quotesPartial: false, historyLoading: false, historyPending: false, loadState: "idle",
   initialize: async () => {
     set({ loadState: "loading", error: undefined });
     try {
@@ -131,15 +133,19 @@ export const useCapitalStore = create<CapitalState>()((set) => ({
     if (status === "confirmed") void generateExpectedInterest().catch(() => undefined);
   },
   refreshQuotes: async () => {
-    set({ quotesLoading: true });
+    set({ quotesLoading: true, quotesError: undefined });
     try {
-      const quotes = await loadMarketQuotes(useCapitalStore.getState().items);
+      const marketItems = useCapitalStore.getState().items.filter((item) => !item.archivedAt && item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto"));
+      const quotes = await loadMarketQuotes(marketItems);
       const current = useCapitalStore.getState();
       const merged = { ...current.quotes, ...Object.fromEntries(quotes.map((quote) => [quote.itemId, quote])) };
-      const totalUsd = String(getCapitalTotalUsd(current.items, current.events, merged));
+      const totalUsd = getCapitalTotalUsd(current.items, current.events, merged);
       await saveCapitalValuation(quotes, totalUsd);
       const today = new Date().toISOString().slice(0, 10);
-      set((state) => ({ quotes: merged, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
+      const resolved = new Set(quotes.map((quote) => quote.itemId));
+      set((state) => ({ quotes: merged, quotesPartial: marketItems.some((item) => !resolved.has(item.id)), valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
+    } catch {
+      set({ quotesError: "Market quotes unavailable" });
     } finally { set({ quotesLoading: false }); }
   },
   rebuildHistory: async () => {
