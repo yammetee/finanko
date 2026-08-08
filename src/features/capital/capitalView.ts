@@ -10,13 +10,13 @@ export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent
       return { ...event, amount: convert(event.amount), fee: convert(event.fee), tax: convert(event.tax), currency: item.quoteCurrency };
     });
     const marketPrice = quotes[item.id]?.price;
-    const resolvedPrice = marketPrice ? convertCapitalMoney(marketPrice, quotes[item.id].currency, item.quoteCurrency) : item.manualPrice ?? "0";
+    const resolvedPrice = marketPrice ? convertCapitalMoney(marketPrice, quotes[item.id].currency, item.quoteCurrency, valuationDate) : item.manualPrice ?? "0";
     const price = Number(resolvedPrice);
-    const position = replayCapitalEvents(item.id, itemEvents, resolvedPrice);
+    const position = replayCapitalEvents(item.id, itemEvents, resolvedPrice, item.type === "cash" || item.type === "deposit");
     const value = Number(position.currentValue);
-    const costBasisUsd = convertCapitalMoney(position.costBasis, item.quoteCurrency, "USD");
-    const profitUsd = convertCapitalMoney(position.totalResult, item.quoteCurrency, "USD");
-    const incomeUsd = convertCapitalMoney(position.netIncome, item.quoteCurrency, "USD");
+    const costBasisUsd = convertCapitalMoney(position.costBasis, item.quoteCurrency, "USD", valuationDate);
+    const profitUsd = convertCapitalMoney(position.totalResult, item.quoteCurrency, "USD", valuationDate);
+    const incomeUsd = convertCapitalMoney(position.netIncome, item.quoteCurrency, "USD", valuationDate);
     return {
       item,
       ...position,
@@ -27,7 +27,6 @@ export function buildCapitalPositions(items: CapitalItem[], events: CapitalEvent
       costBasisUsd,
       profitUsd,
       incomeUsd,
-      quote: quotes[item.id],
       priceSource: marketPrice ? "market" as const : item.manualPrice ? "manual" as const : "missing" as const,
       quoteStale: quotes[item.id] ? Date.now() - new Date(quotes[item.id].quotedAt).getTime() > 24 * 60 * 60 * 1000 : false,
     };

@@ -1,7 +1,7 @@
 const SCALE_DIGITS = 18;
 const SCALE = 10n ** BigInt(SCALE_DIGITS);
 
-export type Decimal = bigint;
+type Decimal = bigint;
 
 export function decimal(value: string | number | undefined): Decimal {
   if (value === undefined || value === "") return 0n;

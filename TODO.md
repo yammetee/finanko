@@ -14,7 +14,6 @@
 - Adding, editing, or deleting a capital event never changes expenses.
 - Expense forms never ask for a capital group, item, or cash source.
 - Capital forms never create expense records.
-- The home page may display expense and capital summaries together, but this is presentation-only composition.
 - Expense period and category filters never affect capital values.
 - Capital failures, stale quotes, or background synchronization never block expense entry.
 - Only neutral UI primitives, formatting helpers, and infrastructure may be shared across the domains.
@@ -158,11 +157,9 @@ Exit condition: capital can operate end-to-end using manual data while expenses 
 
 ## Stage 4: Market identity and providers
 
-- [x] Identify securities with an editable provider asset ID. Exchange/MIC support remains.
+- [x] Identify securities with a stable provider asset ID selected through search while keeping manual ticker entry available before save.
 - [x] Identify listed crypto with an editable stable provider coin ID rather than ticker alone.
-- [ ] Identify tokens with chain and contract address.
 - [x] Store a primary and fallback price source on each market item.
-- [ ] Store an independent income/corporate-action source when needed.
 - [x] Implement normalized provider adapters so vendor response shapes never enter domain or UI code.
 - [x] Use Bybit and CoinGecko for crypto, no-key Nasdaq and Yahoo market data for US stocks/funds, and the existing FX source.
 - [x] Batch unique instruments across user items to avoid repeated provider calls.
@@ -186,26 +183,21 @@ Exit condition: calculated interest arrives as an editable expected event and af
 ## Stage 6: Shared UI foundation
 
 - [x] Move the application header out of the expense page without changing its appearance or behavior.
-- [ ] Extract only genuinely neutral summary, panel, button, loading, and error primitives.
-- [ ] Generalize the existing line-chart foundation while preserving the expense chart output.
 - [x] Keep expense-specific rows, forms, filters, analytics, and state inside the expense feature.
 - [x] Reuse existing dark theme, spacing, typography, controls, and responsive breakpoints.
 - [x] Avoid adding a routing dependency unless navigation requirements make it necessary.
 
 Exit condition: expenses look and behave the same, while capital can use the same visual language without importing expense-domain components.
 
-## Stage 7: Home summary
+## Stage 7: Navigation
 
-- [x] Keep spending as the primary home workflow and retain all current expense controls.
-- [x] Show spending for the selected expense period.
-- [x] Show current total capital as a separate compact metric.
-- [x] Make the capital metric open the capital page.
-- [x] Do not show percentage change or detailed capital analytics on the home page.
-- [x] Ensure expense period/category changes never alter the capital metric.
-- [x] Render capital loading and unavailable states locally without disabling expense actions.
-- [x] Stack the two metrics cleanly on small screens.
+- [x] Keep the expense page unchanged as an independent primary workflow.
+- [x] Put `Expenses` and `Capital` tabs in the shared header between the brand and account actions.
+- [x] Remove the duplicated capital card and navigation button from the expense page.
+- [x] Keep expense display-currency controls scoped to the expense tab.
+- [x] Keep capital loading isolated from expense rendering.
 
-Exit condition: the home page shows independent spending and current-capital values without coupling their data flows.
+Exit condition: both independent domains are directly reachable from the shared header without duplicated navigation or data coupling.
 
 ## Stage 8: Capital page
 
@@ -218,7 +210,7 @@ Exit condition: the home page shows independent spending and current-capital val
 - [x] Add one type filter: `All`, `Stocks and funds`, `Crypto`, `Cash and deposits`.
 - [x] Do not add filters for date, provider, currency, income type, or performance until a real use case requires them.
 - [x] Show each item independently with quantity, average cost, current price, value, absolute P/L, and confirmed income.
-- [x] Provide empty, loading, partial, stale, error, and retry states.
+- [x] Keep unavailable market prices visible as a per-item stale-price state without page-level explanatory banners.
 
 Exit condition: the capital page is useful on mobile and desktop with no unnecessary controls.
 
@@ -226,7 +218,7 @@ Exit condition: the capital page is useful on mobile and desktop with no unneces
 
 - [x] Add and rename a group.
 - [x] Add an item by provider search or manual definition.
-- [x] Let provider data prefill an item while keeping every field editable before save.
+- [x] Let provider data prefill user-facing item fields while keeping them editable before the first save.
 - [x] Add manual buy, sell, deposit, withdrawal, transfer, dividend, interest, staking, fee, tax, split, and adjustment events.
 - [x] Add a fast opening-position flow using quantity and total invested amount, saved atomically with the new item.
 - [x] Edit or permanently delete an incorrect event without destroying unrelated history.
@@ -239,13 +231,13 @@ Exit condition: all capital state can be created and corrected manually even whe
 ## Stage 10: History and snapshots
 
 - [x] Fetch available historical prices when a market-backed item is added through the configured provider.
-- [x] Build historical values from events, dated quotes, and dated FX rates.
+- [x] Build historical values from events, dated quotes, and the latest bundled FX rate available on each valuation date.
 - [x] Record or refresh daily derived snapshots for efficient graph loading.
 - [x] Make snapshots rebuildable after a backdated edit, deletion, split, or provider correction.
 - [x] Start manual assets at their first confirmed event when no earlier market history exists.
 - [x] Keep raw events and quotes authoritative over derived snapshots.
 
-Exit condition: the all-history line graph remains correct after backdated operations and corporate actions.
+Exit condition: the all-history line graph can be rebuilt from authoritative events, quotes, and available dated FX data after backdated changes.
 
 ## Stage 11: Security, validation, and cleanup
 
@@ -254,12 +246,9 @@ Exit condition: the all-history line graph remains correct after backdated opera
 - [x] Test provider failures, malformed responses, rate limits, stale data, and fallback behavior.
 - [x] Test decimal precision across database-scale values and capital calculations.
 - [x] Test that capital failures cannot block receipt, text, or manual expense entry.
-- [x] Verify responsive layouts and accessibility states on supported viewports.
-- [x] Run `npm test` after the current development slice.
-- [x] Run `npm run build` after the current development slice.
-- [x] Run `npm run lint` after the current development slice.
-- [x] Run `git diff --check` after the current development slice.
-- [x] Search the current slice for duplicated implementations, stale documentation, unused exports, and replaced legacy code.
+- [ ] Visually verify the capital route on supported mobile and desktop viewports.
+- [x] Complete full tests, build, lint, and diff validation after the current capital slice.
+- [x] Complete the final search for duplicated implementations, stale documentation, unused exports, and replaced legacy code.
 - [ ] Apply remote schema changes only after separate explicit authorization and a reviewed deployment order.
 
 Exit condition: all checks pass, the two domains remain independent, and only one active implementation exists for each behavior.

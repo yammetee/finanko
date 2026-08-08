@@ -1,12 +1,11 @@
 import AntApp from "antd/es/app";
 import DatePicker from "antd/es/date-picker";
 import dayjs from "dayjs";
-import { ArrowRight, Camera, FileText, PenLine } from "lucide-react";
+import { Camera, FileText, PenLine } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_CURRENCY } from "../../shared/constants/expenses";
 import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
-import { refreshLiveExchangeRates } from "../../shared/lib/exchangeRates";
 import { formatMoney } from "../../shared/lib/format";
 import type { Expense } from "../../shared/types/expense";
 import type { DisplayCurrency } from "../../app/AppHeader";
@@ -46,9 +45,9 @@ function receiptErrorKey(error: unknown) {
   return "receipt.parseError" as const;
 }
 
-interface ExpensesPageProps { currencyMode: DisplayCurrency; capitalTotalUsd: number; capitalState: "idle" | "loading" | "ready" | "error"; onOpenCapital: () => void }
+interface ExpensesPageProps { currencyMode: DisplayCurrency; ratesVersion: number }
 
-export function ExpensesPage({ currencyMode, capitalTotalUsd, capitalState, onOpenCapital }: ExpensesPageProps) {
+export function ExpensesPage({ currencyMode, ratesVersion }: ExpensesPageProps) {
   const { message } = AntApp.useApp();
   const { locale, t } = useI18n();
   const expenseState = useExpenseStore();
@@ -60,16 +59,9 @@ export function ExpensesPage({ currencyMode, capitalTotalUsd, capitalState, onOp
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [ratesVersion, setRatesVersion] = useState(0);
   const [filters, setFilters] = useState<ExpenseFilters>({ period: "month", categoryKeys: [] });
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void refreshLiveExchangeRates().then((updated) => { if (active && updated) setRatesVersion((value) => value + 1); });
-    return () => { active = false; };
-  }, []);
 
   useEffect(() => {
     setShowAllHistory(false);
@@ -196,7 +188,7 @@ export function ExpensesPage({ currencyMode, capitalTotalUsd, capitalState, onOp
   const home = (
     <>
       <section className="summary-header">
-        <div className="home-metrics"><div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div><button className="capital-metric" type="button" onClick={onOpenCapital}><span>{t("capital.title")}<ArrowRight aria-hidden="true" size={16}/></span><strong>{capitalState === "ready" ? formatMoney(capitalTotalUsd, "USD") : capitalState === "error" ? "—" : "…"}</strong></button></div>
+        <div className="summary-copy"><span>{t("expense.spent")}</span><strong>{totalLabel}</strong><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span></small></div>
         <div className="quick-actions">
           <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
           <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>

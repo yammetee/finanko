@@ -1,10 +1,10 @@
-import { getConversionRates } from "../../shared/lib/currency";
+import { getConversionRates, getHistoricalConversionRates } from "../../shared/lib/currency";
 import { decimal, decimalString, divide, multiply } from "./decimal";
 import type { CapitalCurrency } from "./capitalTypes";
 
 export function convertCapitalMoney(amount: string, from: CapitalCurrency, to: CapitalCurrency, date?: string) {
   if (from === to) return decimalString(decimal(amount));
-  const rates = getConversionRates(from, to, date);
+  const rates = date ? getHistoricalConversionRates(from, to, date) : getConversionRates(from, to);
   return decimalString(multiply(divide(decimal(amount), decimal(rates.from)), decimal(rates.to)));
 }
 

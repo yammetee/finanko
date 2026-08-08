@@ -1,30 +1,65 @@
 import { isAuthenticatedUser } from "./serverAuth";
+import { MARKET_REQUEST_LIMIT, normalizeMarketSymbol } from "../src/features/capital/marketContract";
 
 type AssetType = "stock" | "fund" | "crypto";
-interface MarketAsset { itemId: string; type: AssetType; symbol: string; provider?: string; providerAssetId?: string; fallbackProvider?: string; fallbackAssetId?: string }
+type MarketProvider = "bybit" | "coingecko" | "nasdaq" | "yahoo";
+interface MarketAsset { itemId: string; type: AssetType; symbol: string; provider?: MarketProvider; providerAssetId?: string; fallbackProvider?: MarketProvider; fallbackAssetId?: string }
 interface ApiRequest { method?: string; headers: { authorization?: string }; body?: unknown }
 interface ApiResponse { status(code: number): ApiResponse; json(payload: unknown): void; setHeader(name: string, value: string): void; end(): void }
-export interface NormalizedQuote { itemId: string; price: string; currency: "USD"; provider: string; quotedAt: string }
-export interface MarketSearchResult { name: string; symbol: string; type: AssetType; provider: "coingecko" | "nasdaq"; providerAssetId: string }
+interface NormalizedQuote { itemId: string; price: string; currency: "USD"; provider: string; quotedAt: string }
+interface MarketSearchResult { name: string; symbol: string; type: AssetType; provider: "coingecko" | "nasdaq"; providerAssetId: string }
 
 const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; Finanko/1.0)" };
+const COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
+const MARKET_PROVIDERS: MarketProvider[] = ["bybit", "coingecko", "nasdaq", "yahoo"];
+
+export function decimalNumber(value: number) {
+  if (!Number.isFinite(value)) throw new Error("Invalid numeric quote");
+  const text = String(value);
+  if (!/[eE]/.test(text)) return text;
+  const negative = text.startsWith("-");
+  const [coefficient, exponentText] = (negative ? text.slice(1) : text).toLowerCase().split("e");
+  const [whole, fraction = ""] = coefficient.split(".");
+  const digits = `${whole}${fraction}`;
+  const point = whole.length + Number(exponentText);
+  const unsigned = point <= 0 ? `0.${"0".repeat(-point)}${digits}`
+    : point >= digits.length ? `${digits}${"0".repeat(point - digits.length)}`
+      : `${digits.slice(0, point)}.${digits.slice(point)}`;
+  return negative ? `-${unsigned}` : unsigned;
+}
 
 export function validateMarketAssets(value: unknown): MarketAsset[] | null {
   if (!value || typeof value !== "object" || !Array.isArray((value as { assets?: unknown }).assets)) return null;
   const assets = (value as { assets: unknown[] }).assets;
-  if (assets.length === 0 || assets.length > 30) return null;
-  if (!assets.every((asset) => {
-    if (!asset || typeof asset !== "object") return false;
+  if (assets.length === 0 || assets.length > MARKET_REQUEST_LIMIT) return null;
+  const normalized: MarketAsset[] = [];
+  for (const asset of assets) {
+    if (!asset || typeof asset !== "object") return null;
     const row = asset as Record<string, unknown>;
-    return typeof row.itemId === "string" && row.itemId.length <= 100
+    if (!(typeof row.itemId === "string" && row.itemId.length <= 100
       && ["stock", "fund", "crypto"].includes(String(row.type))
-      && typeof row.symbol === "string" && /^[A-Za-z0-9._-]{1,32}$/.test(row.symbol)
-      && (row.provider === undefined || ["bybit", "coingecko", "nasdaq", "yahoo"].includes(String(row.provider)))
+      && typeof row.symbol === "string"
+      && (row.provider === undefined || MARKET_PROVIDERS.includes(row.provider as MarketProvider))
       && (row.providerAssetId === undefined || (typeof row.providerAssetId === "string" && row.providerAssetId.length <= 100))
-      && (row.fallbackProvider === undefined || ["bybit", "coingecko", "nasdaq", "yahoo"].includes(String(row.fallbackProvider)))
-      && (row.fallbackAssetId === undefined || (typeof row.fallbackAssetId === "string" && row.fallbackAssetId.length <= 100));
-  })) return null;
-  return assets as MarketAsset[];
+      && (row.fallbackProvider === undefined || MARKET_PROVIDERS.includes(row.fallbackProvider as MarketProvider))
+      && (row.fallbackAssetId === undefined || (typeof row.fallbackAssetId === "string" && row.fallbackAssetId.length <= 100)))) return null;
+    const symbol = normalizeMarketSymbol(row.symbol);
+    if (!symbol) continue;
+    const type = row.type as AssetType;
+    const supportedProviders = providersFor({ type });
+    if ((row.provider !== undefined && !supportedProviders.includes(row.provider as MarketProvider))
+      || (row.fallbackProvider !== undefined && !supportedProviders.includes(row.fallbackProvider as MarketProvider))) return null;
+    normalized.push({
+      itemId: row.itemId,
+      type,
+      symbol,
+      provider: row.provider as MarketProvider | undefined,
+      providerAssetId: row.providerAssetId as string | undefined,
+      fallbackProvider: row.fallbackProvider as MarketProvider | undefined,
+      fallbackAssetId: row.fallbackAssetId as string | undefined,
+    });
+  }
+  return normalized.length ? normalized : null;
 }
 
 function uniqueAssets(assets: MarketAsset[]) {
@@ -40,6 +75,55 @@ function fanOutQuotes(quotes: NormalizedQuote[], assets: MarketAsset[]) {
   return assets.flatMap((asset) => quotes.map((quote) => ({ ...quote, itemId: asset.itemId })));
 }
 
+function coinGeckoAssetId(asset: MarketAsset) {
+  return asset.providerAssetId || COINGECKO_IDS[asset.symbol] || asset.symbol.toLowerCase();
+}
+
+function providersFor(asset: Pick<MarketAsset, "type">): [MarketProvider, MarketProvider] {
+  return asset.type === "crypto" ? ["bybit", "coingecko"] : ["nasdaq", "yahoo"];
+}
+
+function providerRoute(asset: MarketAsset): [MarketProvider, MarketProvider] {
+  const supported = providersFor(asset);
+  const primary = asset.provider && supported.includes(asset.provider) ? asset.provider : supported[0];
+  const fallback = asset.fallbackProvider && supported.includes(asset.fallbackProvider) && asset.fallbackProvider !== primary
+    ? asset.fallbackProvider
+    : supported.find((provider) => provider !== primary)!;
+  return [primary, fallback];
+}
+
+function routedAsset(asset: MarketAsset, provider: MarketProvider, fallback: boolean): MarketAsset {
+  return { ...asset, provider, providerAssetId: fallback ? asset.fallbackAssetId : asset.providerAssetId };
+}
+
+function quoteLoader(provider: MarketProvider) {
+  if (provider === "bybit") return bybitQuote;
+  if (provider === "coingecko") return coinGeckoQuote;
+  if (provider === "yahoo") return yahooQuote;
+  return nasdaqQuote;
+}
+
+function historyLoader(provider: MarketProvider) {
+  if (provider === "bybit") return bybitHistory;
+  if (provider === "coingecko") return coinGeckoHistory;
+  if (provider === "yahoo") return yahooHistory;
+  return nasdaqHistory;
+}
+
+async function fetchRouted(matching: MarketAsset[], load: (provider: MarketProvider, asset: MarketAsset) => Promise<NormalizedQuote[]>) {
+  const asset = matching[0];
+  const [primary, fallback] = providerRoute(asset);
+  try {
+    return fanOutQuotes(await load(primary, routedAsset(asset, primary, false)), matching);
+  } catch {
+    try {
+      return fanOutQuotes(await load(fallback, routedAsset(asset, fallback, true)), matching);
+    } catch {
+      return [];
+    }
+  }
+}
+
 async function bybitQuote(asset: MarketAsset): Promise<NormalizedQuote> {
   const symbol = (asset.providerAssetId || `${asset.symbol}USDT`).toUpperCase();
   const response = await fetch(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${encodeURIComponent(symbol)}`);
@@ -51,14 +135,13 @@ async function bybitQuote(asset: MarketAsset): Promise<NormalizedQuote> {
 }
 
 async function coinGeckoQuote(asset: MarketAsset): Promise<NormalizedQuote> {
-  const knownIds: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
-  const id = asset.providerAssetId || knownIds[asset.symbol.toUpperCase()] || asset.symbol.toLowerCase();
+  const id = coinGeckoAssetId(asset);
   const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd&include_last_updated_at=true`);
   if (!response.ok) throw new Error("CoinGecko unavailable");
   const body = await response.json() as Record<string, { usd?: number; last_updated_at?: number }>;
   const quote = body[id];
   if (!quote || typeof quote.usd !== "number" || !Number.isFinite(quote.usd)) throw new Error("Invalid CoinGecko quote");
-  return { itemId: asset.itemId, price: String(quote.usd), currency: "USD", provider: "coingecko", quotedAt: new Date((quote.last_updated_at ?? Date.now() / 1000) * 1000).toISOString() };
+  return { itemId: asset.itemId, price: decimalNumber(quote.usd), currency: "USD", provider: "coingecko", quotedAt: new Date((quote.last_updated_at ?? Date.now() / 1000) * 1000).toISOString() };
 }
 
 function nasdaqAssetClass(asset: MarketAsset) {
@@ -94,27 +177,14 @@ async function yahooQuote(asset: MarketAsset): Promise<NormalizedQuote> {
   const body = await response.json() as { chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; regularMarketTime?: number } }>; error?: unknown } };
   const meta = body.chart?.result?.[0]?.meta;
   if (body.chart?.error || typeof meta?.regularMarketPrice !== "number" || !Number.isFinite(meta.regularMarketPrice)) throw new Error("Invalid Yahoo Finance quote");
-  return { itemId: asset.itemId, price: String(meta.regularMarketPrice), currency: "USD", provider: "yahoo", quotedAt: new Date((meta.regularMarketTime ?? Date.now() / 1000) * 1000).toISOString() };
+  return { itemId: asset.itemId, price: decimalNumber(meta.regularMarketPrice), currency: "USD", provider: "yahoo", quotedAt: new Date((meta.regularMarketTime ?? Date.now() / 1000) * 1000).toISOString() };
 }
 
 export async function fetchMarketQuotes(assets: MarketAsset[]) {
-  const crypto = assets.filter((asset) => asset.type === "crypto");
-  const securities = assets.filter((asset) => asset.type !== "crypto");
-  const cryptoQuotes = await Promise.all(uniqueAssets(crypto).map(async (matching) => {
-    const asset = matching[0];
-    const primary = asset.provider === "coingecko" ? coinGeckoQuote : bybitQuote;
-    const fallback = asset.provider === "coingecko" ? bybitQuote : coinGeckoQuote;
-    const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
-    try { return fanOutQuotes([await primary(asset)], matching); } catch { try { return fanOutQuotes([await fallback(fallbackAsset)], matching); } catch { return []; } }
-  }));
-  const securityQuotes = (await Promise.all(uniqueAssets(securities).map(async (matching) => {
-    const asset = matching[0];
-    const primary = asset.provider === "yahoo" ? yahooQuote : nasdaqQuote;
-    const fallback = asset.fallbackProvider === "nasdaq" ? nasdaqQuote : yahooQuote;
-    const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
-    try { return fanOutQuotes([await primary(asset)], matching); } catch { try { return fanOutQuotes([await fallback(fallbackAsset)], matching); } catch { return []; } }
-  }))).flat();
-  return [...cryptoQuotes.flat(), ...securityQuotes];
+  return (await Promise.all(uniqueAssets(assets).map((matching) => fetchRouted(
+    matching,
+    async (provider, asset) => [await quoteLoader(provider)(asset)],
+  )))).flat();
 }
 
 async function bybitHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
@@ -128,8 +198,7 @@ async function bybitHistory(asset: MarketAsset, startDate: string): Promise<Norm
 }
 
 async function coinGeckoHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
-  const knownIds: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
-  const id = asset.providerAssetId || knownIds[asset.symbol.toUpperCase()] || asset.symbol.toLowerCase();
+  const id = coinGeckoAssetId(asset);
   const from = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
   const to = Math.floor(Date.now() / 1000);
   const response = await fetch(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`);
@@ -137,7 +206,7 @@ async function coinGeckoHistory(asset: MarketAsset, startDate: string): Promise<
   const body = await response.json() as { prices?: Array<[number, number]> };
   if (!Array.isArray(body.prices)) throw new Error("Invalid CoinGecko history");
   const byDay = new Map<string, NormalizedQuote>();
-  for (const [timestamp, price] of body.prices) if (Number.isFinite(price)) byDay.set(new Date(timestamp).toISOString().slice(0, 10), { itemId: asset.itemId, price: String(price), currency: "USD", provider: "coingecko", quotedAt: new Date(timestamp).toISOString() });
+  for (const [timestamp, price] of body.prices) if (Number.isFinite(price)) byDay.set(new Date(timestamp).toISOString().slice(0, 10), { itemId: asset.itemId, price: decimalNumber(price), currency: "USD", provider: "coingecko", quotedAt: new Date(timestamp).toISOString() });
   return [...byDay.values()];
 }
 
@@ -166,39 +235,34 @@ async function yahooHistory(asset: MarketAsset, startDate: string): Promise<Norm
   const result = body.chart?.result?.[0];
   if (body.chart?.error || !result?.timestamp) throw new Error("Invalid Yahoo Finance history");
   const closes = result.indicators?.quote?.[0]?.close ?? [];
-  return result.timestamp.flatMap((timestamp, index) => typeof closes[index] === "number" && Number.isFinite(closes[index]) ? [{ itemId: asset.itemId, price: String(closes[index]), currency: "USD" as const, provider: "yahoo", quotedAt: new Date(timestamp * 1000).toISOString() }] : []);
+  return result.timestamp.flatMap((timestamp, index) => typeof closes[index] === "number" && Number.isFinite(closes[index]) ? [{ itemId: asset.itemId, price: decimalNumber(closes[index]), currency: "USD" as const, provider: "yahoo", quotedAt: new Date(timestamp * 1000).toISOString() }] : []);
 }
 
 export async function fetchMarketHistory(assets: MarketAsset[], startDate: string) {
-  const crypto = assets.filter((asset) => asset.type === "crypto");
-  const securities = assets.filter((asset) => asset.type !== "crypto");
-  const cryptoHistory = (await Promise.all(uniqueAssets(crypto).map(async (matching) => {
-    const asset = matching[0];
-    const primary = asset.provider === "coingecko" ? coinGeckoHistory : bybitHistory;
-    const fallback = asset.provider === "coingecko" ? bybitHistory : coinGeckoHistory;
-    const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
-    try { return fanOutQuotes(await primary(asset, startDate), matching); } catch { try { return fanOutQuotes(await fallback(fallbackAsset, startDate), matching); } catch { return []; } }
-  }))).flat();
-  const securityHistory = (await Promise.all(uniqueAssets(securities).map(async (matching) => {
-    const asset = matching[0];
-    const primary = asset.provider === "yahoo" ? yahooHistory : nasdaqHistory;
-    const fallback = asset.fallbackProvider === "nasdaq" ? nasdaqHistory : yahooHistory;
-    const fallbackAsset = { ...asset, provider: asset.fallbackProvider, providerAssetId: asset.fallbackAssetId };
-    try { return fanOutQuotes(await primary(asset, startDate), matching); } catch { try { return fanOutQuotes(await fallback(fallbackAsset, startDate), matching); } catch { return []; } }
-  }))).flat();
-  return [...cryptoHistory, ...securityHistory];
+  return (await Promise.all(uniqueAssets(assets).map((matching) => fetchRouted(
+    matching,
+    (provider, asset) => historyLoader(provider)(asset, startDate),
+  )))).flat();
 }
 
 export async function searchMarketAssets(query: string): Promise<MarketSearchResult[]> {
   const cryptoRequest = fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`).then(async (response) => {
     if (!response.ok) return [];
     const body = await response.json() as { coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number }> };
-    return (body.coins ?? []).filter((coin) => coin.id && coin.name && coin.symbol).slice(0, 6).map((coin) => ({ name: coin.name!, symbol: coin.symbol!.toUpperCase(), type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id!, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }));
+    return (body.coins ?? []).flatMap((coin) => {
+      const symbol = normalizeMarketSymbol(coin.symbol);
+      return coin.id && coin.name && symbol ? [{ name: coin.name, symbol, type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }] : [];
+    }).slice(0, 6);
   }).catch(() => []);
   const securityRequest = fetch(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS }).then(async (response) => {
     if (!response.ok) return [];
     const body = await response.json() as { data?: Array<{ symbol?: string; name?: string; asset?: string }> };
-    return (body.data ?? []).filter((asset) => asset.symbol && asset.name && ["STOCKS", "ETF", "MUTUALFUNDS"].includes(asset.asset ?? "")).map((asset) => ({ name: asset.name!.trim(), symbol: asset.symbol!, type: asset.asset === "STOCKS" ? "stock" as const : "fund" as const, provider: "nasdaq" as const, providerAssetId: asset.symbol! }));
+    return (body.data ?? []).flatMap((asset) => {
+      const symbol = normalizeMarketSymbol(asset.symbol);
+      return asset.name && symbol && ["STOCKS", "ETF", "MUTUALFUNDS"].includes(asset.asset ?? "")
+        ? [{ name: asset.name.trim(), symbol, type: asset.asset === "STOCKS" ? "stock" as const : "fund" as const, provider: "nasdaq" as const, providerAssetId: symbol }]
+        : [];
+    });
   }).catch(() => []);
   const [crypto, securities] = await Promise.all([cryptoRequest, securityRequest]);
   const rankedCrypto = crypto.sort((a, b) => a.rank - b.rank).map((asset) => ({ name: asset.name, symbol: asset.symbol, type: asset.type, provider: asset.provider, providerAssetId: asset.providerAssetId }));

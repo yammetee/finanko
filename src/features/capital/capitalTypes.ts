@@ -2,7 +2,7 @@ export const CAPITAL_CURRENCIES = ["USD", "GEL", "RUB", "THB"] as const;
 export type CapitalCurrency = typeof CAPITAL_CURRENCIES[number];
 export type CapitalItemType = "stock" | "fund" | "crypto" | "cash" | "deposit";
 export type CapitalEventType = "buy" | "sell" | "deposit" | "withdrawal" | "transfer" | "dividend" | "interest" | "staking" | "fee" | "tax" | "split" | "adjustment";
-export type CapitalEventStatus = "expected" | "confirmed" | "ignored";
+type CapitalEventStatus = "expected" | "confirmed" | "ignored";
 
 export interface CapitalGroup {
   id: string;
@@ -76,7 +76,6 @@ export interface CapitalSnapshot {
 export interface CapitalValuation { date: string; totalUsd: string }
 
 export interface CapitalPosition {
-  itemId: string;
   quantity: string;
   costBasis: string;
   averageCost: string;

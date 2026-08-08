@@ -2,25 +2,42 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { AppThemeProvider } from "./providers/AppThemeProvider";
 import { ExpensesPage } from "../features/expenses/ExpensesPage";
 import { useCapitalStore } from "../features/capital/capitalStore";
-import { getCapitalTotalUsd } from "../features/capital/capitalView";
+import { useAuthStore } from "../features/auth/authStore";
 import { AppHeader, type DisplayCurrency } from "./AppHeader";
+import { refreshLiveExchangeRates } from "../shared/lib/exchangeRates";
 
 const CapitalPage = lazy(() => import("../features/capital/CapitalPage").then((module) => ({ default: module.CapitalPage })));
 
 export function AuthenticatedApp() {
   const [page, setPage] = useState<"expenses" | "capital">("expenses");
   const [currencyMode, setCurrencyMode] = useState<DisplayCurrency>("native");
+  const [ratesVersion, setRatesVersion] = useState(0);
+  const userId = useAuthStore((state) => state.session?.user.id);
   const capital = useCapitalStore();
   const initializeCapital = capital.initialize;
+  const resetCapital = capital.reset;
   const refreshCapitalQuotes = capital.refreshQuotes;
   const capitalLoadState = capital.loadState;
-  useEffect(() => { if (capitalLoadState === "idle") void initializeCapital(); }, [capitalLoadState, initializeCapital]);
+  useEffect(() => {
+    let active = true;
+    void refreshLiveExchangeRates().then((updated) => { if (active && updated) setRatesVersion((value) => value + 1); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    resetCapital();
+    if (userId) void initializeCapital(userId);
+    return resetCapital;
+  }, [initializeCapital, resetCapital, userId]);
   const marketItemKey = capital.items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id).sort().join(":");
-  useEffect(() => { if (capitalLoadState === "ready" && marketItemKey) void refreshCapitalQuotes(); }, [capitalLoadState, marketItemKey, refreshCapitalQuotes]);
-  const total = Number(getCapitalTotalUsd(capital.items, capital.events, capital.quotes));
+  useEffect(() => { if (capital.ownerId === userId && capitalLoadState === "ready" && marketItemKey) void refreshCapitalQuotes(); }, [capital.ownerId, capitalLoadState, marketItemKey, refreshCapitalQuotes, userId]);
+  const changePage = (nextPage: "expenses" | "capital") => {
+    setPage(nextPage);
+    if (nextPage === "capital" && userId && (capital.ownerId !== userId || capitalLoadState === "idle" || capitalLoadState === "error")) void initializeCapital(userId);
+  };
+  const capitalReady = Boolean(userId && capital.ownerId === userId && capitalLoadState === "ready");
   return (
     <AppThemeProvider>
-      <div className="app-shell"><AppHeader page={page} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} onHome={() => setPage("expenses")} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} capitalTotalUsd={total} capitalState={capital.loadState} onOpenCapital={() => setPage("capital")} /> : <Suspense fallback={<div aria-live="polite" className="capital-notice" role="status">Loading…</div>}><CapitalPage onBack={() => setPage("expenses")} /></Suspense>}</main></div>
+      <div className="app-shell"><AppHeader page={page} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} ratesVersion={ratesVersion} /> : <Suspense fallback={null}>{capitalReady ? <CapitalPage ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
     </AppThemeProvider>
   );
 }

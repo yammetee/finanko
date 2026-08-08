@@ -11,16 +11,23 @@ export function setLiveExchangeRates(row: RateRow | null) {
   liveRateRow = row;
 }
 
-function getRateRow(date?: string) {
-  if (liveRateRow) return liveRateRow;
-
+function getHistoricalRateRow(date?: string) {
   const target = date ? dayjs(date) : dayjs();
   const sortedRates = [...rates].sort((a, b) => +new Date(b.date) - +new Date(a.date));
   return sortedRates.find((row) => !dayjs(row.date).isAfter(target, "day")) ?? sortedRates[sortedRates.length - 1];
 }
 
+function getRateRow(date?: string) {
+  return liveRateRow ?? getHistoricalRateRow(date);
+}
+
 export function getConversionRates(from: Currency, to: Currency, date?: string) {
   const row = getRateRow(date);
+  return { from: String(row[from]), to: String(row[to]) };
+}
+
+export function getHistoricalConversionRates(from: Currency, to: Currency, date: string) {
+  const row = getHistoricalRateRow(date);
   return { from: String(row[from]), to: String(row[to]) };
 }
 
