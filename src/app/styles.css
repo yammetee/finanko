@@ -22,7 +22,7 @@
 * { box-sizing: border-box; }
 html, body, #root, .ant-app { min-height: 100%; }
 body { background: var(--bg); color: var(--text); margin: 0; min-width: 320px; }
-button, input, textarea { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .visually-hidden { height: 1px; left: -10000px; overflow: hidden; position: absolute; top: auto; width: 1px; }
 .muted { color: var(--text-muted); }
@@ -181,8 +181,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .form-page, .details-page { margin: 0 auto; max-width: 560px; width: 100%; }
 .page-heading { align-items: center; display: grid; gap: 8px; grid-template-columns: 36px minmax(0, 1fr); margin-bottom: 16px; }
 .page-heading h1 { font-size: 18px; font-weight: 600; margin: 0; }
-.capital-page { display: grid; gap: 14px; }
-.capital-summary { display: grid; gap: 5px; }
+.capital-page { display: grid; gap: 16px; min-width: 0; width: 100%; }
+.capital-page > * { min-width: 0; }
+.capital-page .page-heading { margin-bottom: 0; }
+.capital-summary { display: grid; gap: 5px; padding-inline: 2px; }
 .capital-summary strong { font-size: 34px; letter-spacing: -.04em; }
 .capital-stats { display: flex; gap: 22px; margin-top: 6px; }
 .capital-stats small { display: grid; gap: 3px; }
@@ -190,32 +192,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .capital-page .chart-panel h2 { align-items: center; display: flex; gap: 7px; }
 .positive { color: #52c41a !important; }
 .negative { color: var(--danger) !important; }
-.capital-actions { display: flex; gap: 8px; }
-.capital-actions button, .capital-editor button, .capital-notice button { align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; color: var(--text); cursor: pointer; display: inline-flex; gap: 5px; min-height: 38px; padding: 0 12px; }
+.capital-actions { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.capital-actions button, .capital-editor button, .capital-notice button { align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; color: var(--text); cursor: pointer; display: inline-flex; gap: 5px; justify-content: center; min-height: 40px; padding: 0 12px; }
 .capital-actions button:disabled { cursor: not-allowed; opacity: .4; }
 .spin { animation: spin 800ms linear infinite; }
-.capital-editor { display: grid; gap: 9px; }
-.capital-editor h2 { font-size: 15px; margin: 0 0 4px; }
+.capital-editor { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.capital-editor h2 { font-size: 15px; grid-column: 1 / -1; margin: 0 0 2px; }
 .capital-editor label { color: var(--text-secondary); display: grid; font-size: 12px; gap: 5px; }
 .capital-editor .capital-checkbox { align-items: center; display: flex; min-height: 38px; }
 .capital-editor .capital-checkbox input { min-height: 0; width: auto; }
-.capital-editor input, .capital-editor select { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); min-height: 42px; padding: 0 11px; width: 100%; }
-.capital-editor > div { display: flex; gap: 8px; justify-content: flex-end; }
-.capital-editor .capital-asset-search { display: block; }
+.capital-editor input, .capital-editor select { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; color: var(--text); min-height: 44px; min-width: 0; padding: 0 11px; width: 100%; }
+.capital-editor > div { display: flex; gap: 8px; grid-column: 1 / -1; justify-content: flex-end; }
+.capital-editor .capital-asset-search { display: block; grid-column: 1 / -1; }
 .capital-search-results { display: grid; gap: 6px; margin-top: 8px; }
 .capital-search-results button { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
 .capital-search-results span { color: var(--text-muted); font-size: 12px; }
 .capital-editor .primary { background: var(--primary); border-color: var(--primary); }
-.capital-opening { border: 1px solid var(--border); border-radius: 7px; display: grid; gap: 9px; margin: 4px 0; padding: 10px; }
+.capital-opening { border: 1px solid var(--border); border-radius: 7px; display: grid; gap: 9px; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 4px 0; padding: 12px; }
 .capital-opening legend { color: var(--text-muted); font-size: 12px; padding: 0 5px; }
 .capital-notice { align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; justify-content: space-between; padding: 12px; }
 .capital-list { display: grid; }
-.capital-row { align-items: center; border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 64px; padding: 10px 4px; }
+.capital-row { align-items: center; border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 64px; padding: 12px 4px; }
 .capital-row > div { display: grid; gap: 4px; }
 .capital-row > div:last-child { text-align: right; }
+.capital-row strong, .capital-row span, .capital-row small { overflow-wrap: anywhere; }
 .capital-row span { color: var(--text-muted); font-size: 12px; }
 .capital-row small { color: var(--text-muted); font-size: 11px; }
-.capital-row-detailed { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr) auto auto; }
+.capital-row-detailed { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(190px, auto) 76px; }
+.capital-row-detailed > div:nth-child(2) { text-align: right; }
 .capital-row-actions { display: flex !important; flex-direction: row; gap: 3px !important; }
 .capital-row-actions button, .pending-events button, .capital-groups button { align-items: center; background: transparent; border: 0; border-radius: 6px; color: var(--text-muted); cursor: pointer; display: inline-flex; height: 34px; justify-content: center; width: 34px; }
 .capital-row-actions button:hover, .pending-events button:hover, .capital-groups button:hover { background: var(--surface-hover); color: var(--text); }
@@ -298,13 +302,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .home-metrics { align-items: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .capital-metric { padding-left: 14px; }
   .capital-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .capital-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .capital-actions button { justify-content: center; }
+  .capital-page { gap: 14px; }
+  .capital-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .capital-editor { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+  .capital-editor h2, .capital-editor > div, .capital-editor .capital-asset-search, .capital-opening { grid-column: 1; }
+  .capital-editor input, .capital-editor select { font-size: 16px; }
+  .capital-opening { grid-template-columns: minmax(0, 1fr); }
   .capital-notice { align-items: stretch; flex-direction: column; gap: 10px; }
   .capital-notice button { justify-content: center; }
   .capital-search-results button { align-items: flex-start; flex-direction: column; }
-  .capital-row-detailed { grid-template-columns: minmax(0, 1fr) auto; }
-  .capital-row-actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .capital-row-detailed { align-items: start; gap: 8px 12px; grid-template-columns: minmax(0, 1fr) 76px; }
+  .capital-row-detailed > div:nth-child(2) { grid-column: 1; grid-row: 2; text-align: left; }
+  .capital-row-actions { align-self: start; grid-column: 2; grid-row: 1 / span 2; justify-content: flex-end; }
   .summary-copy > strong { font-size: 32px; margin-bottom: 7px; }
   .summary-copy > small { align-items: flex-start; flex-direction: column; gap: 2px; line-height: 1.35; }
   .summary-copy > small b { display: none; }
