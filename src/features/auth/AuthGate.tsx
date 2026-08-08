@@ -1,4 +1,4 @@
-import { LogIn, UserPlus } from "lucide-react";
+import { Eye, EyeOff, LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
@@ -20,6 +20,7 @@ export function AuthGate({ children }: AuthGateProps) {
   const [authMode, setAuthMode] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -118,18 +119,30 @@ export function AuthGate({ children }: AuthGateProps) {
               type="email"
               value={email}
             />
-            <input
-              aria-label={t("auth.passwordPlaceholder")}
-              autoComplete={authMode === "signIn" ? "current-password" : "new-password"}
-              className="auth-input"
-              disabled={!isSupabaseConfigured || submitting}
-              minLength={6}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder={t("auth.passwordPlaceholder")}
-              required
-              type="password"
-              value={password}
-            />
+            <div className="auth-password-field">
+              <input
+                aria-label={t("auth.passwordPlaceholder")}
+                autoComplete={authMode === "signIn" ? "current-password" : "new-password"}
+                className="auth-input"
+                disabled={!isSupabaseConfigured || submitting}
+                minLength={6}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={t("auth.passwordPlaceholder")}
+                required
+                type={passwordVisible ? "text" : "password"}
+                value={password}
+              />
+              <button
+                aria-label={t(passwordVisible ? "auth.hidePassword" : "auth.showPassword")}
+                aria-pressed={passwordVisible}
+                disabled={!isSupabaseConfigured || submitting}
+                onClick={() => setPasswordVisible((visible) => !visible)}
+                title={t(passwordVisible ? "auth.hidePassword" : "auth.showPassword")}
+                type="button"
+              >
+                {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             {authMode === "signUp" ? (
               <label className="auth-legal-consent">
                 <input checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} type="checkbox" />

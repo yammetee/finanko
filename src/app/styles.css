@@ -117,12 +117,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .category-toggle { display: none !important; }
 .date-range { max-width: 340px; width: 100%; }
 
-.analytics-grid { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); overflow: hidden; }
+.analytics-grid { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); height: 280px; overflow: hidden; }
 .analytics-grid > :only-child { border-right: 0; grid-column: 1 / -1; }
-.panel { min-width: 0; padding: 16px; }
-.chart-panel { border-right: 1px solid var(--border); }
+.panel { min-height: 0; min-width: 0; padding: 16px; }
+.chart-panel { border-right: 1px solid var(--border); display: flex; flex-direction: column; }
 .panel h2, .history-section h2, .parsed-items h2 { font-size: 14px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 10px; }
-.chart { height: 148px; }
+.chart { flex: 1 1 auto; min-height: 0; min-width: 0; width: 100%; }
+.category-panel { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .category-panel > button {
   align-items: center;
   background: transparent;
@@ -249,6 +250,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-local-form { display: grid; gap: 8px; }
 .auth-input, .auth-action { border-radius: 6px; min-height: 40px; width: 100%; }
 .auth-input { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0 11px; }
+.auth-password-field { position: relative; }
+.auth-password-field .auth-input { padding-right: 42px; }
+.auth-password-field button { align-items: center; background: transparent; border: 0; color: var(--text-muted); cursor: pointer; display: flex; height: 40px; justify-content: center; padding: 0; position: absolute; right: 1px; top: 0; width: 40px; }
+.auth-password-field button:hover { color: var(--text); }
+.auth-password-field button:disabled { cursor: not-allowed; opacity: .45; }
 .auth-action { align-items: center; background: var(--surface-hover); border: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; gap: 6px; justify-content: center; padding: 0 12px; }
 .auth-action-primary { background: var(--primary); border-color: var(--primary); color: white; font-weight: 600; }
 .auth-action:disabled { cursor: not-allowed; opacity: .45; }
@@ -278,11 +284,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .category-filter.expanded .category-extra { display: inline-flex; }
   .category-toggle { display: inline-flex !important; }
   .button-filter button { height: 36px; }
-  .analytics-grid { grid-template-columns: 1fr; }
-  .chart-panel { border-bottom: 1px solid var(--border); border-right: 0; }
+  .analytics-grid { grid-template-columns: 1fr; height: auto; }
+  .chart-panel { border-bottom: 1px solid var(--border); border-right: 0; height: 220px; }
   .panel { padding: 14px; }
-  .chart { height: 132px; }
-  .category-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-bottom: 10px; }
+  .category-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 220px; padding-bottom: 10px; }
   .category-panel h2 { grid-column: 1 / -1; }
   .category-panel > button { grid-template-columns: 7px minmax(0, 1fr) auto; min-height: 40px; padding-right: 10px; }
   .category-panel > button:nth-of-type(odd) { border-right: 1px solid var(--border); }
