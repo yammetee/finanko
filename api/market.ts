@@ -1,5 +1,3 @@
-import { isAuthenticatedUser } from "./serverAuth";
-
 const MARKET_REQUEST_LIMIT = 30;
 const MARKET_SYMBOL_PATTERN = /^[A-Z0-9._-]{1,32}$/;
 
@@ -20,6 +18,17 @@ interface MarketSearchResult { name: string; symbol: string; type: AssetType; pr
 const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; Finanko/1.0)" };
 const COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
 const MARKET_PROVIDERS: MarketProvider[] = ["bybit", "coingecko", "nasdaq", "yahoo"];
+
+async function isAuthenticatedUser(supabaseUrl: string, supabaseKey: string, token: string) {
+  try {
+    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: supabaseKey, authorization: `Bearer ${token}` },
+    });
+    return authResponse.ok;
+  } catch {
+    return false;
+  }
+}
 
 export function decimalNumber(value: number) {
   if (!Number.isFinite(value)) throw new Error("Invalid numeric quote");
@@ -277,7 +286,7 @@ export async function searchMarketAssets(query: string): Promise<MarketSearchRes
   return [...rankedCrypto, ...securities].slice(0, 10);
 }
 
-export default async function handler(request: ApiRequest, response: ApiResponse) {
+export async function handler(request: ApiRequest, response: ApiResponse) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
   if (request.method === "OPTIONS") { response.status(204).end(); return; }
@@ -304,3 +313,26 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   const quotes = await fetchMarketQuotes(assets);
   response.status(200).json({ quotes });
 }
+
+async function fetchHandler(request: Request) {
+  let body: unknown;
+  if (request.method === "POST") {
+    try { body = await request.json(); }
+    catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
+  }
+  let status = 200;
+  let responseBody: unknown;
+  const headers = new Headers();
+  const adapter: ApiResponse = {
+    status(code) { status = code; return adapter; },
+    json(payload) { responseBody = payload; },
+    setHeader(name, value) { headers.set(name, value); },
+    end() {},
+  };
+  await handler({ method: request.method, headers: { authorization: request.headers.get("authorization") ?? undefined }, body }, adapter);
+  if (responseBody === undefined) return new Response(null, { status, headers });
+  headers.set("content-type", "application/json");
+  return new Response(JSON.stringify(responseBody), { status, headers });
+}
+
+export default { fetch: fetchHandler };

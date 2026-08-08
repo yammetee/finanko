@@ -1,5 +1,3 @@
-import { isAuthenticatedUser } from "./serverAuth";
-
 interface ApiRequest {
   method?: string;
   headers: { authorization?: string };
@@ -11,6 +9,17 @@ interface ApiResponse {
   json(payload: unknown): void;
   setHeader(name: string, value: string): void;
   end(): void;
+}
+
+async function isAuthenticatedUser(supabaseUrl: string, supabaseKey: string, token: string) {
+  try {
+    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: supabaseKey, authorization: `Bearer ${token}` },
+    });
+    return authResponse.ok;
+  } catch {
+    return false;
+  }
 }
 
 interface ReceiptOcrRow {
@@ -374,7 +383,7 @@ function attachReceiptReview(value: unknown, ocr: ReceiptOcrResult) {
   return receipt;
 }
 
-export default async function handler(request: ApiRequest, response: ApiResponse) {
+export async function handler(request: ApiRequest, response: ApiResponse) {
   if (request.method === "OPTIONS") {
     response.setHeader("Allow", "POST, OPTIONS");
     response.status(204).end();
@@ -476,3 +485,26 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     response.status(500).json({ error: "AI request failed" });
   }
 }
+
+async function fetchHandler(request: Request) {
+  let body: ApiRequest["body"];
+  if (request.method === "POST") {
+    try { body = await request.json() as ApiRequest["body"]; }
+    catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
+  }
+  let status = 200;
+  let responseBody: unknown;
+  const headers = new Headers();
+  const adapter: ApiResponse = {
+    status(code) { status = code; return adapter; },
+    json(payload) { responseBody = payload; },
+    setHeader(name, value) { headers.set(name, value); },
+    end() {},
+  };
+  await handler({ method: request.method, headers: { authorization: request.headers.get("authorization") ?? undefined }, body }, adapter);
+  if (responseBody === undefined) return new Response(null, { status, headers });
+  headers.set("content-type", "application/json");
+  return new Response(JSON.stringify(responseBody), { status, headers });
+}
+
+export default { fetch: fetchHandler };

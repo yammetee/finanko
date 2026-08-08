@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv, type Plugin } from "vite";
-import aiHandler from "./api/ai";
-import marketHandler from "./api/market";
+import { handler as aiHandler } from "./api/ai";
+import { handler as marketHandler } from "./api/market";
 
 function localApiPlugin(): Plugin {
   return {
