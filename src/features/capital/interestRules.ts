@@ -1,4 +1,4 @@
-import { decimal, decimalString, divide, multiply } from "./decimal";
+import { decimal, decimalString, divide, multiply } from "../../shared/lib/decimal";
 import { replayCapitalEvents } from "./capitalMath";
 import { capitalEventTimestamp, compareCapitalEvents } from "./capitalEventTime";
 import type { CapitalEvent, CapitalItem } from "./capitalTypes";

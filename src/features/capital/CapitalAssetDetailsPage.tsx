@@ -2,7 +2,7 @@ import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { formatMoney } from "../../shared/lib/format";
-import { decimal, decimalString, divide, multiply } from "./decimal";
+import { decimal, decimalString, divide, multiply } from "../../shared/lib/decimal";
 import { getCapitalItemLabel } from "./capitalLabels";
 import type { buildCapitalPositions } from "./capitalView";
 

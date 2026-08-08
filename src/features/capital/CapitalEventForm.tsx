@@ -9,7 +9,7 @@ import { ChoiceGroup } from "../../shared/ui/ChoiceGroup";
 import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
 import { capitalEventTimestamp } from "./capitalEventTime";
 import { isNonNegativeCapitalDecimal, isNonZeroCapitalDecimal, isPositiveCapitalDecimal, normalizeCapitalDecimal } from "./capitalFormNumbers";
-import { decimal, decimalString, divide, multiply } from "./decimal";
+import { decimal, decimalString, divide, multiply } from "../../shared/lib/decimal";
 import { getCapitalEventLabel } from "./capitalLabels";
 import { getCapitalEventTypes } from "./capitalEventRules";
 import { CAPITAL_CURRENCIES, type CapitalCurrency, type CapitalEvent, type CapitalEventType, type CapitalItem } from "./capitalTypes";

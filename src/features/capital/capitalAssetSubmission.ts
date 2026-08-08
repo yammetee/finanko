@@ -1,6 +1,6 @@
 import dayjs, { type Dayjs } from "dayjs";
 import { isPositiveCapitalDecimal, normalizeCapitalDecimal, percentInputToRate } from "./capitalFormNumbers";
-import { decimal, decimalString, multiply } from "./decimal";
+import { decimal, decimalString, multiply } from "../../shared/lib/decimal";
 import { normalizeMarketSymbol } from "./marketContract";
 import type { CapitalCurrency, CapitalGroup, CapitalItem, CapitalItemType } from "./capitalTypes";
 

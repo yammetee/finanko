@@ -1,5 +1,5 @@
 import { getConversionRates, getHistoricalConversionRates } from "../../shared/lib/currency";
-import { decimal, decimalString, divide, multiply } from "./decimal";
+import { decimal, decimalString, divide, multiply } from "../../shared/lib/decimal";
 import type { CapitalCurrency } from "./capitalTypes";
 
 export function convertCapitalMoney(amount: string, from: CapitalCurrency, to: CapitalCurrency, date?: string) {

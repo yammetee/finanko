@@ -61,7 +61,7 @@ export default defineConfig(({ mode }) => {
           manualChunks(id: string) {
             if (!id.includes("node_modules")) return;
             if (id.includes("@supabase")) return "supabase";
-            if (id.includes("lucide-react")) return "icons";
+            if (id.includes("lucide-react") || id.includes("recharts") || id.includes("react-is")) return "visuals";
           },
         },
       },

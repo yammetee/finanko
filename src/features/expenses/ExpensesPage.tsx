@@ -16,7 +16,7 @@ import { isDefaultExpenseCategory, sortDefaultExpenseCategories } from "./catego
 import { ExpenseDetailsPage } from "./ExpenseDetailsPage";
 import type { ExpenseFormMode } from "./ExpenseFormPage";
 import { ExpenseRows } from "./ExpenseRows";
-import { SpendingChart } from "./SpendingChart";
+import { TrendChart } from "../../shared/ui/TrendChart";
 import {
   buildExpenseCategoryGroups,
   buildExpenseTrendBuckets,
@@ -208,7 +208,7 @@ export function ExpensesPage({ currencyMode, ratesVersion, capitalTotalUsd }: Ex
 
       {expenseView.history.length > 0 ? (
         <div className="analytics-grid">
-          <section className="panel chart-panel"><h2>{t("expense.trend")}</h2><SpendingChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></section>
+          <section className="panel chart-panel"><h2>{t("expense.trend")}</h2><TrendChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></section>
           <section className="panel category-panel"><h2>{t("section.expensesByCategory")}</h2>{breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.convertedValue) / breakdownTotal * 100) : 0; return <button type="button" key={`${item.key}:${item.currency}`} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, item.currency)}</strong><small>{share}%</small></button>; })}</section>
         </div>
       ) : null}

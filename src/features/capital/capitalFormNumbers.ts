@@ -1,4 +1,4 @@
-import { decimal, decimalString, divide, multiply } from "./decimal";
+import { decimal, decimalString, divide, multiply } from "../../shared/lib/decimal";
 
 const decimalPattern = /^\d{1,20}(?:[.,]\d{1,18})?$/;
 const signedDecimalPattern = /^-?\d{1,20}(?:[.,]\d{1,18})?$/;

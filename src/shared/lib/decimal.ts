@@ -1,7 +1,7 @@
 const SCALE_DIGITS = 18;
 const SCALE = 10n ** BigInt(SCALE_DIGITS);
 
-type Decimal = bigint;
+export type Decimal = bigint;
 
 export function decimal(value: string | number | undefined): Decimal {
   if (value === undefined || value === "") return 0n;
@@ -21,6 +21,14 @@ export function multiply(left: Decimal, right: Decimal): Decimal {
 export function divide(left: Decimal, right: Decimal): Decimal {
   if (right === 0n) return 0n;
   return left * SCALE / right;
+}
+
+export function roundDecimal(value: Decimal, fractionDigits = 2): Decimal {
+  if (!Number.isInteger(fractionDigits) || fractionDigits < 0 || fractionDigits > SCALE_DIGITS) throw new Error("Invalid decimal precision");
+  const step = 10n ** BigInt(SCALE_DIGITS - fractionDigits);
+  const absolute = value < 0n ? -value : value;
+  const rounded = (absolute + step / 2n) / step * step;
+  return value < 0n ? -rounded : rounded;
 }
 
 export function decimalString(value: Decimal): string {
