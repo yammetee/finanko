@@ -13,7 +13,7 @@ const defaultCategories = [
   { name: "Subscriptions", color: "#9e91d8" },
   { name: "Other", color: "#8c8c8c" },
 ] as const;
-
+ 
 const defaultCategoryNameSet = new Set(
   defaultCategories.map((category) => category.name.toLocaleLowerCase()),
 );
