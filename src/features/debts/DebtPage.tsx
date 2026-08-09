@@ -1,5 +1,5 @@
 import { ChevronRight, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
 import { useI18n } from "../../shared/i18n/i18nContext";
@@ -9,11 +9,7 @@ import type { Currency } from "../../shared/types/expense";
 import { TrendChart } from "../../shared/ui/TrendChart";
 import { buildDebtProjection } from "./debtMath";
 import { DebtDetailsPage } from "./DebtDetailsPage";
-import { DebtForm } from "./DebtForm";
-import { DebtGroupForm } from "./DebtGroupForm";
-import { DebtPaymentForm } from "./DebtPaymentForm";
 import { DebtPaymentDetailsPage } from "./DebtPaymentDetailsPage";
-import { DebtReconciliationForm } from "./DebtReconciliationForm";
 import { DebtReconciliationDetailsPage } from "./DebtReconciliationDetailsPage";
 import { useDebtStore } from "./debtStore";
 import type { Debt, DebtGroup, DebtPayment, DebtReconciliation } from "./debtTypes";
@@ -21,6 +17,11 @@ import { buildDebtPositions } from "./debtView";
 
 type Editor = { kind: "group"; value?: DebtGroup } | { kind: "debt"; value?: Debt } | { kind: "payment"; value?: DebtPayment } | { kind: "reconciliation"; value?: DebtReconciliation; debtId?: string } | null;
 const COLORS = ["#5a9feb", "#9b82e6", "#58b6ad", "#e8b94c", "#f07f86", "#c69b58"];
+const DebtForm = lazy(() => import("./DebtForm").then((module) => ({ default: module.DebtForm })));
+const DebtGroupForm = lazy(() => import("./DebtGroupForm").then((module) => ({ default: module.DebtGroupForm })));
+const DebtPaymentForm = lazy(() => import("./DebtPaymentForm").then((module) => ({ default: module.DebtPaymentForm })));
+const DebtReconciliationForm = lazy(() => import("./DebtReconciliationForm").then((module) => ({ default: module.DebtReconciliationForm })));
+const editorFallback = <div className="parsing-state"><div className="auth-loader" /></div>;
 
 export function DebtPage({ currencyMode, onCurrencyChange, ratesVersion }: { currencyMode: DisplayCurrency; onCurrencyChange: (value: DisplayCurrency) => void; ratesVersion: number }) {
   const { message } = useFeedback();
@@ -67,10 +68,10 @@ export function DebtPage({ currencyMode, onCurrencyChange, ratesVersion }: { cur
     catch { message.error(t("feedback.saveFailed")); }
     finally { setSaving(false); }
   };
-  if (editor?.kind === "group") return <DebtGroupForm group={editor.value} saving={saving} onBack={() => setEditor(null)} onSave={(name) => save(() => state.saveGroup({ id: editor.value?.id, name }))}/>;
-  if (editor?.kind === "debt") return <DebtForm debt={editor.value} groups={state.groups} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.saveDebt({ ...value, id: editor.value?.id }))}/>;
-  if (editor?.kind === "payment") return <DebtPaymentForm payment={editor.value} debts={state.debts} events={state.events} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.savePayment({ ...value, id: editor.value?.id }))}/>;
-  if (editor?.kind === "reconciliation") return <DebtReconciliationForm reconciliation={editor.value} debtId={editor.debtId} debts={state.debts} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.saveReconciliation({ ...value, id: editor.value?.id }))}/>;
+  if (editor?.kind === "group") return <Suspense fallback={editorFallback}><DebtGroupForm group={editor.value} saving={saving} onBack={() => setEditor(null)} onSave={(name) => save(() => state.saveGroup({ id: editor.value?.id, name }))}/></Suspense>;
+  if (editor?.kind === "debt") return <Suspense fallback={editorFallback}><DebtForm debt={editor.value} groups={state.groups} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.saveDebt({ ...value, id: editor.value?.id }))}/></Suspense>;
+  if (editor?.kind === "payment") return <Suspense fallback={editorFallback}><DebtPaymentForm payment={editor.value} debts={state.debts} events={state.events} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.savePayment({ ...value, id: editor.value?.id }))}/></Suspense>;
+  if (editor?.kind === "reconciliation") return <Suspense fallback={editorFallback}><DebtReconciliationForm reconciliation={editor.value} debtId={editor.debtId} debts={state.debts} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.saveReconciliation({ ...value, id: editor.value?.id }))}/></Suspense>;
   if (selectedEvent) {
     const debt = state.debts.find((value) => value.id === selectedEvent.debtId);
     if (debt && selectedEvent.type === "reconciliation") return <DebtReconciliationDetailsPage debt={debt} reconciliation={selectedEvent} onBack={() => setSelectedEventId(null)} onEdit={() => { setSelectedEventId(null); setEditor({ kind: "reconciliation", value: selectedEvent }); }} onDelete={() => void (async () => { try { await state.deleteEvent(selectedEvent.id); setSelectedEventId(null); message.success(t("debt.deleted")); } catch { message.error(t("feedback.saveFailed")); } })()}/>;

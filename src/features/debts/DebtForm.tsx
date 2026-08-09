@@ -5,6 +5,7 @@ import InputNumber from "antd/es/input-number";
 import Select from "antd/es/select";
 import dayjs from "dayjs";
 import { ArrowLeft } from "lucide-react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import { CURRENCIES } from "../../shared/constants/expenses";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { decimal, decimalString, divide, multiply } from "../../shared/lib/decimal";
@@ -15,7 +16,11 @@ import type { Debt, DebtGroup } from "./debtTypes";
 type Values = { groupId: string; name: string; lender?: string; loanType: Debt["loanType"]; currency: Debt["currency"]; principalBalance: string; annualRate: string; requiredPayment: string; balanceDate: dayjs.Dayjs; nextPaymentDate: dayjs.Dayjs; remainingPayments: number };
 interface Props { debt?: Debt; groups: DebtGroup[]; saving: boolean; onBack: () => void; onSave: (value: Omit<Debt, "id">) => void | Promise<void> }
 
-export function DebtForm({ debt, groups, saving, onBack, onSave }: Props) {
+export function DebtForm(props: Props) {
+  return <AppThemeProvider><DebtFormContent {...props} /></AppThemeProvider>;
+}
+
+function DebtFormContent({ debt, groups, saving, onBack, onSave }: Props) {
   const { t } = useI18n();
   const required = [{ required: true, message: t("debt.validation.required") }];
   const positive = [...required, { validator: (_: unknown, value?: string | number) => Number(value) > 0 ? Promise.resolve() : Promise.reject(new Error(t("debt.validation.positive"))) }];

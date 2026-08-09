@@ -1,15 +1,12 @@
 import { Check, ChevronRight, Pencil, Plus, RefreshCw, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { convertMoney } from "../../shared/lib/currency";
 import { formatMoney } from "../../shared/lib/format";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
 import { TrendChart } from "../../shared/ui/TrendChart";
-import { CapitalAssetForm } from "./CapitalAssetForm";
 import { CapitalAssetDetailsPage } from "./CapitalAssetDetailsPage";
-import { CapitalEventForm } from "./CapitalEventForm";
-import { CapitalGroupForm } from "./CapitalGroupForm";
 import type { CapitalAssetSubmission } from "./capitalAssetSubmission";
 import { sumCapitalValues } from "./capitalCurrency";
 import { getCapitalEventLabel, getCapitalItemLabel } from "./capitalLabels";
@@ -21,6 +18,10 @@ type Editor = { kind: "group"; value?: CapitalGroup } | { kind: "item"; value?: 
 type TypeFilter = "all" | "market" | "crypto" | "cash";
 const GROUP_COLORS = ["#5a9feb", "#58b6ad", "#e8b94c", "#9b82e6", "#f07f86", "#c69b58", "#65a9d8", "#e58aa8"];
 const typeMatches = (type: CapitalItemType, filter: TypeFilter) => filter === "all" || (filter === "market" && (type === "stock" || type === "fund")) || type === filter || (filter === "cash" && type === "deposit");
+const CapitalAssetForm = lazy(() => import("./CapitalAssetForm").then((module) => ({ default: module.CapitalAssetForm })));
+const CapitalEventForm = lazy(() => import("./CapitalEventForm").then((module) => ({ default: module.CapitalEventForm })));
+const CapitalGroupForm = lazy(() => import("./CapitalGroupForm").then((module) => ({ default: module.CapitalGroupForm })));
+const editorFallback = <div className="parsing-state"><div className="auth-loader" /></div>;
 
 export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurrencyChange }: { ratesVersion: number; debtTotalUsd?: number; currencyMode: DisplayCurrency; onCurrencyChange: (value: DisplayCurrency) => void }) {
   const { message } = useFeedback();
@@ -75,9 +76,9 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
     try { await action(); message.success(success); }
     catch { message.error(t("capital.actionError")); }
   };
-  if (editor?.kind === "group") return <CapitalGroupForm group={editor.value} saving={saving} onBack={() => setEditor(null)} onSave={(name) => save(() => state.saveGroup({ id: editor.value?.id, name }))}/>;
-  if (editor?.kind === "item") return <CapitalAssetForm key={editor.value?.id ?? "new"} item={editor.value} groups={state.groups} items={state.items} saving={saving} onBack={() => setEditor(null)} onSave={saveAsset}/>;
-  if (editor?.kind === "event") return <CapitalEventForm key={editor.value?.id ?? "new"} event={editor.value} items={state.items} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.saveEvent({ ...value, id: editor.value?.id }))}/>;
+  if (editor?.kind === "group") return <Suspense fallback={editorFallback}><CapitalGroupForm group={editor.value} saving={saving} onBack={() => setEditor(null)} onSave={(name) => save(() => state.saveGroup({ id: editor.value?.id, name }))}/></Suspense>;
+  if (editor?.kind === "item") return <Suspense fallback={editorFallback}><CapitalAssetForm key={editor.value?.id ?? "new"} item={editor.value} groups={state.groups} items={state.items} saving={saving} onBack={() => setEditor(null)} onSave={saveAsset}/></Suspense>;
+  if (editor?.kind === "event") return <Suspense fallback={editorFallback}><CapitalEventForm key={editor.value?.id ?? "new"} event={editor.value} items={state.items} saving={saving} onBack={() => setEditor(null)} onSave={(value) => save(() => state.saveEvent({ ...value, id: editor.value?.id }))}/></Suspense>;
   if (selectedPosition) {
     const openingType = selectedPosition.item.type === "cash" || selectedPosition.item.type === "deposit" ? "deposit" : "buy";
     const latestOpening = state.events.filter((event) => event.itemId === selectedPosition.item.id && event.status === "confirmed" && event.type === openingType).sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0];

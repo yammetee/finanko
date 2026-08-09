@@ -46,6 +46,42 @@ function localApiPlugin(): Plugin {
   };
 }
 
+function inlineEntryCssPlugin(): Plugin {
+  return {
+    name: "evenkvit-inline-entry-css",
+    apply: "build",
+    enforce: "post",
+    generateBundle(_, bundle) {
+      const html = Object.values(bundle).find((output) => output.type === "asset" && output.fileName === "index.html");
+      if (!html || html.type !== "asset") return;
+      let source = String(html.source);
+      for (const [fileName, output] of Object.entries(bundle)) {
+        if (output.type !== "asset" || !fileName.endsWith(".css")) continue;
+        const escapedFileName = fileName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const stylesheet = new RegExp(`<link rel="stylesheet"[^>]*href="/${escapedFileName}"[^>]*>`);
+        if (!stylesheet.test(source)) continue;
+        source = source.replace(stylesheet, `<style>${String(output.source)}</style>`);
+        delete bundle[fileName];
+      }
+      html.source = source;
+    },
+  };
+}
+
+function apiPreconnectPlugin(apiUrl?: string): Plugin {
+  return {
+    name: "evenkvit-api-preconnect",
+    transformIndexHtml(html) {
+      if (!apiUrl) return html;
+      const origin = new URL(apiUrl).origin;
+      return {
+        html,
+        tags: [{ tag: "link", attrs: { rel: "preconnect", href: origin, crossorigin: "" }, injectTo: "head" }],
+      };
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_RECEIPT_MODEL", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"].forEach((key) => {
@@ -54,8 +90,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     envPrefix: ["VITE_", "NEXT_PUBLIC_"],
-    plugins: [react(), localApiPlugin()],
+    plugins: [react(), localApiPlugin(), apiPreconnectPlugin(env.NEXT_PUBLIC_SUPABASE_URL), inlineEntryCssPlugin()],
     build: {
+      minify: "esbuild",
+      sourcemap: true,
+      target: "es2022",
       rollupOptions: {
         output: {
           manualChunks(id: string) {

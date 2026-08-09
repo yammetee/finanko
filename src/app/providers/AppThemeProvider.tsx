@@ -1,3 +1,4 @@
+import "@ant-design/v5-patch-for-react-19";
 import ConfigProvider from "antd/es/config-provider";
 import darkAlgorithm from "antd/es/theme/themes/dark";
 import type { PropsWithChildren } from "react";

@@ -1,6 +1,7 @@
 import Form from "antd/es/form";
 import Input from "antd/es/input";
 import { ArrowLeft } from "lucide-react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import type { CapitalGroup } from "./capitalTypes";
 
@@ -11,7 +12,11 @@ interface Props {
   onSave: (name: string) => void | Promise<void>;
 }
 
-export function CapitalGroupForm({ group, saving, onBack, onSave }: Props) {
+export function CapitalGroupForm(props: Props) {
+  return <AppThemeProvider><CapitalGroupFormContent {...props} /></AppThemeProvider>;
+}
+
+function CapitalGroupFormContent({ group, saving, onBack, onSave }: Props) {
   const { t } = useI18n();
   return <section className="form-page">
     <header className="page-heading"><button type="button" onClick={onBack} aria-label={t("actions.back")}><ArrowLeft size={19}/></button><h1>{t(group ? "capital.group.edit" : "capital.group.new")}</h1></header>

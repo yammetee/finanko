@@ -1,5 +1,6 @@
 import useMessage from "antd/es/message/useMessage";
 import { useEffect, useRef } from "react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import type { FeedbackNotice } from "./feedbackContext";
 
 interface FeedbackHostProps {
@@ -8,6 +9,10 @@ interface FeedbackHostProps {
 }
 
 export function FeedbackHost({ notices, onShown }: FeedbackHostProps) {
+  return <AppThemeProvider><FeedbackHostContent notices={notices} onShown={onShown} /></AppThemeProvider>;
+}
+
+function FeedbackHostContent({ notices, onShown }: FeedbackHostProps) {
   const [message, messageHolder] = useMessage();
   const shown = useRef(new Set<number>());
 

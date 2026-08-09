@@ -4,6 +4,7 @@ import Input from "antd/es/input";
 import Select from "antd/es/select";
 import dayjs, { type Dayjs } from "dayjs";
 import { ArrowLeft } from "lucide-react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { ChoiceGroup } from "../../shared/ui/ChoiceGroup";
 import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
@@ -43,7 +44,11 @@ interface Props {
   onSave: (event: Omit<CapitalEvent, "id">) => void | Promise<void>;
 }
 
-export function CapitalEventForm({ event, items, saving, onBack, onSave }: Props) {
+export function CapitalEventForm(props: Props) {
+  return <AppThemeProvider><CapitalEventFormContent {...props} /></AppThemeProvider>;
+}
+
+function CapitalEventFormContent({ event, items, saving, onBack, onSave }: Props) {
   const { locale, t } = useI18n();
   const [form] = Form.useForm<EventFormValues>();
   const itemId = Form.useWatch("itemId", form) ?? event?.itemId ?? items[0]?.id;

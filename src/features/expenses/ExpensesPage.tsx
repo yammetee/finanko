@@ -8,6 +8,7 @@ import { formatMoney } from "../../shared/lib/format";
 import type { Expense } from "../../shared/types/expense";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
+import { TrendChart } from "../../shared/ui/TrendChart";
 import { parseReceiptInput, parseTextInput } from "../receipts/aiParser";
 import { detectAmountInText, detectCurrencyInText, parseTextInputLocally, type ParsedExpense } from "../receipts/expenseParser";
 import { prepareReceiptImage } from "../receipts/receiptImage";
@@ -30,7 +31,6 @@ import { useExpenseStore } from "./expenseStore";
 
 const ExpenseFormPage = lazy(() => import("./ExpenseFormPage").then((module) => ({ default: module.ExpenseFormPage })));
 const ExpenseDateRange = lazy(() => import("./ExpenseDateRange").then((module) => ({ default: module.ExpenseDateRange })));
-const TrendChart = lazy(() => import("../../shared/ui/TrendChart").then((module) => ({ default: module.TrendChart })));
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
 const MOBILE_CATEGORY_LIMIT = 5;
 const HISTORY_LIMIT = 8;
@@ -202,12 +202,12 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
           {categoryGroups.map((group, index) => <button className={`${selectedCategory === group.key ? "active" : ""}${index >= MOBILE_CATEGORY_LIMIT ? " category-extra" : ""}`} key={group.key} type="button" onClick={() => chooseCategory(group.key)}><i style={{ background: group.color }} />{group.name}</button>)}
           {categoryGroups.length > MOBILE_CATEGORY_LIMIT ? <button className="category-toggle" type="button" aria-expanded={showAllCategories} onClick={() => setShowAllCategories((value) => !value)}>{showAllCategories ? t("actions.collapse") : t("actions.more", { count: categoryGroups.length - MOBILE_CATEGORY_LIMIT })}</button> : null}
         </div>
-        {filters.period === "custom" ? <Suspense fallback={<div className="date-range date-range-placeholder" aria-hidden="true" />}><ExpenseDateRange value={filters.customRange} onChange={(customRange) => setFilters((current) => ({ ...current, customRange }))} /></Suspense> : null}
+        {filters.period === "custom" ? <Suspense fallback={<div className="date-range date-range-placeholder" aria-hidden="true" />}><ExpenseDateRange label={t("expense.period.custom")} value={filters.customRange} onChange={(customRange) => setFilters((current) => ({ ...current, customRange }))} /></Suspense> : null}
       </section>
 
       {expenseView.history.length > 0 ? (
         <div className="analytics-grid">
-          <section className="panel chart-panel"><h2>{t("expense.trend")}</h2><Suspense fallback={<div className="chart" aria-hidden="true" />}><TrendChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></Suspense></section>
+          <section className="panel chart-panel"><h2>{t("expense.trend")}</h2><TrendChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></section>
           <section className="panel category-panel"><h2>{t("section.expensesByCategory")}</h2>{breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.convertedValue) / breakdownTotal * 100) : 0; return <button type="button" key={`${item.key}:${item.currency}`} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, item.currency)}</strong><small>{share}%</small></button>; })}</section>
         </div>
       ) : null}
@@ -222,7 +222,7 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
 
   return (
     <>
-      <input ref={receiptInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
+      <input ref={receiptInput} aria-label={t("inputMode.receipt")} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
       {formMode ? <Suspense fallback={<div className="parsing-state">{t("expense.loadingEditor")}</div>}><ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /></Suspense> : selected ? <ExpenseDetailsPage expense={selected} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
     </>
   );

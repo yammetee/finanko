@@ -4,13 +4,18 @@ import InputNumber from "antd/es/input-number";
 import Select from "antd/es/select";
 import dayjs from "dayjs";
 import { ArrowLeft } from "lucide-react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import type { Debt, DebtReconciliation } from "./debtTypes";
 
 type Values = { debtId: string; principalBalance: string; occurredAt: dayjs.Dayjs };
 interface Props { reconciliation?: DebtReconciliation; debtId?: string; debts: Debt[]; saving: boolean; onBack: () => void; onSave: (value: Omit<DebtReconciliation, "id" | "sequence" | "type">) => void | Promise<void> }
 
-export function DebtReconciliationForm({ reconciliation, debtId, debts, saving, onBack, onSave }: Props) {
+export function DebtReconciliationForm(props: Props) {
+  return <AppThemeProvider><DebtReconciliationFormContent {...props} /></AppThemeProvider>;
+}
+
+function DebtReconciliationFormContent({ reconciliation, debtId, debts, saving, onBack, onSave }: Props) {
   const { t } = useI18n();
   const availableDebts = debts.filter((debt) => debt.status === "active" || debt.id === reconciliation?.debtId);
   return <section className="form-page">

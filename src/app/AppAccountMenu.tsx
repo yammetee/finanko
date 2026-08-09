@@ -5,8 +5,13 @@ import { useState } from "react";
 import { useAuthStore } from "../features/auth/authStore";
 import { useI18n } from "../shared/i18n/i18nContext";
 import { useFeedback } from "../shared/ui/feedbackContext";
+import { AppThemeProvider } from "./providers/AppThemeProvider";
 
 export function AppAccountMenu() {
+  return <AppThemeProvider><AppAccountMenuContent /></AppThemeProvider>;
+}
+
+function AppAccountMenuContent() {
   const [open, setOpen] = useState(true);
   const [modal, modalHolder] = useModal();
   const { message } = useFeedback();

@@ -6,6 +6,7 @@ import InputNumber from "antd/es/input-number";
 import Spin from "antd/es/spin";
 import { ArrowLeft, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useEffect } from "react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import { CURRENCIES } from "../../shared/constants/expenses";
 import { getCategoryName } from "../../shared/i18n/displayText";
 import type { MessageKey } from "../../shared/i18n/i18nContext";
@@ -38,7 +39,11 @@ const warningKeys: Record<string, MessageKey> = {
   totals_mismatch: "receipt.warning.totalsMismatch",
 };
 
-export function ExpenseFormPage({ mode, draft, categories, parsing, saving, parseError, onBack, onParseText, onSave }: ExpenseFormPageProps) {
+export function ExpenseFormPage(props: ExpenseFormPageProps) {
+  return <AppThemeProvider><ExpenseFormPageContent {...props} /></AppThemeProvider>;
+}
+
+function ExpenseFormPageContent({ mode, draft, categories, parsing, saving, parseError, onBack, onParseText, onSave }: ExpenseFormPageProps) {
   const { t } = useI18n();
   const [draftForm] = Form.useForm<ExpenseFormValues>();
   const [textForm] = Form.useForm<{ text: string }>();
@@ -73,7 +78,7 @@ export function ExpenseFormPage({ mode, draft, categories, parsing, saving, pars
             <>
               {fields.length > 0 ? <section className="parsed-items"><h2>{t("section.parsedItems")}</h2>{fields.map((field) => (
                 <div className="parsed-item" key={field.key}>
-                  <div className="parsed-name"><Form.Item name={[field.name, "name"]} rules={[{ required: true, message: t("expense.nameRequired") }]}><Input autoFocus={mode === "manual" && field.name === 0} placeholder={t("form.name")} /></Form.Item><button type="button" onClick={() => remove(field.name)} aria-label={t("actions.delete")}><Trash2 size={15} /></button></div>
+                  <div className="parsed-name"><Form.Item name={[field.name, "name"]} rules={[{ required: true, message: t("expense.nameRequired") }]}><Input aria-label={t("form.name")} autoFocus={mode === "manual" && field.name === 0} placeholder={t("form.name")} /></Form.Item><button type="button" onClick={() => remove(field.name)} aria-label={t("actions.delete")}><Trash2 size={15} /></button></div>
                   <Form.Item name={[field.name, "amount"]} label={t("form.price")} rules={[{ required: true, message: t("expense.amountRequired") }, { type: "number", min: 0.01, message: t("expense.amountRequired") }]}><InputNumber min={0.01} step={0.01} /></Form.Item>
                   <Form.Item name={[field.name, "currency"]} noStyle rules={[{ required: true, message: t("expense.currencyRequired") }]}><ChoiceGroup label={t("form.itemCurrency")} options={CURRENCIES.map((itemCurrency) => ({ value: itemCurrency, label: <><CurrencyIcon currency={itemCurrency} size={12} />{itemCurrency}</> }))} /></Form.Item>
                   <Form.Item name={[field.name, "categoryId"]} noStyle rules={[{ required: true, message: t("expense.categoryRequired") }]}><ChoiceGroup label={t("expense.category")} options={categories.map((category) => ({ value: category.id, label: getCategoryName(category, t) }))} /></Form.Item>

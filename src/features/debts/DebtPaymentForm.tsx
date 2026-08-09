@@ -4,6 +4,7 @@ import InputNumber from "antd/es/input-number";
 import Select from "antd/es/select";
 import dayjs from "dayjs";
 import { ArrowLeft } from "lucide-react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import { useMemo } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { decimal } from "../../shared/lib/decimal";
@@ -20,7 +21,11 @@ function isGreaterThan(left?: string, right?: string) {
   catch { return false; }
 }
 
-export function DebtPaymentForm({ payment, debts, events, saving, onBack, onSave }: Props) {
+export function DebtPaymentForm(props: Props) {
+  return <AppThemeProvider><DebtPaymentFormContent {...props} /></AppThemeProvider>;
+}
+
+function DebtPaymentFormContent({ payment, debts, events, saving, onBack, onSave }: Props) {
   const { t } = useI18n();
   const [form] = Form.useForm<Values>();
   const availableDebts = debts.filter((debt) => debt.status === "active" || debt.id === payment?.debtId);

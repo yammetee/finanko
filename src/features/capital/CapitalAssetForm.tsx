@@ -6,6 +6,7 @@ import Select from "antd/es/select";
 import dayjs from "dayjs";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { ChoiceGroup } from "../../shared/ui/ChoiceGroup";
 import { CurrencyIcon } from "../../shared/ui/CurrencyIcon";
@@ -28,7 +29,11 @@ interface Props {
   onSave: (submission: CapitalAssetSubmission) => void | Promise<void>;
 }
 
-export function CapitalAssetForm({ item, groups, items, saving, onBack, onSave }: Props) {
+export function CapitalAssetForm(props: Props) {
+  return <AppThemeProvider><CapitalAssetFormContent {...props} /></AppThemeProvider>;
+}
+
+function CapitalAssetFormContent({ item, groups, items, saving, onBack, onSave }: Props) {
   const { locale, t } = useI18n();
   const [form] = Form.useForm<AssetFormValues>();
   const type = Form.useWatch("type", form) ?? item?.type ?? "stock";
@@ -75,7 +80,7 @@ export function CapitalAssetForm({ item, groups, items, saving, onBack, onSave }
     <header className="page-heading"><button type="button" onClick={onBack} aria-label={t("actions.back")}><ArrowLeft size={19}/></button><h1>{t(item ? "capital.asset.edit" : "capital.asset.new")}</h1></header>
     <Form className="expense-form" form={form} layout="vertical" initialValues={initialValues} onFinish={submit}>
       {!item ? <Form.Item name="type" noStyle><ChoiceGroup label={t("capital.asset.type")} options={ITEM_TYPES.map((value) => ({ value, label: getCapitalItemLabel(value, locale) }))} onChange={(value) => { if (value !== type) form.setFieldsValue({ symbol: undefined, openingPrice: undefined }); setProvider(undefined); setProviderAssetId(undefined); }}/></Form.Item> : null}
-      {!item && market ? <Form.Item label={t("capital.asset.search")}><AutoComplete autoFocus filterOption={false} options={suggestionOptions} value={query} onChange={setQuery} onSelect={(key) => { const selected = suggestions.find((value) => `${value.provider}:${value.providerAssetId}` === key); if (selected) chooseSuggestion(selected); }}/></Form.Item> : null}
+      {!item && market ? <Form.Item label={t("capital.asset.search")}><AutoComplete aria-label={t("capital.asset.search")} autoFocus filterOption={false} options={suggestionOptions} value={query} onChange={setQuery} onSelect={(key) => { const selected = suggestions.find((value) => `${value.provider}:${value.providerAssetId}` === key); if (selected) chooseSuggestion(selected); }}/></Form.Item> : null}
       <Form.Item name="name" label={t("form.name")} rules={[{ required: true, whitespace: true, message: t("capital.validation.name") }]}><Input maxLength={120}/></Form.Item>
       {groups.length > 1 ? <Form.Item name="groupId" label={t("capital.asset.group")} rules={[{ required: true }]}><Select options={groups.map((value) => ({ value: value.id, label: value.name }))}/></Form.Item> : null}
       {market && !item ? <Form.Item name="symbol" label={t("capital.asset.symbol")} rules={[{ validator: (_, value) => isMarketSymbol(value) ? Promise.resolve() : Promise.reject(new Error(t("capital.validation.symbol"))) }]}><Input autoCapitalize="characters" maxLength={32} onChange={() => { setProvider(undefined); setProviderAssetId(undefined); }}/></Form.Item> : null}
