@@ -104,6 +104,7 @@ function linearTicks(maximum: number, count = 5) {
   const step = factor * magnitude;
   const ticks: number[] = [];
   for (let value = 0; value <= maximum + step * 0.001; value += step) ticks.push(round(value));
+  if (ticks[ticks.length - 1] < maximum) ticks.push(round(ticks[ticks.length - 1] + step));
   return ticks;
 }
 
@@ -128,12 +129,13 @@ export function TrendChart({ buckets, currency, locale, label }: TrendChartProps
   const geometry = useMemo(() => {
     const left = 48;
     const right = 2;
-    const top = 2;
+    const top = 10;
     const bottom = 22;
     const plotWidth = Math.max(size.width - left - right, 1);
     const plotHeight = Math.max(size.height - top - bottom, 1);
     const maximum = Math.max(0, ...buckets.map((bucket) => bucket.value));
-    const scaleMaximum = maximum || 1;
+    const ticks = linearTicks(maximum);
+    const scaleMaximum = ticks[ticks.length - 1] || 1;
     const points: ChartPoint[] = buckets.map((bucket, index) => ({
       ...bucket,
       axisLabel: dateLabel(bucket, locale, buckets.length),
@@ -144,7 +146,7 @@ export function TrendChart({ buckets, currency, locale, label }: TrendChartProps
     const line = monotonePath(points);
     const baseline = top + plotHeight;
     const area = points.length > 0 ? `${line}L${round(points[points.length - 1].x)},${round(baseline)}L${round(points[0].x)},${round(baseline)}Z` : "";
-    return { area, baseline, left, line, maximum: scaleMaximum, plotWidth, points, right, ticks: linearTicks(maximum), top };
+    return { area, baseline, left, line, maximum: scaleMaximum, plotWidth, points, right, ticks, top };
   }, [buckets, locale, size]);
 
   const activePoint = activeIndex === null ? undefined : geometry.points[activeIndex];

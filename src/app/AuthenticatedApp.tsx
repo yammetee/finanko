@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { FeedbackProvider } from "../shared/ui/FeedbackProvider";
 import { ExpensesPage } from "../features/expenses/ExpensesPage";
 import { useCapitalStore } from "../features/capital/capitalStore";
@@ -10,34 +10,16 @@ import { refreshLiveExchangeRates } from "../shared/lib/exchangeRates";
 import { useDebtStore } from "../features/debts/debtStore";
 import { getOutstandingDebt } from "../features/debts/debtView";
 import type { AppPage } from "./AppHeader";
+import { useI18n } from "../shared/i18n/i18nContext";
 
 const CapitalPage = lazy(() => import("../features/capital/CapitalPage").then((module) => ({ default: module.CapitalPage })));
 const DebtPage = lazy(() => import("../features/debts/DebtPage").then((module) => ({ default: module.DebtPage })));
 
-function scheduleIdleTask(task: () => void) {
-  const idleWindow = window as Window & {
-    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
-    cancelIdleCallback?: (handle: number) => void;
-  };
-  let idleHandle: number | undefined;
-  const delayHandle = globalThis.setTimeout(() => {
-    if (typeof idleWindow.requestIdleCallback === "function") {
-      idleHandle = idleWindow.requestIdleCallback(task, { timeout: 2_000 });
-      return;
-    }
-    task();
-  }, 3_000);
-  return () => {
-    globalThis.clearTimeout(delayHandle);
-    if (idleHandle !== undefined) idleWindow.cancelIdleCallback?.(idleHandle);
-  };
-}
-
 export function AuthenticatedApp() {
+  const { t } = useI18n();
   const [page, setPage] = useState<AppPage>("expenses");
   const [currencyMode, setCurrencyMode] = useState<DisplayCurrency>("native");
   const [ratesVersion, setRatesVersion] = useState(0);
-  const ratesRequest = useRef<Promise<void> | null>(null);
   const userId = useAuthStore((state) => state.session?.user.id);
   const capital = useCapitalStore();
   const debt = useDebtStore();
@@ -47,36 +29,29 @@ export function AuthenticatedApp() {
   const resetCapital = capital.reset;
   const refreshCapitalQuotes = capital.refreshQuotes;
   const capitalLoadState = capital.loadState;
-  const refreshRates = useCallback(() => {
-    if (ratesRequest.current) return;
-    ratesRequest.current = refreshLiveExchangeRates()
-      .then((updated) => { if (updated) setRatesVersion((value) => value + 1); })
-      .finally(() => { ratesRequest.current = null; });
+  useEffect(() => {
+    let active = true;
+    void refreshLiveExchangeRates().then((updated) => {
+      if (active && updated) setRatesVersion((value) => value + 1);
+    });
+    return () => { active = false; };
   }, []);
-  useEffect(() => { if (currencyMode !== "native") refreshRates(); }, [currencyMode, refreshRates]);
   useEffect(() => {
     resetCapital();
     if (!userId) return resetCapital;
-    const cancel = scheduleIdleTask(() => {
-      const current = useCapitalStore.getState();
-      if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
-    });
-    return () => { cancel(); resetCapital(); };
+    void initializeCapital(userId);
+    return resetCapital;
   }, [initializeCapital, resetCapital, userId]);
   useEffect(() => {
     resetDebt();
     if (!userId) return resetDebt;
-    const cancel = scheduleIdleTask(() => {
-      const current = useDebtStore.getState();
-      if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
-    });
-    return () => { cancel(); resetDebt(); };
+    void initializeDebt(userId);
+    return resetDebt;
   }, [initializeDebt, resetDebt, userId]);
   const marketItemKey = capital.items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id).sort().join(":");
   useEffect(() => { if (capital.ownerId === userId && capitalLoadState === "ready" && marketItemKey) void refreshCapitalQuotes(); }, [capital.ownerId, capitalLoadState, marketItemKey, refreshCapitalQuotes, userId]);
   const changePage = (nextPage: AppPage) => {
     setPage(nextPage);
-    if (nextPage !== "expenses") refreshRates();
     if (nextPage === "capital" && userId && (capital.ownerId !== userId || capitalLoadState === "idle" || capitalLoadState === "error")) void initializeCapital(userId);
     if (nextPage === "debts" && userId && (debt.ownerId !== userId || debt.loadState === "idle" || debt.loadState === "error")) void initializeDebt(userId);
   };
@@ -84,9 +59,16 @@ export function AuthenticatedApp() {
   const debtReady = Boolean(userId && debt.ownerId === userId && debt.loadState === "ready");
   const capitalTotalUsd = capitalReady ? getCapitalTotalUsd(capital.items, capital.events, capital.quotes) : undefined;
   const debtTotalUsd = debtReady ? getOutstandingDebt(debt.debts, debt.events, "USD") : undefined;
+  const loading = <div className="parsing-state"><div className="auth-loader" /></div>;
+  const capitalContent = capital.loadState === "error"
+    ? <div className="parsing-state"><span>{t("feedback.loadFailed")}</span><button type="button" onClick={() => { if (userId) void initializeCapital(userId); }}>{t("actions.retry")}</button></div>
+    : capitalReady ? <CapitalPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} debtTotalUsd={debtTotalUsd} /> : loading;
+  const debtContent = debt.loadState === "error"
+    ? <div className="parsing-state"><span>{t("feedback.loadFailed")}</span><button type="button" onClick={() => { if (userId) void initializeDebt(userId); }}>{t("actions.retry")}</button></div>
+    : debtReady ? <DebtPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} /> : loading;
   return (
     <FeedbackProvider>
-      <div className="app-shell"><AppHeader page={page} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} debtTotalUsd={debtTotalUsd} /> : page === "capital" ? <Suspense fallback={null}>{capitalReady ? <CapitalPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} debtTotalUsd={debtTotalUsd} /> : null}</Suspense> : <Suspense fallback={null}>{debtReady ? <DebtPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
+      <div className="app-shell"><AppHeader page={page} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} debtTotalUsd={debtTotalUsd} /> : page === "capital" ? <Suspense fallback={loading}>{capitalContent}</Suspense> : <Suspense fallback={loading}>{debtContent}</Suspense>}</main></div>
     </FeedbackProvider>
   );
 }
