@@ -1,7 +1,7 @@
-import AntApp from "antd/es/app";
 import { ChevronRight, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
+import { useFeedback } from "../../shared/ui/feedbackContext";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { convertMoney, getHistoricalConversionRates } from "../../shared/lib/currency";
 import { formatMoney } from "../../shared/lib/format";
@@ -23,7 +23,7 @@ type Editor = { kind: "group"; value?: DebtGroup } | { kind: "debt"; value?: Deb
 const COLORS = ["#5a9feb", "#9b82e6", "#58b6ad", "#e8b94c", "#f07f86", "#c69b58"];
 
 export function DebtPage({ currencyMode, onCurrencyChange, ratesVersion }: { currencyMode: DisplayCurrency; onCurrencyChange: (value: DisplayCurrency) => void; ratesVersion: number }) {
-  const { message } = AntApp.useApp();
+  const { message } = useFeedback();
   const { locale, t } = useI18n();
   const state = useDebtStore();
   const [editor, setEditor] = useState<Editor>(null);

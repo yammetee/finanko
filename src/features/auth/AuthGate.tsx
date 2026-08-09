@@ -8,9 +8,10 @@ import { useAuthStore } from "./authStore";
 
 interface AuthGateProps {
   children: React.ReactNode;
+  preloadAuthenticatedApp: () => void;
 }
 
-export function AuthGate({ children }: AuthGateProps) {
+export function AuthGate({ children, preloadAuthenticatedApp }: AuthGateProps) {
   const { initialize, signInWithPassword, signUpWithPassword, loading, user } = useAuthStore();
   const { t } = useI18n();
   const currentUser = user();
@@ -42,6 +43,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
     setExpensesReady(false);
     setExpensesError(null);
+    preloadAuthenticatedApp();
     void initializeExpenseData(currentUserId)
       .then(() => { if (active) setExpensesReady(true); })
       .catch(() => { if (active) setExpensesError(t("feedback.loadFailed")); });
@@ -49,7 +51,7 @@ export function AuthGate({ children }: AuthGateProps) {
     return () => {
       active = false;
     };
-  }, [currentUserId, t]);
+  }, [currentUserId, preloadAuthenticatedApp, t]);
 
   if (currentUser && expensesError) {
     return <div className="auth-screen"><div className="auth-card"><p className="muted auth-description">{expensesError}</p><button className="auth-action auth-action-primary" type="button" onClick={() => window.location.reload()}>{t("actions.retry")}</button></div></div>;
@@ -102,7 +104,7 @@ export function AuthGate({ children }: AuthGateProps) {
       <div className="auth-card">
         <div className="auth-stack">
           <div className="auth-brand">
-            <img alt="evenkvit" src="/evenkvit-mark.png" />
+            <img alt="evenkvit" height={123} src="/evenkvit-mark.webp" width={224} />
             <p className="muted auth-description">{t("auth.description")}</p>
           </div>
           <form className="auth-local-form" onSubmit={handleSubmit}>

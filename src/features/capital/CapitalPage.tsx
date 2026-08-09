@@ -1,10 +1,10 @@
-import AntApp from "antd/es/app";
 import { Check, ChevronRight, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { convertMoney } from "../../shared/lib/currency";
 import { formatMoney } from "../../shared/lib/format";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
+import { useFeedback } from "../../shared/ui/feedbackContext";
 import { TrendChart } from "../../shared/ui/TrendChart";
 import { CapitalAssetForm } from "./CapitalAssetForm";
 import { CapitalAssetDetailsPage } from "./CapitalAssetDetailsPage";
@@ -23,7 +23,7 @@ const GROUP_COLORS = ["#5a9feb", "#58b6ad", "#e8b94c", "#9b82e6", "#f07f86", "#c
 const typeMatches = (type: CapitalItemType, filter: TypeFilter) => filter === "all" || (filter === "market" && (type === "stock" || type === "fund")) || type === filter || (filter === "cash" && type === "deposit");
 
 export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurrencyChange }: { ratesVersion: number; debtTotalUsd?: number; currencyMode: DisplayCurrency; onCurrencyChange: (value: DisplayCurrency) => void }) {
-  const { message } = AntApp.useApp();
+  const { message } = useFeedback();
   const { locale, t } = useI18n();
   const state = useCapitalStore();
   const [editor, setEditor] = useState<Editor>(null);
@@ -93,7 +93,7 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
 
   return <>
     <section className="summary-header">
-      <div className="summary-copy"><span>{t("capital.total")}</span><div className="summary-total"><strong>{formatMoney(displayUsd(total), displayCurrency)}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{t("capital.invested")} {formatMoney(displayUsd(invested), displayCurrency)}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(displayUsd(result), displayCurrency)}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(displayUsd(income), displayCurrency)}</span><b aria-hidden="true">·</b><span>{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(displayUsd(debtTotalUsd), displayCurrency)}</span></small></div>
+      <div className="summary-copy"><span>{t("capital.total")}</span><div className="summary-total"><strong>{formatMoney(displayUsd(total), displayCurrency)}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{t("capital.invested")} {formatMoney(displayUsd(invested), displayCurrency)}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(displayUsd(result), displayCurrency)}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(displayUsd(income), displayCurrency)}</span><b aria-hidden="true">·</b><span className="summary-async-metric">{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(displayUsd(debtTotalUsd), displayCurrency)}</span></small></div>
       <div className="quick-actions"><button type="button" onClick={() => setEditor({ kind: "group" })}><Plus size={16}/>{t("capital.group.title")}</button><button className="primary" type="button" disabled={!state.groups.length} onClick={() => setEditor({ kind: "item" })}><Plus size={16}/>{t("capital.asset.title")}</button><button type="button" disabled={!state.items.length} onClick={() => setEditor({ kind: "event" })}><Plus size={16}/>{t("capital.event.title")}</button></div>
     </section>
 

@@ -78,6 +78,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .summary-copy { flex: 1 1 auto; min-width: 0; }
 .summary-copy > small { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: 12px; gap: 4px 7px; }
 .summary-copy > small b { color: var(--border-strong); font-weight: 400; }
+.summary-async-metric { display: inline-block; min-width: 132px; }
 .quick-actions { display: flex; gap: 8px; }
 .quick-actions button {
   align-items: center;
@@ -121,6 +122,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .button-filter i { border-radius: 50%; height: 6px; width: 6px; }
 .category-toggle { display: none !important; }
 .date-range { max-width: 340px; width: 100%; }
+.date-range-placeholder { min-height: 40px; }
 
 .analytics-grid { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); height: 280px; overflow: hidden; }
 .analytics-grid > :only-child { border-right: 0; grid-column: 1 / -1; }

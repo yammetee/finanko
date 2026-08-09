@@ -18,7 +18,10 @@ export async function initializeExpenseData(ownerId: string) {
   );
   if (missingDefaults.length > 0) {
     await saveCategories(missingDefaults, ownerId);
-    snapshot = await loadExpenseData();
+    snapshot = {
+      ...snapshot,
+      categories: [...snapshot.categories, ...missingDefaults],
+    };
   }
   useExpenseStore.setState(snapshot);
 }

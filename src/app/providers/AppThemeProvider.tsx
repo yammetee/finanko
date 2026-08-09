@@ -1,7 +1,7 @@
-import AntApp from "antd/es/app";
 import ConfigProvider from "antd/es/config-provider";
-import theme from "antd/es/theme";
+import darkAlgorithm from "antd/es/theme/themes/dark";
 import type { PropsWithChildren } from "react";
+import { FeedbackProvider } from "../../shared/ui/FeedbackProvider";
 
 const appFontFamily =
   'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -10,7 +10,7 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
   return (
     <ConfigProvider
       theme={{
-        algorithm: theme.darkAlgorithm,
+        algorithm: darkAlgorithm,
         token: {
           colorPrimary: "#1677ff",
           colorInfo: "#1677ff",
@@ -44,7 +44,7 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
         },
       }}
     >
-      <AntApp>{children}</AntApp>
+      <FeedbackProvider>{children}</FeedbackProvider>
     </ConfigProvider>
   );
 }
