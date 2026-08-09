@@ -2,7 +2,6 @@ import "@ant-design/v5-patch-for-react-19";
 import ConfigProvider from "antd/es/config-provider";
 import darkAlgorithm from "antd/es/theme/themes/dark";
 import type { PropsWithChildren } from "react";
-import { FeedbackProvider } from "../../shared/ui/FeedbackProvider";
 
 const appFontFamily =
   'Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -34,18 +33,13 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
           fontFamily: appFontFamily,
         },
         components: {
-          Button: {
-            primaryShadow: "none",
-            dangerShadow: "none",
-            fontWeight: 550,
-          },
           Input: {
             activeShadow: "0 0 0 2px rgba(22, 119, 255, 0.10)",
           },
         },
       }}
     >
-      <FeedbackProvider>{children}</FeedbackProvider>
+      {children}
     </ConfigProvider>
   );
 }

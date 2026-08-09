@@ -5,7 +5,6 @@ import { AppThemeProvider } from "../../app/providers/AppThemeProvider";
 const { RangePicker } = DatePicker;
 
 interface ExpenseDateRangeProps {
-  label: string;
   value?: [string, string];
   onChange: (value: [string, string]) => void;
 }
@@ -14,11 +13,10 @@ export function ExpenseDateRange(props: ExpenseDateRangeProps) {
   return <AppThemeProvider><ExpenseDateRangeContent {...props} /></AppThemeProvider>;
 }
 
-function ExpenseDateRangeContent({ label, value, onChange }: ExpenseDateRangeProps) {
+function ExpenseDateRangeContent({ value, onChange }: ExpenseDateRangeProps) {
   return (
     <RangePicker
       allowClear={false}
-      aria-label={label}
       className="date-range"
       value={value ? [dayjs(value[0]), dayjs(value[1])] : undefined}
       onChange={(range) => {
