@@ -15,6 +15,7 @@ interface AuthState {
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signUpWithPassword: (email: string, password: string, legalAcceptedAt: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   user: () => User | null;
 }
 
@@ -64,9 +65,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         emailRedirectTo: window.location.origin,
         data: {
           terms_accepted_at: legalAcceptedAt,
-          terms_version: "2026-08-04",
+          terms_version: "2026-08-09",
           privacy_acknowledged_at: legalAcceptedAt,
-          privacy_version: "2026-08-04",
+          privacy_version: "2026-08-09",
         },
       },
     });
@@ -83,6 +84,20 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (supabase) {
       await supabase.auth.signOut();
     }
+    set({ session: null, loading: false });
+  },
+  deleteAccount: async () => {
+    const supabase = await getSupabaseClient();
+    const session = get().session;
+    if (!supabase || !session) throw new Error("Authentication required");
+
+    const response = await fetch("/api/account", {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${session.access_token}` },
+    });
+    if (!response.ok) throw new Error("Account deletion failed");
+
+    await supabase.auth.signOut({ scope: "local" });
     set({ session: null, loading: false });
   },
   user: () => get().session?.user ?? null,

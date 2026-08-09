@@ -12,7 +12,7 @@ Expenses, capital, and debts share top-level navigation, but they never share re
 
 The current application uses Vite, React, TypeScript, Ant Design, Zustand, Supabase Auth/Postgres, and Vercel Functions.
 
-The active development plan is maintained in [TODO.md](./TODO.md).
+Account deletion is performed by the server through Supabase Auth Admin and requires a server-only `SUPABASE_SECRET_KEY`. Never expose this variable through Vite or a `NEXT_PUBLIC_*` name.
 
 ## Development
 
@@ -24,7 +24,6 @@ npm run dev
 ## Validation
 
 ```bash
-npm test
 npm run build
 npm run lint
 git diff --check

@@ -1,8 +1,10 @@
 {
   "actions.back": "Назад",
+  "actions.account": "Аккаунт",
   "actions.addItem": "Добавить позицию",
   "actions.cancel": "Отмена",
   "actions.delete": "Удалить",
+  "actions.deleteAccount": "Удалить аккаунт",
   "actions.edit": "Изменить",
   "actions.collapse": "Свернуть",
   "actions.more": "Ещё {count}",
@@ -251,5 +253,9 @@
   "debt.saved": "Сохранено",
   "debt.deleted": "Удалено",
   "debt.validation.required": "Заполните поле",
-  "debt.validation.positive": "Введите число больше нуля"
+  "debt.validation.positive": "Введите число больше нуля",
+  "account.delete.title": "Удалить аккаунт навсегда?",
+  "account.delete.description": "Аккаунт и все данные о расходах, капитале, долгах, котировках и расчётах будут удалены без возможности восстановления.",
+  "account.delete.confirm": "Удалить аккаунт",
+  "account.delete.failed": "Не удалось удалить аккаунт. Попробуйте ещё раз."
 }

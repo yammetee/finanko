@@ -65,6 +65,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   padding: 0 8px;
 }
 .header-actions button:hover, .page-heading button:hover { background: var(--surface-hover); color: var(--text); }
+.account-menu .ant-dropdown-menu { min-width: 220px; }
+.account-menu-email { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .main-content { display: grid; gap: 14px; margin: 0 auto; max-width: 960px; padding: 22px 16px 40px; }
 .summary-header { align-items: end; display: flex; gap: 32px; justify-content: space-between; }

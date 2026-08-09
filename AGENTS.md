@@ -17,6 +17,6 @@
 
 ## Quality
 
-- Add or update focused tests for changed behavior.
-- Run the repository's relevant tests, type checks, lint checks, build, and diff validation.
+- Do not create, modify, or run automated tests unless the user explicitly requests them.
+- Run the repository's relevant type checks, lint checks, build, and diff validation.
 - Report what changed, what was verified, and any remaining limitation.

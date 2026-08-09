@@ -1,8 +1,10 @@
 {
   "actions.back": "Back",
+  "actions.account": "Account",
   "actions.addItem": "Add item",
   "actions.cancel": "Cancel",
   "actions.delete": "Delete",
+  "actions.deleteAccount": "Delete account",
   "actions.edit": "Edit",
   "actions.collapse": "Collapse",
   "actions.more": "{count} more",
@@ -251,5 +253,9 @@
   "debt.saved": "Saved",
   "debt.deleted": "Deleted",
   "debt.validation.required": "Complete this field",
-  "debt.validation.positive": "Enter a number greater than zero"
+  "debt.validation.positive": "Enter a number greater than zero",
+  "account.delete.title": "Delete account permanently?",
+  "account.delete.description": "Your account and all expense, capital, debt, quote, and calculation data will be deleted permanently. This cannot be undone.",
+  "account.delete.confirm": "Delete account",
+  "account.delete.failed": "Could not delete the account. Please try again."
 }
