@@ -35,6 +35,11 @@ export async function initializeExpenseData(ownerId: string) {
     }
     if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
       useExpenseStore.setState({ ...snapshot, loadedRangeKey: expenseRangeKey(range), loadState: "ready" });
+      void loadExpenseTrackingStart().then((trackingStartedAt) => {
+        if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
+          useExpenseStore.setState({ trackingStartedAt });
+        }
+      }).catch(() => undefined);
     }
   } catch (error) {
     if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {

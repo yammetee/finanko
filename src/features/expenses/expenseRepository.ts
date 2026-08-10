@@ -76,17 +76,15 @@ export async function loadExpenseTrackingStart() {
 
 export async function loadExpenseData(range: ExpenseRange): Promise<ExpenseSnapshot> {
   const supabase = await requireSupabaseClient();
-  const [categories, expenses, trackingStartedAt] = await Promise.all([
+  const [categories, expenses] = await Promise.all([
     supabase.from("categories").select("id,name,color,created_at").order("created_at"),
     loadExpenses(range),
-    loadExpenseTrackingStart(),
   ]);
   if (categories.error) throw categories.error;
 
   return {
     categories: (categories.data ?? []).map((row) => categoryFromRow(row as Row)),
     expenses,
-    trackingStartedAt,
   };
 }
 

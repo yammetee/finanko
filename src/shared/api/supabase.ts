@@ -1,5 +1,5 @@
-import type { GoTrueClient } from "@supabase/auth-js";
-import type { PostgrestClient } from "@supabase/postgrest-js";
+import { GoTrueClient } from "@supabase/auth-js";
+import { PostgrestClient } from "@supabase/postgrest-js";
 
 const supabaseUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabasePublishableKey = import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as
@@ -25,7 +25,7 @@ function authStorageKey() {
 export function getSupabaseAuthClient() {
   if (!isSupabaseConfigured) return Promise.resolve(null);
 
-  authClientPromise ??= import("@supabase/auth-js").then(({ GoTrueClient }) =>
+  authClientPromise ??= Promise.resolve(
     new GoTrueClient({
       url: supabaseEndpoint("auth/v1"),
       headers: {
@@ -45,10 +45,7 @@ export function getSupabaseAuthClient() {
 async function getSupabaseDataClient() {
   if (!isSupabaseConfigured) return null;
 
-  dataClientPromise ??= Promise.all([
-    getSupabaseAuthClient(),
-    import("@supabase/postgrest-js"),
-  ]).then(([auth, { PostgrestClient }]) => {
+  dataClientPromise ??= getSupabaseAuthClient().then((auth) => {
     if (!auth) return null;
 
     const authenticatedFetch: typeof fetch = async (input, init) => {
