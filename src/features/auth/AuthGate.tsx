@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
-import { initializeExpenseData, resetExpenseData, useExpenseStore } from "../expenses/expenseStore";
+import { initializeExpenseData, resetExpenseData } from "../expenses/expenseStore";
 import { getAuthErrorKey } from "./authErrors";
 import { useAuthStore } from "./authStore";
 import { loadAuthenticatedApp } from "../../app/authenticatedAppModule";
@@ -19,8 +19,6 @@ export function AuthGate({ children }: AuthGateProps) {
     loading: state.loading,
     session: state.session,
   })));
-  const expenseOwnerId = useExpenseStore((state) => state.ownerId);
-  const expenseLoadState = useExpenseStore((state) => state.loadState);
   const { t } = useI18n();
   const currentUser = session?.user ?? null;
   const currentUserId = typeof currentUser?.id === "string" ? currentUser.id : null;
@@ -48,7 +46,7 @@ export function AuthGate({ children }: AuthGateProps) {
     void initializeExpenseData(currentUserId).catch(() => undefined);
   }, [currentUserId]);
 
-  if (loading || (currentUser && (expenseOwnerId !== currentUserId || expenseLoadState === "idle" || expenseLoadState === "loading"))) {
+  if (loading) {
     return (
       <div className="auth-screen">
         <div className="auth-loader" />
