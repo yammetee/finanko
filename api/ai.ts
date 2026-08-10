@@ -1,3 +1,5 @@
+import { getAuthenticatedUserId } from "../src/server/supabaseAuth";
+
 interface ApiRequest {
   method?: string;
   headers: { authorization?: string };
@@ -9,17 +11,6 @@ interface ApiResponse {
   json(payload: unknown): void;
   setHeader(name: string, value: string): void;
   end(): void;
-}
-
-async function isAuthenticatedUser(supabaseUrl: string, supabaseKey: string, token: string) {
-  try {
-    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { apikey: supabaseKey, authorization: `Bearer ${token}` },
-    });
-    return authResponse.ok;
-  } catch {
-    return false;
-  }
 }
 
 interface ReceiptOcrRow {
@@ -402,7 +393,7 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
       response.status(401).json({ error: "Unauthorized" });
       return;
     }
-    if (!await isAuthenticatedUser(supabaseUrl, supabaseKey, token)) {
+    if (!await getAuthenticatedUserId(supabaseUrl, supabaseKey, token)) {
       response.status(401).json({ error: "Unauthorized" });
       return;
     }

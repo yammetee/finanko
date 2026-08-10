@@ -22,26 +22,27 @@ export function CapitalRoute(props: Props) {
   const valuations = useCapitalStore((state) => state.valuations);
   const initialize = useCapitalStore((state) => state.initialize);
   const refreshQuotes = useCapitalStore((state) => state.refreshQuotes);
-  const refreshAttempted = useRef(false);
+  const refreshAttemptedKey = useRef<string | null>(null);
   const marketItemKey = useMemo(() => items
     .filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto"))
-    .map((item) => item.id)
+    .map((item) => `${item.id}:${item.symbol}:${item.primaryProvider ?? ""}:${item.primaryAssetId ?? ""}`)
     .sort()
     .join(":"), [items]);
   const hasMissingQuote = useMemo(() => items.some((item) => item.symbol
     && (item.type === "stock" || item.type === "fund" || item.type === "crypto")
     && !quotes[item.id]), [items, quotes]);
   const today = new Date().toISOString().slice(0, 10);
+  const refreshKey = `${userId}:${today}:${marketItemKey}`;
 
   useEffect(() => {
     if (ownerId !== userId || loadState === "idle") void initialize(userId);
   }, [initialize, loadState, ownerId, userId]);
 
   useEffect(() => {
-    if (ownerId !== userId || loadState !== "ready" || !marketItemKey || (!hasMissingQuote && valuations.some((value) => value.date === today)) || refreshAttempted.current) return;
-    refreshAttempted.current = true;
+    if (ownerId !== userId || loadState !== "ready" || !marketItemKey || (!hasMissingQuote && valuations.some((value) => value.date === today)) || refreshAttemptedKey.current === refreshKey) return;
+    refreshAttemptedKey.current = refreshKey;
     void refreshQuotes();
-  }, [hasMissingQuote, loadState, marketItemKey, ownerId, refreshQuotes, today, userId, valuations]);
+  }, [hasMissingQuote, loadState, marketItemKey, ownerId, refreshKey, refreshQuotes, today, userId, valuations]);
 
   if (ownerId !== userId || loadState === "idle" || loadState === "loading") return <FeaturePageState />;
   if (loadState === "error") return <FeaturePageState error onRetry={() => void initialize(userId)} />;

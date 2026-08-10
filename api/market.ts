@@ -1,3 +1,6 @@
+import { fetchWithTimeout } from "../src/shared/api/fetchWithTimeout";
+import { getAuthenticatedUserId } from "../src/server/supabaseAuth";
+
 const MARKET_REQUEST_LIMIT = 30;
 const MARKET_SYMBOL_PATTERN = /^[A-Z0-9._-]{1,32}$/;
 
@@ -18,16 +21,58 @@ interface MarketSearchResult { name: string; symbol: string; type: AssetType; pr
 const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; evenkvit/1.0)" };
 const COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
 const MARKET_PROVIDERS: MarketProvider[] = ["bybit", "coingecko", "nasdaq", "yahoo"];
+const MARKET_CACHE_MAX_ENTRIES = 500;
+const QUOTE_CACHE_TTL_MS = 60_000;
+const SEARCH_CACHE_TTL_MS = 5 * 60_000;
+const HISTORY_CACHE_TTL_MS = 15 * 60_000;
+const MARKET_RATE_WINDOW_MS = 60_000;
+const MARKET_RATE_LIMITS = { search: 30, quotes: 60, history: 10 } as const;
 
-async function isAuthenticatedUser(supabaseUrl: string, supabaseKey: string, token: string) {
-  try {
-    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { apikey: supabaseKey, authorization: `Bearer ${token}` },
-    });
-    return authResponse.ok;
-  } catch {
-    return false;
+interface CacheEntry { expiresAt: number; value?: unknown; request?: Promise<unknown> }
+const marketCache = new Map<string, CacheEntry>();
+const marketRateWindows = new Map<string, { startedAt: number; count: number }>();
+
+function pruneMarketCache(now: number) {
+  for (const [key, entry] of marketCache) if (entry.expiresAt <= now) marketCache.delete(key);
+  while (marketCache.size >= MARKET_CACHE_MAX_ENTRIES) {
+    const oldestKey = marketCache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    marketCache.delete(oldestKey);
   }
+}
+
+async function cachedMarketValue<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const cached = marketCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    if (cached.request) return cached.request as Promise<T>;
+    return cached.value as T;
+  }
+  pruneMarketCache(now);
+  const request = load().then((value) => {
+    marketCache.set(key, { expiresAt: Date.now() + ttlMs, value });
+    return value;
+  }).catch((error) => {
+    marketCache.delete(key);
+    throw error;
+  });
+  marketCache.set(key, { expiresAt: now + ttlMs, request });
+  return request;
+}
+
+function consumeMarketRateLimit(userId: string, mode: keyof typeof MARKET_RATE_LIMITS) {
+  const now = Date.now();
+  const key = `${userId}:${mode}`;
+  const current = marketRateWindows.get(key);
+  if (!current || now - current.startedAt >= MARKET_RATE_WINDOW_MS) {
+    marketRateWindows.set(key, { startedAt: now, count: 1 });
+    return 0;
+  }
+  if (current.count >= MARKET_RATE_LIMITS[mode]) {
+    return Math.max(1, Math.ceil((MARKET_RATE_WINDOW_MS - (now - current.startedAt)) / 1000));
+  }
+  current.count += 1;
+  return 0;
 }
 
 export function decimalNumber(value: number) {
@@ -127,23 +172,36 @@ function historyLoader(provider: MarketProvider) {
   return nasdaqHistory;
 }
 
-async function fetchRouted(matching: MarketAsset[], load: (provider: MarketProvider, asset: MarketAsset) => Promise<NormalizedQuote[]>) {
+async function fetchRouted(
+  matching: MarketAsset[],
+  cacheScope: string,
+  ttlMs: number,
+  load: (provider: MarketProvider, asset: MarketAsset, signal: AbortSignal) => Promise<NormalizedQuote[]>,
+) {
   const asset = matching[0];
   const [primary, fallback] = providerRoute(asset);
+  const cacheKey = [cacheScope, asset.type, primary, asset.providerAssetId ?? asset.symbol, fallback, asset.fallbackAssetId ?? ""].join(":").toLowerCase();
   try {
-    const quotes = await Promise.any([
-      load(primary, routedAsset(asset, primary, false)),
-      load(fallback, routedAsset(asset, fallback, true)),
-    ]);
+    const quotes = await cachedMarketValue(cacheKey, ttlMs, async () => {
+      const controller = new AbortController();
+      try {
+        return await Promise.any([
+          load(primary, routedAsset(asset, primary, false), controller.signal),
+          load(fallback, routedAsset(asset, fallback, true), controller.signal),
+        ]);
+      } finally {
+        controller.abort();
+      }
+    });
     return fanOutQuotes(quotes, matching);
   } catch {
     return [];
   }
 }
 
-async function bybitQuote(asset: MarketAsset): Promise<NormalizedQuote> {
+async function bybitQuote(asset: MarketAsset, signal: AbortSignal): Promise<NormalizedQuote> {
   const symbol = (asset.providerAssetId || `${asset.symbol}USDT`).toUpperCase();
-  const response = await fetch(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${encodeURIComponent(symbol)}`);
+  const response = await fetchWithTimeout(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${encodeURIComponent(symbol)}`, { signal }, 8_000);
   if (!response.ok) throw new Error("Bybit unavailable");
   const body = await response.json() as { retCode?: number; result?: { list?: Array<{ lastPrice?: string }> }; time?: number };
   const price = body.result?.list?.[0]?.lastPrice;
@@ -151,9 +209,9 @@ async function bybitQuote(asset: MarketAsset): Promise<NormalizedQuote> {
   return { itemId: asset.itemId, price, currency: "USD", provider: "bybit", quotedAt: new Date(body.time ?? Date.now()).toISOString() };
 }
 
-async function coinGeckoQuote(asset: MarketAsset): Promise<NormalizedQuote> {
+async function coinGeckoQuote(asset: MarketAsset, signal: AbortSignal): Promise<NormalizedQuote> {
   const id = coinGeckoAssetId(asset);
-  const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd&include_last_updated_at=true`);
+  const response = await fetchWithTimeout(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd&include_last_updated_at=true`, { signal }, 8_000);
   if (!response.ok) throw new Error("CoinGecko unavailable");
   const body = await response.json() as Record<string, { usd?: number; last_updated_at?: number }>;
   const quote = body[id];
@@ -177,9 +235,9 @@ function parseNasdaqDate(value: unknown) {
   return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
 }
 
-async function nasdaqQuote(asset: MarketAsset): Promise<NormalizedQuote> {
+async function nasdaqQuote(asset: MarketAsset, signal: AbortSignal): Promise<NormalizedQuote> {
   const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
-  const response = await fetch(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${nasdaqAssetClass(asset)}`, { headers: NASDAQ_HEADERS });
+  const response = await fetchWithTimeout(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${nasdaqAssetClass(asset)}`, { headers: NASDAQ_HEADERS, signal }, 8_000);
   if (!response.ok) throw new Error("Nasdaq unavailable");
   const body = await response.json() as { data?: { primaryData?: { lastSalePrice?: string; lastTradeTimestamp?: string } }; status?: { rCode?: number } };
   const price = parseNasdaqPrice(body.data?.primaryData?.lastSalePrice);
@@ -187,9 +245,9 @@ async function nasdaqQuote(asset: MarketAsset): Promise<NormalizedQuote> {
   return { itemId: asset.itemId, price, currency: "USD", provider: "nasdaq", quotedAt: parseNasdaqDate(body.data?.primaryData?.lastTradeTimestamp) ?? new Date().toISOString() };
 }
 
-async function yahooQuote(asset: MarketAsset): Promise<NormalizedQuote> {
+async function yahooQuote(asset: MarketAsset, signal: AbortSignal): Promise<NormalizedQuote> {
   const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
-  const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`);
+  const response = await fetchWithTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`, { signal }, 8_000);
   if (!response.ok) throw new Error("Yahoo Finance unavailable");
   const body = await response.json() as { chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; regularMarketTime?: number } }>; error?: unknown } };
   const meta = body.chart?.result?.[0]?.meta;
@@ -200,25 +258,27 @@ async function yahooQuote(asset: MarketAsset): Promise<NormalizedQuote> {
 export async function fetchMarketQuotes(assets: MarketAsset[]) {
   return (await Promise.all(uniqueAssets(assets).map((matching) => fetchRouted(
     matching,
-    async (provider, asset) => [await quoteLoader(provider)(asset)],
+    "quote",
+    QUOTE_CACHE_TTL_MS,
+    async (provider, asset, signal) => [await quoteLoader(provider)(asset, signal)],
   )))).flat();
 }
 
-async function bybitHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+async function bybitHistory(asset: MarketAsset, startDate: string, signal: AbortSignal): Promise<NormalizedQuote[]> {
   const symbol = (asset.providerAssetId || `${asset.symbol}USDT`).toUpperCase();
   const start = new Date(`${startDate}T00:00:00Z`).getTime();
-  const response = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${encodeURIComponent(symbol)}&interval=D&start=${start}&limit=1000`);
+  const response = await fetchWithTimeout(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${encodeURIComponent(symbol)}&interval=D&start=${start}&limit=1000`, { signal }, 12_000);
   if (!response.ok) throw new Error("Bybit history unavailable");
   const body = await response.json() as { retCode?: number; result?: { list?: string[][] } };
   if (body.retCode !== 0 || !Array.isArray(body.result?.list)) throw new Error("Invalid Bybit history");
   return body.result.list.flatMap((row) => row[0] && row[4] && /^\d+(\.\d+)?$/.test(row[4]) ? [{ itemId: asset.itemId, price: row[4], currency: "USD" as const, provider: "bybit", quotedAt: new Date(Number(row[0])).toISOString() }] : []);
 }
 
-async function coinGeckoHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+async function coinGeckoHistory(asset: MarketAsset, startDate: string, signal: AbortSignal): Promise<NormalizedQuote[]> {
   const id = coinGeckoAssetId(asset);
   const from = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
   const to = Math.floor(Date.now() / 1000);
-  const response = await fetch(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`);
+  const response = await fetchWithTimeout(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`, { signal }, 12_000);
   if (!response.ok) throw new Error("CoinGecko history unavailable");
   const body = await response.json() as { prices?: Array<[number, number]> };
   if (!Array.isArray(body.prices)) throw new Error("Invalid CoinGecko history");
@@ -227,10 +287,10 @@ async function coinGeckoHistory(asset: MarketAsset, startDate: string): Promise<
   return [...byDay.values()];
 }
 
-async function nasdaqHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+async function nasdaqHistory(asset: MarketAsset, startDate: string, signal: AbortSignal): Promise<NormalizedQuote[]> {
   const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
   const endDate = new Date().toISOString().slice(0, 10);
-  const response = await fetch(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${nasdaqAssetClass(asset)}&fromdate=${startDate}&todate=${endDate}&limit=5000`, { headers: NASDAQ_HEADERS });
+  const response = await fetchWithTimeout(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${nasdaqAssetClass(asset)}&fromdate=${startDate}&todate=${endDate}&limit=5000`, { headers: NASDAQ_HEADERS, signal }, 12_000);
   if (!response.ok) throw new Error("Nasdaq history unavailable");
   const body = await response.json() as { data?: { tradesTable?: { rows?: Array<{ date?: string; close?: string }> | null } }; status?: { rCode?: number } };
   if (body.status?.rCode !== 200) throw new Error("Invalid Nasdaq history");
@@ -242,11 +302,11 @@ async function nasdaqHistory(asset: MarketAsset, startDate: string): Promise<Nor
   });
 }
 
-async function yahooHistory(asset: MarketAsset, startDate: string): Promise<NormalizedQuote[]> {
+async function yahooHistory(asset: MarketAsset, startDate: string, signal: AbortSignal): Promise<NormalizedQuote[]> {
   const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
   const period1 = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
   const period2 = Math.floor(Date.now() / 1000);
-  const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${period1}&period2=${period2}`);
+  const response = await fetchWithTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${period1}&period2=${period2}`, { signal }, 12_000);
   if (!response.ok) throw new Error("Yahoo Finance history unavailable");
   const body = await response.json() as { chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }>; error?: unknown } };
   const result = body.chart?.result?.[0];
@@ -258,47 +318,52 @@ async function yahooHistory(asset: MarketAsset, startDate: string): Promise<Norm
 export async function fetchMarketHistory(assets: MarketAsset[], startDate: string) {
   return (await Promise.all(uniqueAssets(assets).map((matching) => fetchRouted(
     matching,
-    (provider, asset) => historyLoader(provider)(asset, startDate),
+    `history:${startDate}`,
+    HISTORY_CACHE_TTL_MS,
+    (provider, asset, signal) => historyLoader(provider)(asset, startDate, signal),
   )))).flat();
 }
 
 export async function searchMarketAssets(query: string, type?: AssetType): Promise<MarketSearchResult[]> {
-  const cryptoRequest = type && type !== "crypto" ? Promise.resolve([]) : fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`).then(async (response) => {
-    if (!response.ok) return [];
-    const body = await response.json() as { coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number }> };
-    return (body.coins ?? []).flatMap((coin) => {
-      const symbol = normalizeMarketSymbol(coin.symbol);
-      return coin.id && coin.name && symbol ? [{ name: coin.name, symbol, type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }] : [];
-    }).slice(0, 6);
-  }).catch(() => []);
-  const securityRequest = type === "crypto" ? Promise.resolve([]) : fetch(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS }).then(async (response) => {
-    if (!response.ok) return [];
-    const body = await response.json() as { data?: Array<{ symbol?: string; name?: string; asset?: string }> };
-    return (body.data ?? []).flatMap((asset) => {
-      const symbol = normalizeMarketSymbol(asset.symbol);
-      const assetType = asset.asset === "STOCKS" ? "stock" as const : ["ETF", "MUTUALFUNDS"].includes(asset.asset ?? "") ? "fund" as const : undefined;
-      return asset.name && symbol && assetType && (!type || assetType === type)
-        ? [{ name: asset.name.trim(), symbol, type: assetType, provider: "nasdaq" as const, providerAssetId: symbol }]
-        : [];
-    });
-  }).catch(() => []);
-  const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`).then(async (response) => {
-    if (!response.ok) return [];
-    const body = await response.json() as { quotes?: Array<{ symbol?: string; longname?: string; shortname?: string; quoteType?: string }> };
-    return (body.quotes ?? []).flatMap((asset) => {
-      const symbol = normalizeMarketSymbol(asset.symbol);
-      const assetType = asset.quoteType === "EQUITY" ? "stock" as const : asset.quoteType === "ETF" || asset.quoteType === "MUTUALFUND" ? "fund" as const : undefined;
-      const name = asset.longname?.trim() || asset.shortname?.trim();
-      return name && symbol && assetType && (!type || assetType === type)
-        ? [{ name, symbol, type: assetType, provider: "yahoo" as const, providerAssetId: symbol }]
-        : [];
-    });
-  }).catch(() => []);
-  const [crypto, nasdaqSecurities, yahooSecurities] = await Promise.all([cryptoRequest, securityRequest, yahooRequest]);
-  const rankedCrypto = crypto.sort((a, b) => a.rank - b.rank).map((asset) => ({ name: asset.name, symbol: asset.symbol, type: asset.type, provider: asset.provider, providerAssetId: asset.providerAssetId }));
-  const securities = new Map<string, MarketSearchResult>();
-  for (const asset of [...yahooSecurities, ...nasdaqSecurities]) if (!securities.has(`${asset.type}:${asset.symbol}`)) securities.set(`${asset.type}:${asset.symbol}`, asset);
-  return [...rankedCrypto, ...securities.values()].slice(0, 10);
+  const cacheKey = `search:${type ?? "all"}:${query.trim().toLowerCase()}`;
+  return cachedMarketValue(cacheKey, SEARCH_CACHE_TTL_MS, async () => {
+    const cryptoRequest = type && type !== "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`, {}, 8_000).then(async (response) => {
+      if (!response.ok) return [];
+      const body = await response.json() as { coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number }> };
+      return (body.coins ?? []).flatMap((coin) => {
+        const symbol = normalizeMarketSymbol(coin.symbol);
+        return coin.id && coin.name && symbol ? [{ name: coin.name, symbol, type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }] : [];
+      }).slice(0, 6);
+    }).catch(() => []);
+    const securityRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS }, 8_000).then(async (response) => {
+      if (!response.ok) return [];
+      const body = await response.json() as { data?: Array<{ symbol?: string; name?: string; asset?: string }> };
+      return (body.data ?? []).flatMap((asset) => {
+        const symbol = normalizeMarketSymbol(asset.symbol);
+        const assetType = asset.asset === "STOCKS" ? "stock" as const : ["ETF", "MUTUALFUNDS"].includes(asset.asset ?? "") ? "fund" as const : undefined;
+        return asset.name && symbol && assetType && (!type || assetType === type)
+          ? [{ name: asset.name.trim(), symbol, type: assetType, provider: "nasdaq" as const, providerAssetId: symbol }]
+          : [];
+      });
+    }).catch(() => []);
+    const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`, {}, 8_000).then(async (response) => {
+      if (!response.ok) return [];
+      const body = await response.json() as { quotes?: Array<{ symbol?: string; longname?: string; shortname?: string; quoteType?: string }> };
+      return (body.quotes ?? []).flatMap((asset) => {
+        const symbol = normalizeMarketSymbol(asset.symbol);
+        const assetType = asset.quoteType === "EQUITY" ? "stock" as const : asset.quoteType === "ETF" || asset.quoteType === "MUTUALFUND" ? "fund" as const : undefined;
+        const name = asset.longname?.trim() || asset.shortname?.trim();
+        return name && symbol && assetType && (!type || assetType === type)
+          ? [{ name, symbol, type: assetType, provider: "yahoo" as const, providerAssetId: symbol }]
+          : [];
+      });
+    }).catch(() => []);
+    const [crypto, nasdaqSecurities, yahooSecurities] = await Promise.all([cryptoRequest, securityRequest, yahooRequest]);
+    const rankedCrypto = crypto.sort((a, b) => a.rank - b.rank).map((asset) => ({ name: asset.name, symbol: asset.symbol, type: asset.type, provider: asset.provider, providerAssetId: asset.providerAssetId }));
+    const securities = new Map<string, MarketSearchResult>();
+    for (const asset of [...yahooSecurities, ...nasdaqSecurities]) if (!securities.has(`${asset.type}:${asset.symbol}`)) securities.set(`${asset.type}:${asset.symbol}`, asset);
+    return [...rankedCrypto, ...securities.values()].slice(0, 10);
+  });
 }
 
 export async function handler(request: ApiRequest, response: ApiResponse) {
@@ -309,13 +374,17 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
   const token = request.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!token || !url || !key || !await isAuthenticatedUser(url, key, token)) { response.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = token && url && key ? await getAuthenticatedUserId(url, key, token) : null;
+  if (!userId) { response.status(401).json({ error: "Unauthorized" }); return; }
   const mode = request.body && typeof request.body === "object" ? (request.body as { mode?: unknown }).mode : undefined;
   if (mode === "search") {
     const { query, type } = request.body as { query?: unknown; type?: unknown };
     if (typeof query !== "string" || query.trim().length < 2 || query.trim().length > 50) { response.status(400).json({ error: "Invalid search query" }); return; }
     if (type !== "stock" && type !== "fund" && type !== "crypto") { response.status(400).json({ error: "Invalid asset type" }); return; }
-    response.status(200).json({ assets: await searchMarketAssets(query.trim(), type) });
+    const retryAfter = consumeMarketRateLimit(userId, "search");
+    if (retryAfter) { response.setHeader("Retry-After", String(retryAfter)); response.status(429).json({ error: "Too many market requests" }); return; }
+    try { response.status(200).json({ assets: await searchMarketAssets(query.trim(), type) }); }
+    catch { response.status(503).json({ error: "Market data unavailable" }); }
     return;
   }
   const assets = validateMarketAssets(request.body);
@@ -323,11 +392,16 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
   const startDate = (request.body as { startDate?: unknown }).startDate;
   if (mode === "history") {
     if (typeof startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { response.status(400).json({ error: "Invalid history range" }); return; }
-    response.status(200).json({ quotes: await fetchMarketHistory(assets, startDate) });
+    const retryAfter = consumeMarketRateLimit(userId, "history");
+    if (retryAfter) { response.setHeader("Retry-After", String(retryAfter)); response.status(429).json({ error: "Too many market requests" }); return; }
+    try { response.status(200).json({ quotes: await fetchMarketHistory(assets, startDate) }); }
+    catch { response.status(503).json({ error: "Market data unavailable" }); }
     return;
   }
-  const quotes = await fetchMarketQuotes(assets);
-  response.status(200).json({ quotes });
+  const retryAfter = consumeMarketRateLimit(userId, "quotes");
+  if (retryAfter) { response.setHeader("Retry-After", String(retryAfter)); response.status(429).json({ error: "Too many market requests" }); return; }
+  try { response.status(200).json({ quotes: await fetchMarketQuotes(assets) }); }
+  catch { response.status(503).json({ error: "Market data unavailable" }); }
 }
 
 async function fetchHandler(request: Request) {

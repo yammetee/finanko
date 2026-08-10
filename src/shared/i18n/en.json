@@ -89,7 +89,7 @@
   "expense.textRequired": "Enter an expense description",
   "expense.untitled": "Expense",
   "expense.updated": "Expense updated",
-  "feedback.loadFailed": "Could not load expenses. Reload the app and try again.",
+  "feedback.loadFailed": "Could not load expenses. Try again.",
   "feedback.saveFailed": "Could not save changes. Please try again.",
   "form.currency": "Currency",
   "form.date": "Date",

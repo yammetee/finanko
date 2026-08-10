@@ -89,7 +89,7 @@
   "expense.textRequired": "Введите описание расхода",
   "expense.untitled": "Расход",
   "expense.updated": "Расход обновлён",
-  "feedback.loadFailed": "Не удалось загрузить расходы. Перезагрузите приложение и попробуйте снова.",
+  "feedback.loadFailed": "Не удалось загрузить расходы. Повторите попытку.",
   "feedback.saveFailed": "Не удалось сохранить изменения. Попробуйте ещё раз.",
   "form.currency": "Валюта",
   "form.date": "Дата",

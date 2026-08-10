@@ -4,7 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
 import { useI18n } from "../../shared/i18n/i18nContext";
-import { convertMoney, getHistoricalConversionRates } from "../../shared/lib/currency";
+import { convertMoney } from "../../shared/lib/currency";
 import { formatMoney } from "../../shared/lib/format";
 import type { Currency } from "../../shared/types/expense";
 import { TrendChart } from "../../shared/ui/TrendChart";
@@ -52,9 +52,7 @@ export function DebtPage({ currencyMode, onCurrencyChange, ratesVersion, onDataC
   }, [ratesVersion, state.debts, state.events]);
   const convert = useCallback((value: string, currency: Currency, date?: string) => {
     void ratesVersion;
-    if (!date) return convertMoney(Number(value), currency, displayCurrency);
-    const rates = getHistoricalConversionRates(currency, displayCurrency, date);
-    return Number(value) / Number(rates.from) * Number(rates.to);
+    return convertMoney(Number(value), currency, displayCurrency, date);
   }, [displayCurrency, ratesVersion]);
   const active = useMemo(() => projections.filter(({ projection }) => projection.status === "active"), [projections]);
   const current = useMemo(() => projections.filter(({ projection }) => projection.status === statusFilter), [projections, statusFilter]);

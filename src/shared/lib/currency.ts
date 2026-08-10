@@ -1,33 +1,20 @@
-import dayjs from "dayjs";
-import ratesData from "../data/exchangeRates.json";
 import type { Currency } from "../types/expense";
 
-type RateRow = Record<Currency, number> & { date: string };
+type RateRow = Record<Currency, number>;
 
-const rates = ratesData.rates as RateRow[];
-const sortedRates = [...rates].sort((a, b) => +new Date(b.date) - +new Date(a.date));
 let liveRateRow: RateRow | null = null;
 
 export function setLiveExchangeRates(row: RateRow | null) {
   liveRateRow = row;
 }
 
-function getHistoricalRateRow(date?: string) {
-  const target = date ? dayjs(date) : dayjs();
-  return sortedRates.find((row) => !dayjs(row.date).isAfter(target, "day")) ?? sortedRates[sortedRates.length - 1];
+function getRateRow() {
+  if (!liveRateRow) throw new Error("exchange_rates_unavailable");
+  return liveRateRow;
 }
 
-function getRateRow(date?: string) {
-  return liveRateRow ?? getHistoricalRateRow(date);
-}
-
-export function getConversionRates(from: Currency, to: Currency, date?: string) {
-  const row = getRateRow(date);
-  return { from: String(row[from]), to: String(row[to]) };
-}
-
-export function getHistoricalConversionRates(from: Currency, to: Currency, date: string) {
-  const row = getHistoricalRateRow(date);
+export function getConversionRates(from: Currency, to: Currency) {
+  const row = getRateRow();
   return { from: String(row[from]), to: String(row[to]) };
 }
 
@@ -37,8 +24,9 @@ export function convertMoney(
   to: Currency,
   date?: string,
 ) {
+  void date;
   if (from === to) return amount;
-  const row = getRateRow(date);
+  const row = getRateRow();
   const usdAmount = amount / row[from];
   return usdAmount * row[to];
 }

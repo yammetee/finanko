@@ -1,5 +1,7 @@
 import { initializeExpenseData, resetExpenseData } from "../features/expenses/expenseStore";
 import { clearPreloadedFinancialSummary, preloadFinancialSummary } from "../features/summary/financialSummaryRepository";
+import { loadTrendChart } from "../shared/ui/trendChartModule";
+import { refreshLiveExchangeRates } from "../shared/lib/exchangeRates";
 import { loadAuthenticatedApp } from "./authenticatedAppModule";
 
 let activeOwnerId: string | null = null;
@@ -16,6 +18,8 @@ export function startAuthenticatedStartup(ownerId: string) {
   const app = loadAuthenticatedApp();
 
   ignoreFailure(app);
+  ignoreFailure(loadTrendChart());
+  ignoreFailure(refreshLiveExchangeRates(true));
   ignoreFailure(initializeExpenseData(ownerId));
   if (previousOwnerId) clearPreloadedFinancialSummary(previousOwnerId);
   ignoreFailure(preloadFinancialSummary(ownerId));

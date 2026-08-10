@@ -1,5 +1,6 @@
 import { GoTrueClient } from "@supabase/auth-js";
 import { PostgrestClient } from "@supabase/postgrest-js";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 
 const supabaseUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabasePublishableKey = import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as
@@ -36,6 +37,7 @@ export function getSupabaseAuthClient() {
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
+      fetch: fetchWithTimeout,
     }),
   );
 
@@ -54,7 +56,7 @@ async function getSupabaseDataClient() {
       const headers = new Headers(init?.headers);
       if (!headers.has("apikey")) headers.set("apikey", supabasePublishableKey!);
       if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${accessToken}`);
-      return fetch(input, { ...init, headers });
+      return fetchWithTimeout(input, { ...init, headers });
     };
 
     const dataClient = new PostgrestClient(supabaseEndpoint("rest/v1"), {

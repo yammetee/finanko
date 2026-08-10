@@ -1,4 +1,5 @@
 import { getSupabaseAuthClient } from "../../shared/api/supabase";
+import { fetchWithTimeout } from "../../shared/api/fetchWithTimeout";
 import { MARKET_REQUEST_LIMIT, normalizeMarketSymbol } from "./marketContract";
 import type { CapitalAssetSuggestion, CapitalItem, CapitalQuote } from "./capitalTypes";
 
@@ -20,11 +21,12 @@ async function marketAccessToken() {
   return token;
 }
 
-async function marketRequest<T>(token: string, body: Record<string, unknown>, errorMessage: string): Promise<T> {
-  const response = await fetch("/api/market", {
+async function marketRequest<T>(token: string, body: Record<string, unknown>, errorMessage: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetchWithTimeout("/api/market", {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
   if (!response.ok) throw new Error(errorMessage);
   return response.json() as Promise<T>;
@@ -54,15 +56,11 @@ async function loadMarketData(items: CapitalItem[], mode?: "history", startDate?
   const assets = marketAssets(items);
   if (!assets.length) return [];
   const token = await marketAccessToken();
-  const responses: Array<{ quotes?: CapitalQuote[] }> = [];
-  let requestError: unknown;
-  for (const batch of chunks(assets, MARKET_REQUEST_LIMIT)) {
-    try {
-      responses.push(await marketRequest(token, { mode, startDate, assets: batch }, "Market data unavailable"));
-    } catch (error) {
-      requestError ??= error;
-    }
-  }
+  const results = await Promise.allSettled(chunks(assets, MARKET_REQUEST_LIMIT).map((batch) => (
+    marketRequest<{ quotes?: CapitalQuote[] }>(token, { mode, startDate, assets: batch }, "Market data unavailable")
+  )));
+  const responses = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  const requestError = results.find((result): result is PromiseRejectedResult => result.status === "rejected")?.reason;
   if (!responses.length) throw requestError ?? new Error("Market data unavailable");
   return responses.flatMap((body) => Array.isArray(body.quotes) ? body.quotes : []);
 }
@@ -75,8 +73,8 @@ export function loadMarketHistory(items: CapitalItem[], startDate: string) {
   return loadMarketData(items, "history", startDate);
 }
 
-export async function searchMarketAssets(query: string, type: CapitalAssetSuggestion["type"]): Promise<CapitalAssetSuggestion[]> {
+export async function searchMarketAssets(query: string, type: CapitalAssetSuggestion["type"], signal?: AbortSignal): Promise<CapitalAssetSuggestion[]> {
   const token = await marketAccessToken();
-  const body = await marketRequest<{ assets?: CapitalAssetSuggestion[] }>(token, { mode: "search", query, type }, "Asset search unavailable");
+  const body = await marketRequest<{ assets?: CapitalAssetSuggestion[] }>(token, { mode: "search", query, type }, "Asset search unavailable", signal);
   return Array.isArray(body.assets) ? body.assets : [];
 }

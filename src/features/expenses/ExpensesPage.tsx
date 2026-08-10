@@ -56,6 +56,7 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
     loadState: state.loadState,
     rangeLoading: state.rangeLoading,
     loadedRangeKey: state.loadedRangeKey,
+    retry: state.retry,
     loadRange: state.loadRange,
     addExpenses: state.addExpenses,
     updateExpense: state.updateExpense,
@@ -243,7 +244,7 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
 
       <section className="history-section">
         <div className="section-heading"><h2>{t("expense.history")}</h2><span>{expensesReady ? expenseView.history.length : "—"}</span></div>
-        {expensesFailed ? <p className="muted">{t("feedback.loadFailed")}</p> : null}
+        {expensesFailed ? <><p className="muted">{t("feedback.loadFailed")}</p><button className="history-toggle" type="button" onClick={() => void expenseState.retry()}>{t("actions.retry")}</button></> : null}
         {expensesReady ? <ExpenseRows entries={visibleHistory} displayCurrency={currencyMode === "native" ? "native" : displayCurrency} onSelect={setSelected} /> : null}
         {hiddenHistoryCount > 0 ? <button className="history-toggle" type="button" aria-expanded={showAllHistory} onClick={() => setShowAllHistory((value) => !value)}>{showAllHistory ? t("actions.collapse") : t("actions.showMore", { count: hiddenHistoryCount })}</button> : null}
       </section>

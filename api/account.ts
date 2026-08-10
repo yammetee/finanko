@@ -1,4 +1,6 @@
 import { GoTrueAdminApi } from "@supabase/auth-js";
+import { fetchWithTimeout } from "../src/shared/api/fetchWithTimeout";
+import { getAuthenticatedUserId } from "../src/server/supabaseAuth";
 
 interface ApiRequest {
   method?: string;
@@ -10,21 +12,6 @@ interface ApiResponse {
   json(payload: unknown): void;
   setHeader(name: string, value: string): void;
   end(): void;
-}
-
-const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-async function authenticatedUserId(supabaseUrl: string, publishableKey: string, token: string) {
-  try {
-    const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { apikey: publishableKey, authorization: `Bearer ${token}` },
-    });
-    if (!authResponse.ok) return null;
-    const user = await authResponse.json() as { id?: unknown };
-    return typeof user.id === "string" && USER_ID_PATTERN.test(user.id) ? user.id : null;
-  } catch {
-    return null;
-  }
 }
 
 export async function handler(request: ApiRequest, response: ApiResponse) {
@@ -47,7 +34,7 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
     return;
   }
 
-  const userId = await authenticatedUserId(supabaseUrl, publishableKey, token);
+  const userId = await getAuthenticatedUserId(supabaseUrl, publishableKey, token);
   if (!userId) {
     response.status(401).json({ error: "Unauthorized" });
     return;
@@ -59,6 +46,7 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
       Authorization: `Bearer ${secretKey}`,
       apikey: secretKey,
     },
+    fetch: fetchWithTimeout,
   });
   const { error } = await admin.deleteUser(userId, false);
   if (error) {

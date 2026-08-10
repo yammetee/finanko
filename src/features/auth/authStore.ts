@@ -1,6 +1,7 @@
 import type { Session } from "@supabase/auth-js";
 import { create } from "zustand";
 import { getSupabaseAuthClient, isSupabaseConfigured } from "../../shared/api/supabase";
+import { fetchWithTimeout } from "../../shared/api/fetchWithTimeout";
 
 let unsubscribeAuth: (() => void) | null = null;
 let initializeAuthPromise: Promise<void> | null = null;
@@ -92,7 +93,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const session = get().session;
     if (!auth || !session) throw new Error("Authentication required");
 
-    const response = await fetch("/api/account", {
+    const response = await fetchWithTimeout("/api/account", {
       method: "DELETE",
       headers: { authorization: `Bearer ${session.access_token}` },
     });

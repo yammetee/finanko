@@ -31,6 +31,7 @@ export interface ExpenseState extends ExpenseSnapshot {
   loadState: LoadState;
   loadedRangeKey: string | null;
   rangeLoading: boolean;
+  retry: () => Promise<void>;
   loadRange: (range: ExpenseRange) => Promise<void>;
   addExpenses: (inputs: NewExpenseInput[]) => Promise<void>;
   updateExpense: (id: string, input: NewExpenseInput) => Promise<void>;

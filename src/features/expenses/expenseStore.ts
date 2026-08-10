@@ -18,6 +18,7 @@ export async function initializeExpenseData(ownerId: string) {
   expenseRangeRequestVersion += 1;
   const range = initialExpenseRange();
   useExpenseStore.setState({ ownerId, categories: [], expenses: [], trackingStartedAt: undefined, loadedRangeKey: null, rangeLoading: false, loadState: "loading" });
+  const trackingRequest = loadExpenseTrackingStart().catch(() => undefined);
   try {
     let snapshot = await loadExpenseData(range);
     const existingNames = new Set(
@@ -35,11 +36,11 @@ export async function initializeExpenseData(ownerId: string) {
     }
     if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
       useExpenseStore.setState({ ...snapshot, loadedRangeKey: expenseRangeKey(range), loadState: "ready" });
-      void loadExpenseTrackingStart().then((trackingStartedAt) => {
+      void trackingRequest.then((trackingStartedAt) => {
         if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
           useExpenseStore.setState({ trackingStartedAt });
         }
-      }).catch(() => undefined);
+      });
     }
   } catch (error) {
     if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
@@ -74,6 +75,10 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
   trackingStartedAt: undefined,
   loadedRangeKey: null,
   rangeLoading: false,
+  retry: async () => {
+    const ownerId = useExpenseStore.getState().ownerId;
+    if (ownerId) await initializeExpenseData(ownerId);
+  },
   loadState: "idle",
   loadRange: async (range) => {
     const ownerId = get().ownerId;

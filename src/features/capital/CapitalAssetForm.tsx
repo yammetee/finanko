@@ -48,10 +48,12 @@ function CapitalAssetFormContent({ item, groups, items, saving, onBack, onSave }
   useEffect(() => {
     if (item || !market || query.trim().length < 2) { setSuggestions([]); return; }
     let active = true;
+    let requestController: AbortController | undefined;
     const timer = window.setTimeout(() => {
-      void searchMarketAssets(query.trim(), type).then((values) => { if (active) setSuggestions(values); }).catch(() => { if (active) setSuggestions([]); });
+      requestController = new AbortController();
+      void searchMarketAssets(query.trim(), type, requestController.signal).then((values) => { if (active) setSuggestions(values); }).catch(() => { if (active) setSuggestions([]); });
     }, 300);
-    return () => { active = false; window.clearTimeout(timer); };
+    return () => { active = false; requestController?.abort(); window.clearTimeout(timer); };
   }, [item, market, query, type]);
 
   const chooseSuggestion = (value: CapitalAssetSuggestion) => {
