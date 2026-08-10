@@ -4,26 +4,44 @@ import { createDefaultCategories } from "./categoryData";
 import { loadExpenseData, saveCategories, saveExpenses } from "./expenseRepository";
 import type { ExpenseState, NewExpenseInput } from "./expenseTypes";
 
+let expenseSessionVersion = 0;
+
 function uid(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
 export async function initializeExpenseData(ownerId: string) {
-  let snapshot = await loadExpenseData();
-  const existingNames = new Set(
-    snapshot.categories.map((category) => category.name.trim().toLocaleLowerCase()),
-  );
-  const missingDefaults = createDefaultCategories().filter(
-    (category) => !existingNames.has(category.name.toLocaleLowerCase()),
-  );
-  if (missingDefaults.length > 0) {
-    await saveCategories(missingDefaults, ownerId);
-    snapshot = {
-      ...snapshot,
-      categories: [...snapshot.categories, ...missingDefaults],
-    };
+  const version = ++expenseSessionVersion;
+  useExpenseStore.setState({ ownerId, categories: [], expenses: [], loadState: "loading" });
+  try {
+    let snapshot = await loadExpenseData();
+    const existingNames = new Set(
+      snapshot.categories.map((category) => category.name.trim().toLocaleLowerCase()),
+    );
+    const missingDefaults = createDefaultCategories().filter(
+      (category) => !existingNames.has(category.name.toLocaleLowerCase()),
+    );
+    if (missingDefaults.length > 0) {
+      await saveCategories(missingDefaults, ownerId);
+      snapshot = {
+        ...snapshot,
+        categories: [...snapshot.categories, ...missingDefaults],
+      };
+    }
+    if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
+      useExpenseStore.setState({ ...snapshot, loadState: "ready" });
+    }
+  } catch (error) {
+    if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
+      useExpenseStore.setState({ loadState: "error" });
+    }
+    throw error;
   }
-  useExpenseStore.setState(snapshot);
+}
+
+export function resetExpenseData() {
+  expenseSessionVersion += 1;
+  useExpenseStore.setState({ ownerId: null, categories: [], expenses: [], loadState: "idle" });
 }
 
 function buildExpense(input: NewExpenseInput, existing?: Expense): Expense {
@@ -39,8 +57,10 @@ function buildExpense(input: NewExpenseInput, existing?: Expense): Expense {
 }
 
 export const useExpenseStore = create<ExpenseState>()((set, get) => ({
+  ownerId: null,
   categories: [],
   expenses: [],
+  loadState: "idle",
   addExpenses: async (inputs) => {
     const expenses = inputs.map((input) => buildExpense(input));
     await saveExpenses(expenses);

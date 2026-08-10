@@ -20,3 +20,9 @@
 - Do not create, modify, or run automated tests unless the user explicitly requests them.
 - Run the repository's relevant type checks, lint checks, build, and diff validation.
 - Report what changed, what was verified, and any remaining limitation.
+
+## Performance constraints
+
+- Never introduce artificial delays or timer-based loading strategies. This includes using `setTimeout`, sleeps, delayed dynamic imports, idle-callback timeouts, or deferred navigation/data loading to influence perceived performance or Lighthouse results.
+- Improve startup performance only by reducing work, splitting code at real feature boundaries, loading independent work asynchronously, and fixing the underlying render, network, or data bottleneck.
+- If a timer is genuinely required for explicitly requested product behavior, obtain the user's explicit approval before adding it.

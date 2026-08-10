@@ -2,22 +2,17 @@ import { Eye, EyeOff, LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
-import { initializeExpenseData } from "../expenses/expenseStore";
+import { initializeExpenseData, resetExpenseData } from "../expenses/expenseStore";
 import { getAuthErrorKey } from "./authErrors";
 import { useAuthStore } from "./authStore";
 
-interface AuthGateProps {
-  children: React.ReactNode;
-  preloadAuthenticatedApp: () => void;
-}
+interface AuthGateProps { children: React.ReactNode }
 
-export function AuthGate({ children, preloadAuthenticatedApp }: AuthGateProps) {
+export function AuthGate({ children }: AuthGateProps) {
   const { initialize, signInWithPassword, signUpWithPassword, loading, user } = useAuthStore();
   const { t } = useI18n();
   const currentUser = user();
   const currentUserId = typeof currentUser?.id === "string" ? currentUser.id : null;
-  const [expensesReady, setExpensesReady] = useState(false);
-  const [expensesError, setExpensesError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,59 +27,18 @@ export function AuthGate({ children, preloadAuthenticatedApp }: AuthGateProps) {
   }, [initialize]);
 
   useEffect(() => {
-    let active = true;
-
     if (typeof currentUserId !== "string") {
-      setExpensesReady(false);
-      return () => {
-        active = false;
-      };
+      resetExpenseData();
+      return;
     }
 
-    setExpensesReady(false);
-    setExpensesError(null);
-    preloadAuthenticatedApp();
-    void initializeExpenseData(currentUserId)
-      .then(() => { if (active) setExpensesReady(true); })
-      .catch(() => { if (active) setExpensesError(t("feedback.loadFailed")); });
-
-    return () => {
-      active = false;
-    };
-  }, [currentUserId, preloadAuthenticatedApp, t]);
-
-  if (currentUser && expensesError) {
-    return <div className="auth-screen"><div className="auth-card"><p className="muted auth-description">{expensesError}</p><button className="auth-action auth-action-primary" type="button" onClick={() => window.location.reload()}>{t("actions.retry")}</button></div></div>;
-  }
+    void initializeExpenseData(currentUserId).catch(() => undefined);
+  }, [currentUserId]);
 
   if (loading) {
     return (
       <div className="auth-screen">
         <div className="auth-loader" />
-      </div>
-    );
-  }
-
-  if (currentUser && !expensesReady) {
-    return (
-      <div className="app-shell app-loading-shell" aria-busy="true">
-        <header className="app-header">
-          <span className="brand"><img alt="" height={123} src="/evenkvit-mark.webp" width={224} /></span>
-          <nav className="header-tabs" aria-label="Разделы">
-            <button className="active" disabled type="button">{t("expense.history")}</button>
-            <button disabled type="button">{t("capital.title")}</button>
-            <button disabled type="button">{t("debt.title")}</button>
-          </nav>
-          <div className="header-actions"><button aria-hidden="true" disabled tabIndex={-1} type="button" /></div>
-        </header>
-        <main className="main-content">
-          <section className="summary-header">
-            <div className="summary-copy"><span>{t("expense.spent")}</span><div className="summary-total"><strong>—</strong></div><small aria-hidden="true"><span className="loading-line loading-line-wide" /></small></div>
-            <div className="quick-actions" aria-hidden="true"><span /><span /><span /></div>
-          </section>
-          <section className="filters" aria-hidden="true"><div className="loading-line" /><div className="loading-line loading-line-wide" /></section>
-          <div className="app-loading-panel" aria-hidden="true"><div className="auth-loader" /></div>
-        </main>
       </div>
     );
   }

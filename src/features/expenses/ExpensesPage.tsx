@@ -50,6 +50,9 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
   const { message } = useFeedback();
   const { locale, t } = useI18n();
   const expenseState = useExpenseStore();
+  const expensesReady = expenseState.loadState === "ready";
+  const expensesFailed = expenseState.loadState === "error";
+  const expensesLoading = expenseState.loadState === "idle" || expenseState.loadState === "loading";
   const receiptInput = useRef<HTMLInputElement>(null);
   const [formMode, setFormMode] = useState<ExpenseFormMode | null>(null);
   const [draft, setDraft] = useState<ExpenseDraft | null>(null);
@@ -114,8 +117,8 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
     dayjs(),
     trackingStartedAt,
   );
-  const totalLabel = formatMoney(expenseView.total, displayCurrency);
-  const averageLabel = formatMoney(average, displayCurrency);
+  const totalLabel = expensesReady ? formatMoney(expenseView.total, displayCurrency) : "—";
+  const averageLabel = expensesReady ? formatMoney(average, displayCurrency) : "—";
   const trend = useMemo(() => buildExpenseTrendBuckets(expenseView.history, filters), [expenseView.history, filters]);
   const selectedCategory = categoryGroups.find((group) => {
     return filters.categoryKeys.includes(group.key);
@@ -185,39 +188,40 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
   }
 
   const home = (
-    <>
+    <div className="expenses-home" aria-busy={expensesLoading}>
       <section className="summary-header">
-        <div className="summary-copy"><span>{t("expense.spent")}</span><div className="summary-total"><strong>{totalLabel}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{t("expense.count", { count: expenseView.history.length })}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span><b aria-hidden="true">·</b><span className="summary-async-metric">{t("capital.total")} {capitalTotalUsd === undefined ? "—" : formatMoney(Number(capitalTotalUsd), "USD")}</span><b aria-hidden="true">·</b><span className="summary-async-metric">{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(debtTotalUsd, "USD")}</span></small></div>
+        <div className="summary-copy"><span>{t("expense.spent")}</span><div className="summary-total"><strong>{totalLabel}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{expensesReady ? t("expense.count", { count: expenseView.history.length }) : "—"}</span><b aria-hidden="true">·</b><span>{t("expense.averageDailyExpense")} {averageLabel}</span><b aria-hidden="true">·</b><span className="summary-async-metric">{t("capital.total")} {capitalTotalUsd === undefined ? "—" : formatMoney(Number(capitalTotalUsd), "USD")}</span><b aria-hidden="true">·</b><span className="summary-async-metric">{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(debtTotalUsd, "USD")}</span></small></div>
         <div className="quick-actions">
-          <button className="primary" type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
-          <button type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>
-          <button type="button" onClick={openManual}><PenLine size={17} />{t("inputMode.manual")}</button>
+          <button className="primary" disabled={!expensesReady} type="button" onClick={() => receiptInput.current?.click()}><Camera size={17} />{t("inputMode.receipt")}</button>
+          <button disabled={!expensesReady} type="button" onClick={openText}><FileText size={17} />{t("inputMode.text")}</button>
+          <button disabled={!expensesReady} type="button" onClick={openManual}><PenLine size={17} />{t("inputMode.manual")}</button>
         </div>
       </section>
 
       <section className="filters" aria-label={t("expense.period")}>
-        <div className="button-filter period-filter">{PERIODS.map((period) => <button className={filters.period === period ? "active" : ""} aria-pressed={filters.period === period} key={period} type="button" onClick={() => setFilters((current) => ({ ...current, period, customRange: period === "custom" && !current.customRange ? [dayjs().startOf("month").toISOString(), dayjs().endOf("day").toISOString()] : current.customRange }))}>{t(`expense.period.${period}`)}</button>)}</div>
+        <div className="button-filter period-filter">{PERIODS.map((period) => <button className={filters.period === period ? "active" : ""} aria-pressed={filters.period === period} disabled={!expensesReady} key={period} type="button" onClick={() => setFilters((current) => ({ ...current, period, customRange: period === "custom" && !current.customRange ? [dayjs().startOf("month").toISOString(), dayjs().endOf("day").toISOString()] : current.customRange }))}>{t(`expense.period.${period}`)}</button>)}</div>
         <div className={`button-filter category-filter${showAllCategories ? " expanded" : ""}`}>
-          <button className={selectedCategory === "" ? "active" : ""} type="button" onClick={() => chooseCategory("")}>{t("expense.allCategories")}</button>
-          {categoryGroups.map((group, index) => <button className={`${selectedCategory === group.key ? "active" : ""}${index >= MOBILE_CATEGORY_LIMIT ? " category-extra" : ""}`} key={group.key} type="button" onClick={() => chooseCategory(group.key)}><i style={{ background: group.color }} />{group.name}</button>)}
-          {categoryGroups.length > MOBILE_CATEGORY_LIMIT ? <button className="category-toggle" type="button" aria-expanded={showAllCategories} onClick={() => setShowAllCategories((value) => !value)}>{showAllCategories ? t("actions.collapse") : t("actions.more", { count: categoryGroups.length - MOBILE_CATEGORY_LIMIT })}</button> : null}
+          <button className={selectedCategory === "" ? "active" : ""} disabled={!expensesReady} type="button" onClick={() => chooseCategory("")}>{t("expense.allCategories")}</button>
+          {categoryGroups.map((group, index) => <button className={`${selectedCategory === group.key ? "active" : ""}${index >= MOBILE_CATEGORY_LIMIT ? " category-extra" : ""}`} disabled={!expensesReady} key={group.key} type="button" onClick={() => chooseCategory(group.key)}><i style={{ background: group.color }} />{group.name}</button>)}
+          {categoryGroups.length > MOBILE_CATEGORY_LIMIT ? <button className="category-toggle" disabled={!expensesReady} type="button" aria-expanded={showAllCategories} onClick={() => setShowAllCategories((value) => !value)}>{showAllCategories ? t("actions.collapse") : t("actions.more", { count: categoryGroups.length - MOBILE_CATEGORY_LIMIT })}</button> : null}
         </div>
         {filters.period === "custom" ? <Suspense fallback={<div className="date-range date-range-placeholder" aria-hidden="true" />}><ExpenseDateRange label={t("expense.period.custom")} value={filters.customRange} onChange={(customRange) => setFilters((current) => ({ ...current, customRange }))} /></Suspense> : null}
       </section>
 
-      {expenseView.history.length > 0 ? (
+      {!expensesReady || expenseView.history.length > 0 ? (
         <div className="analytics-grid">
-          <section className="panel chart-panel"><h2>{t("expense.trend")}</h2><Suspense fallback={<div className="chart" aria-hidden="true" />}><TrendChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></Suspense></section>
+          <section className="panel chart-panel"><h2>{t("expense.trend")}</h2>{expensesReady ? <Suspense fallback={<div className="chart" aria-hidden="true" />}><TrendChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></Suspense> : <div className="chart" aria-hidden="true" />}</section>
           <section className="panel category-panel"><h2>{t("section.expensesByCategory")}</h2>{breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.convertedValue) / breakdownTotal * 100) : 0; return <button type="button" key={`${item.key}:${item.currency}`} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, item.currency)}</strong><small>{share}%</small></button>; })}</section>
         </div>
       ) : null}
 
       <section className="history-section">
-        <div className="section-heading"><h2>{t("expense.history")}</h2><span>{expenseView.history.length}</span></div>
-        <ExpenseRows entries={visibleHistory} displayCurrency={currencyMode === "native" ? "native" : displayCurrency} onSelect={setSelected} />
+        <div className="section-heading"><h2>{t("expense.history")}</h2><span>{expensesReady ? expenseView.history.length : "—"}</span></div>
+        {expensesFailed ? <p className="muted">{t("feedback.loadFailed")}</p> : null}
+        {expensesReady ? <ExpenseRows entries={visibleHistory} displayCurrency={currencyMode === "native" ? "native" : displayCurrency} onSelect={setSelected} /> : null}
         {hiddenHistoryCount > 0 ? <button className="history-toggle" type="button" aria-expanded={showAllHistory} onClick={() => setShowAllHistory((value) => !value)}>{showAllHistory ? t("actions.collapse") : t("actions.showMore", { count: hiddenHistoryCount })}</button> : null}
       </section>
-    </>
+    </div>
   );
 
   return (

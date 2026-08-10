@@ -20,6 +20,8 @@ export interface ExpenseSnapshot {
 }
 
 export interface ExpenseState extends ExpenseSnapshot {
+  ownerId: string | null;
+  loadState: "idle" | "loading" | "ready" | "error";
   addExpenses: (inputs: NewExpenseInput[]) => Promise<void>;
   updateExpense: (id: string, input: NewExpenseInput) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;

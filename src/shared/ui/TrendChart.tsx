@@ -47,6 +47,22 @@ function money(value: number, currency: Currency, locale: Locale, compact = fals
   }).format(value);
 }
 
+function getYAxis(maximumValue: number) {
+  if (!Number.isFinite(maximumValue) || maximumValue <= 0) {
+    return { maximum: 1.05, step: 0.2, splits: [0, 0.2, 0.4, 0.6, 0.8, 1] };
+  }
+  const paddedMaximum = maximumValue * 1.05;
+  const rawStep = paddedMaximum / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalizedStep = rawStep / magnitude;
+  const multiplier = normalizedStep <= 1 ? 1 : normalizedStep <= 2 ? 2 : normalizedStep <= 2.5 ? 2.5 : normalizedStep <= 5 ? 5 : 10;
+  const step = multiplier * magnitude;
+  const maximum = Math.ceil(paddedMaximum / step) * step;
+  const splitCount = Math.round(maximum / step);
+  const splits = Array.from({ length: splitCount + 1 }, (_, index) => Number((index * step).toPrecision(12)));
+  return { maximum: maximum + step * 0.25, step, splits };
+}
+
 export function TrendChart({ buckets, currency, locale, label }: TrendChartProps) {
   const chartRoot = useRef<HTMLDivElement>(null);
   const tooltip = useRef<HTMLDivElement>(null);
@@ -60,6 +76,7 @@ export function TrendChart({ buckets, currency, locale, label }: TrendChartProps
     buckets.map((_, index) => index),
     buckets.map((bucket) => bucket.value),
   ], [buckets]);
+  const yAxis = useMemo(() => getYAxis(Math.max(0, ...buckets.map((bucket) => bucket.value))), [buckets]);
 
   useLayoutEffect(() => {
     const root = chartRoot.current;
@@ -95,7 +112,7 @@ export function TrendChart({ buckets, currency, locale, label }: TrendChartProps
           range: [-0.5, Math.max(0.5, buckets.length - 0.5)],
         },
         y: {
-          range: (_chart, _minimum, maximum) => [0, maximum > 0 ? maximum * 1.08 : 1],
+          range: () => [0, yAxis.maximum],
         },
       },
       axes: [
@@ -115,6 +132,8 @@ export function TrendChart({ buckets, currency, locale, label }: TrendChartProps
           space: 42,
           font: "10px system-ui, sans-serif",
           stroke: "rgba(255, 255, 255, 0.52)",
+          incrs: [yAxis.step],
+          splits: yAxis.splits,
           grid: { show: true, stroke: "#292b2f", width: 1 },
           ticks: { show: false },
           values: (_chart, splits) => splits.map((value) => money(value, currency, locale, true)),
@@ -150,7 +169,7 @@ export function TrendChart({ buckets, currency, locale, label }: TrendChartProps
       resizeObserver.disconnect();
       chart.destroy();
     };
-  }, [buckets, currency, data, label, labels, locale]);
+  }, [buckets, currency, data, label, labels, locale, yAxis]);
 
   return (
     <div className="chart" role="img" aria-label={label}>
