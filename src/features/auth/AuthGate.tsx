@@ -57,10 +57,34 @@ export function AuthGate({ children, preloadAuthenticatedApp }: AuthGateProps) {
     return <div className="auth-screen"><div className="auth-card"><p className="muted auth-description">{expensesError}</p><button className="auth-action auth-action-primary" type="button" onClick={() => window.location.reload()}>{t("actions.retry")}</button></div></div>;
   }
 
-  if (loading || (currentUser && !expensesReady)) {
+  if (loading) {
     return (
       <div className="auth-screen">
         <div className="auth-loader" />
+      </div>
+    );
+  }
+
+  if (currentUser && !expensesReady) {
+    return (
+      <div className="app-shell app-loading-shell" aria-busy="true">
+        <header className="app-header">
+          <span className="brand"><img alt="" height={123} src="/evenkvit-mark.webp" width={224} /></span>
+          <nav className="header-tabs" aria-label="Разделы">
+            <button className="active" disabled type="button">{t("expense.history")}</button>
+            <button disabled type="button">{t("capital.title")}</button>
+            <button disabled type="button">{t("debt.title")}</button>
+          </nav>
+          <div className="header-actions"><button aria-hidden="true" disabled tabIndex={-1} type="button" /></div>
+        </header>
+        <main className="main-content">
+          <section className="summary-header">
+            <div className="summary-copy"><span>{t("expense.spent")}</span><div className="summary-total"><strong>—</strong></div><small aria-hidden="true"><span className="loading-line loading-line-wide" /></small></div>
+            <div className="quick-actions" aria-hidden="true"><span /><span /><span /></div>
+          </section>
+          <section className="filters" aria-hidden="true"><div className="loading-line" /><div className="loading-line loading-line-wide" /></section>
+          <div className="app-loading-panel" aria-hidden="true"><div className="auth-loader" /></div>
+        </main>
       </div>
     );
   }

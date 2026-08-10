@@ -202,7 +202,7 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
           {categoryGroups.map((group, index) => <button className={`${selectedCategory === group.key ? "active" : ""}${index >= MOBILE_CATEGORY_LIMIT ? " category-extra" : ""}`} key={group.key} type="button" onClick={() => chooseCategory(group.key)}><i style={{ background: group.color }} />{group.name}</button>)}
           {categoryGroups.length > MOBILE_CATEGORY_LIMIT ? <button className="category-toggle" type="button" aria-expanded={showAllCategories} onClick={() => setShowAllCategories((value) => !value)}>{showAllCategories ? t("actions.collapse") : t("actions.more", { count: categoryGroups.length - MOBILE_CATEGORY_LIMIT })}</button> : null}
         </div>
-        {filters.period === "custom" ? <Suspense fallback={<div className="date-range date-range-placeholder" aria-hidden="true" />}><ExpenseDateRange value={filters.customRange} onChange={(customRange) => setFilters((current) => ({ ...current, customRange }))} /></Suspense> : null}
+        {filters.period === "custom" ? <Suspense fallback={<div className="date-range date-range-placeholder" aria-hidden="true" />}><ExpenseDateRange label={t("expense.period.custom")} value={filters.customRange} onChange={(customRange) => setFilters((current) => ({ ...current, customRange }))} /></Suspense> : null}
       </section>
 
       {expenseView.history.length > 0 ? (
@@ -222,7 +222,7 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
 
   return (
     <>
-      <input ref={receiptInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
+      <input ref={receiptInput} aria-label={t("inputMode.receipt")} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleReceipt(file); }} />
       {formMode ? <Suspense fallback={<div className="parsing-state">{t("expense.loadingEditor")}</div>}><ExpenseFormPage mode={formMode} draft={draft} categories={formCategories} parsing={parsing} saving={saving} parseError={parseError} onBack={closeForm} onParseText={handleText} onSave={saveExpense} /></Suspense> : selected ? <ExpenseDetailsPage expense={selected} categories={analyticsCategories} onBack={() => setSelected(null)} onEdit={() => openEdit(selected)} onDelete={() => void deleteExpense(selected)} /> : home}
     </>
   );

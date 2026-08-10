@@ -14,20 +14,6 @@ import type { AppPage } from "./AppHeader";
 const CapitalPage = lazy(() => import("../features/capital/CapitalPage").then((module) => ({ default: module.CapitalPage })));
 const DebtPage = lazy(() => import("../features/debts/DebtPage").then((module) => ({ default: module.DebtPage })));
 
-function scheduleIdleTask(task: () => void) {
-  const idleWindow = window as Window & {
-    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
-    cancelIdleCallback?: (handle: number) => void;
-  };
-  if (typeof idleWindow.requestIdleCallback === "function") {
-    const handle = idleWindow.requestIdleCallback(task, { timeout: 2_000 });
-    return () => idleWindow.cancelIdleCallback?.(handle);
-  }
-
-  const handle = globalThis.setTimeout(task, 250);
-  return () => globalThis.clearTimeout(handle);
-}
-
 export function AuthenticatedApp() {
   const [page, setPage] = useState<AppPage>("expenses");
   const [currencyMode, setCurrencyMode] = useState<DisplayCurrency>("native");
@@ -43,28 +29,22 @@ export function AuthenticatedApp() {
   const capitalLoadState = capital.loadState;
   useEffect(() => {
     let active = true;
-    const cancel = scheduleIdleTask(() => {
-      void refreshLiveExchangeRates().then((updated) => { if (active && updated) setRatesVersion((value) => value + 1); });
-    });
-    return () => { active = false; cancel(); };
+    void refreshLiveExchangeRates().then((updated) => { if (active && updated) setRatesVersion((value) => value + 1); });
+    return () => { active = false; };
   }, []);
   useEffect(() => {
     resetCapital();
     if (!userId) return resetCapital;
-    const cancel = scheduleIdleTask(() => {
-      const current = useCapitalStore.getState();
-      if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
-    });
-    return () => { cancel(); resetCapital(); };
+    const current = useCapitalStore.getState();
+    if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
+    return resetCapital;
   }, [initializeCapital, resetCapital, userId]);
   useEffect(() => {
     resetDebt();
     if (!userId) return resetDebt;
-    const cancel = scheduleIdleTask(() => {
-      const current = useDebtStore.getState();
-      if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
-    });
-    return () => { cancel(); resetDebt(); };
+    const current = useDebtStore.getState();
+    if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
+    return resetDebt;
   }, [initializeDebt, resetDebt, userId]);
   const marketItemKey = capital.items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id).sort().join(":");
   useEffect(() => { if (capital.ownerId === userId && capitalLoadState === "ready" && marketItemKey) void refreshCapitalQuotes(); }, [capital.ownerId, capitalLoadState, marketItemKey, refreshCapitalQuotes, userId]);
