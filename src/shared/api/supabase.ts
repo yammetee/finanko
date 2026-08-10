@@ -1,4 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { GoTrueClient } from "@supabase/auth-js";
+import type { PostgrestClient } from "@supabase/postgrest-js";
 
 const supabaseUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabasePublishableKey = import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as
@@ -7,20 +8,71 @@ const supabasePublishableKey = import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
 
-let supabasePromise: Promise<SupabaseClient | null> | null = null;
+type AppSupabaseClient = PostgrestClient & { auth: GoTrueClient };
 
-export function getSupabaseClient() {
+let authClientPromise: Promise<GoTrueClient | null> | null = null;
+let dataClientPromise: Promise<AppSupabaseClient | null> | null = null;
+
+function supabaseEndpoint(path: string) {
+  return `${supabaseUrl!.replace(/\/+$/, "")}/${path}`;
+}
+
+function authStorageKey() {
+  const hostname = new URL(supabaseUrl!).hostname;
+  return `sb-${hostname.split(".")[0]}-auth-token`;
+}
+
+export function getSupabaseAuthClient() {
   if (!isSupabaseConfigured) return Promise.resolve(null);
 
-  supabasePromise ??= import("@supabase/supabase-js").then(({ createClient }) =>
-    createClient(supabaseUrl!, supabasePublishableKey!),
+  authClientPromise ??= import("@supabase/auth-js").then(({ GoTrueClient }) =>
+    new GoTrueClient({
+      url: supabaseEndpoint("auth/v1"),
+      headers: {
+        Authorization: `Bearer ${supabasePublishableKey!}`,
+        apikey: supabasePublishableKey!,
+      },
+      storageKey: authStorageKey(),
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    }),
   );
 
-  return supabasePromise;
+  return authClientPromise;
+}
+
+async function getSupabaseDataClient() {
+  if (!isSupabaseConfigured) return null;
+
+  dataClientPromise ??= Promise.all([
+    getSupabaseAuthClient(),
+    import("@supabase/postgrest-js"),
+  ]).then(([auth, { PostgrestClient }]) => {
+    if (!auth) return null;
+
+    const authenticatedFetch: typeof fetch = async (input, init) => {
+      const { data } = await auth.getSession();
+      const accessToken = data.session?.access_token ?? supabasePublishableKey!;
+      const headers = new Headers(init?.headers);
+      if (!headers.has("apikey")) headers.set("apikey", supabasePublishableKey!);
+      if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${accessToken}`);
+      return fetch(input, { ...init, headers });
+    };
+
+    const dataClient = new PostgrestClient(supabaseEndpoint("rest/v1"), {
+      schema: "public",
+      fetch: authenticatedFetch,
+    });
+
+    return Object.assign(dataClient, { auth });
+  });
+
+  return dataClientPromise;
 }
 
 export async function requireSupabaseClient() {
-  const client = await getSupabaseClient();
+  const client = await getSupabaseDataClient();
   if (!client) throw new Error("Supabase is not configured");
   return client;
 }

@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { GoTrueAdminApi } from "@supabase/auth-js";
 
 interface ApiRequest {
   method?: string;
@@ -53,10 +53,14 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
     return;
   }
 
-  const admin = createClient(supabaseUrl, secretKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  const admin = new GoTrueAdminApi({
+    url: `${supabaseUrl.replace(/\/+$/, "")}/auth/v1`,
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      apikey: secretKey,
+    },
   });
-  const { error } = await admin.auth.admin.deleteUser(userId, false);
+  const { error } = await admin.deleteUser(userId, false);
   if (error) {
     response.status(500).json({ error: "Account deletion failed" });
     return;

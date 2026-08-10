@@ -1,6 +1,6 @@
-import type { Session } from "@supabase/supabase-js";
+import type { Session } from "@supabase/auth-js";
 import { create } from "zustand";
-import { getSupabaseClient, isSupabaseConfigured } from "../../shared/api/supabase";
+import { getSupabaseAuthClient, isSupabaseConfigured } from "../../shared/api/supabase";
 
 let unsubscribeAuth: (() => void) | null = null;
 
@@ -28,32 +28,32 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       return;
     }
 
-    const supabase = await getSupabaseClient();
-    if (!supabase) {
+    const auth = await getSupabaseAuthClient();
+    if (!auth) {
       set({ loading: false, session: null });
       return;
     }
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = auth.onAuthStateChange((_event, session) => {
       set({ session, loading: false });
     });
     unsubscribeAuth = () => listener.subscription.unsubscribe();
   },
   signInWithPassword: async (email, password) => {
-    const supabase = await getSupabaseClient();
-    if (!supabase) return;
+    const auth = await getSupabaseAuthClient();
+    if (!auth) return;
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await auth.signInWithPassword({
       email,
       password,
     });
     if (error) throw error;
   },
   signUpWithPassword: async (email, password, legalAcceptedAt) => {
-    const supabase = await getSupabaseClient();
-    if (!supabase) throw new Error("Supabase is not configured");
+    const auth = await getSupabaseAuthClient();
+    if (!auth) throw new Error("Supabase is not configured");
 
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await auth.signUp({
       email,
       password,
       options: {
@@ -71,15 +71,15 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     return { requiresEmailConfirmation: !data.session };
   },
   signOut: async () => {
-    const supabase = await getSupabaseClient();
-    if (supabase) {
-      await supabase.auth.signOut();
+    const auth = await getSupabaseAuthClient();
+    if (auth) {
+      await auth.signOut();
     }
   },
   deleteAccount: async () => {
-    const supabase = await getSupabaseClient();
+    const auth = await getSupabaseAuthClient();
     const session = get().session;
-    if (!supabase || !session) throw new Error("Authentication required");
+    if (!auth || !session) throw new Error("Authentication required");
 
     const response = await fetch("/api/account", {
       method: "DELETE",
@@ -87,6 +87,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     });
     if (!response.ok) throw new Error("Account deletion failed");
 
-    await supabase.auth.signOut({ scope: "local" });
+    await auth.signOut({ scope: "local" });
   },
 }));

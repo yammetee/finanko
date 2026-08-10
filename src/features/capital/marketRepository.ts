@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "../../shared/api/supabase";
+import { getSupabaseAuthClient } from "../../shared/api/supabase";
 import { MARKET_REQUEST_LIMIT, normalizeMarketSymbol } from "./marketContract";
 import type { CapitalAssetSuggestion, CapitalItem, CapitalQuote } from "./capitalTypes";
 
@@ -13,9 +13,9 @@ interface MarketRequestAsset {
 }
 
 async function marketAccessToken() {
-  const client = await getSupabaseClient();
-  if (!client) throw new Error("Supabase is not configured");
-  const token = (await client.auth.getSession()).data.session?.access_token;
+  const auth = await getSupabaseAuthClient();
+  if (!auth) throw new Error("Supabase is not configured");
+  const token = (await auth.getSession()).data.session?.access_token;
   if (!token) throw new Error("Authentication required");
   return token;
 }
