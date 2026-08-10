@@ -37,7 +37,9 @@ function cacheRates(rates: { date: string; USD: number; GEL: number; RUB: number
   }
 }
 
-export async function refreshLiveExchangeRates() {
+let exchangeRatesRequest: Promise<boolean> | null = null;
+
+async function requestLiveExchangeRates() {
   const cached = cachedRates();
   if (cached) {
     setLiveExchangeRates(cached);
@@ -74,4 +76,9 @@ export async function refreshLiveExchangeRates() {
   } catch {
     return false;
   }
+}
+
+export function refreshLiveExchangeRates() {
+  exchangeRatesRequest ??= requestLiveExchangeRates();
+  return exchangeRatesRequest;
 }

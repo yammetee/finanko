@@ -3,11 +3,8 @@ import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
-import { initializeExpenseData, resetExpenseData } from "../expenses/expenseStore";
 import { getAuthErrorKey } from "./authErrors";
 import { useAuthStore } from "./authStore";
-import { loadAuthenticatedApp } from "../../app/authenticatedAppModule";
-import { loadTrendChart } from "../../shared/ui/trendChartModule";
 
 interface AuthGateProps { children: React.ReactNode }
 
@@ -21,7 +18,6 @@ export function AuthGate({ children }: AuthGateProps) {
   })));
   const { t } = useI18n();
   const currentUser = session?.user ?? null;
-  const currentUserId = typeof currentUser?.id === "string" ? currentUser.id : null;
   const [authMode, setAuthMode] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,19 +28,8 @@ export function AuthGate({ children }: AuthGateProps) {
   const [legalAccepted, setLegalAccepted] = useState(false);
 
   useEffect(() => {
-    initialize();
+    void initialize().catch(() => undefined);
   }, [initialize]);
-
-  useEffect(() => {
-    if (typeof currentUserId !== "string") {
-      resetExpenseData();
-      return;
-    }
-
-    void loadAuthenticatedApp();
-    void loadTrendChart();
-    void initializeExpenseData(currentUserId).catch(() => undefined);
-  }, [currentUserId]);
 
   if (loading) {
     return (

@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { getSupabaseAuthClient, isSupabaseConfigured } from "../../shared/api/supabase";
 
 let unsubscribeAuth: (() => void) | null = null;
+let initializeAuthPromise: Promise<void> | null = null;
 
 interface SignUpResult {
   requiresEmailConfirmation: boolean;
@@ -21,23 +22,33 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()((set, get) => ({
   loading: true,
   session: null,
-  initialize: async () => {
-    if (unsubscribeAuth) return;
-    if (!isSupabaseConfigured) {
-      set({ loading: false, session: null });
-      return;
-    }
+  initialize: () => {
+    if (unsubscribeAuth) return Promise.resolve();
+    if (initializeAuthPromise) return initializeAuthPromise;
 
-    const auth = await getSupabaseAuthClient();
-    if (!auth) {
-      set({ loading: false, session: null });
-      return;
-    }
+    initializeAuthPromise = (async () => {
+      if (!isSupabaseConfigured) {
+        set({ loading: false, session: null });
+        return;
+      }
 
-    const { data: listener } = auth.onAuthStateChange((_event, session) => {
-      set({ session, loading: false });
+      const auth = await getSupabaseAuthClient();
+      if (!auth) {
+        set({ loading: false, session: null });
+        return;
+      }
+
+      const { data: listener } = auth.onAuthStateChange((_event, session) => {
+        set({ session, loading: false });
+      });
+      unsubscribeAuth = () => listener.subscription.unsubscribe();
+    })().catch((error) => {
+      initializeAuthPromise = null;
+      set({ loading: false, session: null });
+      throw error;
     });
-    unsubscribeAuth = () => listener.subscription.unsubscribe();
+
+    return initializeAuthPromise;
   },
   signInWithPassword: async (email, password) => {
     const auth = await getSupabaseAuthClient();
