@@ -1,4 +1,4 @@
-import type { Session, User } from "@supabase/supabase-js";
+import type { Session } from "@supabase/supabase-js";
 import { create } from "zustand";
 import { getSupabaseClient, isSupabaseConfigured } from "../../shared/api/supabase";
 
@@ -16,13 +16,13 @@ interface AuthState {
   signUpWithPassword: (email: string, password: string, legalAcceptedAt: string) => Promise<SignUpResult>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
-  user: () => User | null;
 }
 
 export const useAuthStore = create<AuthState>()((set, get) => ({
   loading: true,
   session: null,
   initialize: async () => {
+    if (unsubscribeAuth) return;
     if (!isSupabaseConfigured) {
       set({ loading: false, session: null });
       return;
@@ -34,10 +34,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       return;
     }
 
-    const { data } = await supabase.auth.getSession();
-    set({ session: data.session, loading: false });
-
-    unsubscribeAuth?.();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       set({ session, loading: false });
     });
@@ -47,12 +43,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const supabase = await getSupabaseClient();
     if (!supabase) return;
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) throw error;
-    set({ session: data.session, loading: false });
   },
   signUpWithPassword: async (email, password, legalAcceptedAt) => {
     const supabase = await getSupabaseClient();
@@ -73,10 +68,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     });
     if (error) throw error;
 
-    if (data.session) {
-      set({ session: data.session, loading: false });
-    }
-
     return { requiresEmailConfirmation: !data.session };
   },
   signOut: async () => {
@@ -84,7 +75,6 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (supabase) {
       await supabase.auth.signOut();
     }
-    set({ session: null, loading: false });
   },
   deleteAccount: async () => {
     const supabase = await getSupabaseClient();
@@ -98,7 +88,5 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (!response.ok) throw new Error("Account deletion failed");
 
     await supabase.auth.signOut({ scope: "local" });
-    set({ session: null, loading: false });
   },
-  user: () => get().session?.user ?? null,
 }));

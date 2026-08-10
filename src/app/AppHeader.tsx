@@ -12,7 +12,7 @@ function AccountMenuLauncher() {
   const [requested, setRequested] = useState(false);
   const button = <button type="button" aria-label={t("actions.account")} title={t("actions.account")} onClick={() => setRequested(true)}><CircleUserRound size={18} /></button>;
   if (!requested) return button;
-  return <Suspense fallback={button}><AppAccountMenu /></Suspense>;
+  return <Suspense fallback={button}><AppAccountMenu onClose={() => setRequested(false)} /></Suspense>;
 }
 
 export function AppHeader({ page, onPageChange }: Props) {

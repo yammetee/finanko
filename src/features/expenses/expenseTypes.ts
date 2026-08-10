@@ -4,6 +4,12 @@ import type {
   Expense,
   ExpenseSource,
 } from "../../shared/types/expense";
+import type { LoadState } from "../../shared/types/loadState";
+
+export interface ExpenseRange {
+  start?: string;
+  end?: string;
+}
 
 export interface NewExpenseInput {
   amount: number;
@@ -17,11 +23,15 @@ export interface NewExpenseInput {
 export interface ExpenseSnapshot {
   categories: Category[];
   expenses: Expense[];
+  trackingStartedAt?: string;
 }
 
 export interface ExpenseState extends ExpenseSnapshot {
   ownerId: string | null;
-  loadState: "idle" | "loading" | "ready" | "error";
+  loadState: LoadState;
+  loadedRangeKey: string | null;
+  rangeLoading: boolean;
+  loadRange: (range: ExpenseRange) => Promise<void>;
   addExpenses: (inputs: NewExpenseInput[]) => Promise<void>;
   updateExpense: (id: string, input: NewExpenseInput) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;

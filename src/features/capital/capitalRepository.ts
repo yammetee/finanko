@@ -1,13 +1,7 @@
-import { getSupabaseClient } from "../../shared/api/supabase";
+import { requireSupabaseClient } from "../../shared/api/supabase";
 import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalQuote, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
 
 type Row = Record<string, unknown>;
-
-async function client() {
-  const value = await getSupabaseClient();
-  if (!value) throw new Error("Supabase is not configured");
-  return value;
-}
 
 const optional = (value: unknown) => value === null || value === undefined ? undefined : String(value);
 const isoTimestamp = (value: unknown) => {
@@ -61,10 +55,17 @@ function valuation(row: Row): CapitalValuation {
 }
 
 export async function loadCapitalData(ownerId: string): Promise<CapitalSnapshot> {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { data, error } = await supabase.rpc("get_capital_snapshot", { expected_owner_id: ownerId });
   if (error) throw error;
   return deserializeCapitalSnapshot(data);
+}
+
+export async function loadCapitalQuoteHistory(ownerId: string): Promise<CapitalQuote[]> {
+  const supabase = await requireSupabaseClient();
+  const { data, error } = await supabase.rpc("get_capital_quote_history", { expected_owner_id: ownerId });
+  if (error) throw error;
+  return (Array.isArray(data) ? data : []).map((row) => quote(row as Row));
 }
 
 export function deserializeCapitalSnapshot(data: unknown): CapitalSnapshot {
@@ -74,19 +75,18 @@ export function deserializeCapitalSnapshot(data: unknown): CapitalSnapshot {
     items: (snapshot.items ?? []).map(item),
     events: (snapshot.events ?? []).map(event),
     latestQuotes: (snapshot.quotes ?? []).map(quote),
-    quoteHistory: (snapshot.quoteHistory ?? []).map(quote),
     valuations: (snapshot.snapshots ?? []).map(valuation),
   };
 }
 
 export async function saveCapitalHistory(ownerId: string, quotes: CapitalQuote[], values: CapitalValuation[]) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc("rebuild_capital_history", { expected_owner_id: ownerId, quote_rows: quotes.map((value) => ({ item_id: value.itemId, price: value.price, currency: value.currency, provider: value.provider, quoted_at: value.quotedAt })), snapshot_rows: values.map((value) => ({ date: value.date, total_usd: value.totalUsd })) });
   if (error) throw error;
 }
 
 export async function saveCapitalValuation(ownerId: string, quotes: CapitalQuote[], totalUsd: string) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc("save_capital_valuation", {
     expected_owner_id: ownerId,
     quote_rows: quotes.map((value) => ({ item_id: value.itemId, price: value.price, currency: value.currency, provider: value.provider, quoted_at: value.quotedAt })),
@@ -106,7 +106,7 @@ export function serializeCapitalSnapshot(snapshot: Partial<CapitalSnapshot>) {
 }
 
 export async function saveCapitalData(ownerId: string, snapshot: Partial<CapitalSnapshot>) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc("save_capital_snapshot", {
     expected_owner_id: ownerId,
     capital_data: serializeCapitalSnapshot(snapshot),
@@ -115,7 +115,7 @@ export async function saveCapitalData(ownerId: string, snapshot: Partial<Capital
 }
 
 async function deleteCapitalRecord(rpc: "delete_capital_group" | "delete_capital_item", ownerId: string, id: string) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc(rpc, { expected_owner_id: ownerId, target_id: id });
   if (error) throw error;
 }
@@ -123,7 +123,7 @@ async function deleteCapitalRecord(rpc: "delete_capital_group" | "delete_capital
 export const deleteCapitalGroup = (ownerId: string, id: string) => deleteCapitalRecord("delete_capital_group", ownerId, id);
 export const deleteCapitalItem = (ownerId: string, id: string) => deleteCapitalRecord("delete_capital_item", ownerId, id);
 export async function deleteCapitalEvent(ownerId: string, id: string, replacements: CapitalEvent[]) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc("delete_capital_event", { expected_owner_id: ownerId, target_id: id, replacement_rows: serializeCapitalEvents(replacements) });
   if (error) throw error;
 }

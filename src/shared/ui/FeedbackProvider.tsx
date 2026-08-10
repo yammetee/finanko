@@ -6,8 +6,10 @@ const FeedbackHost = lazy(() => import("./FeedbackHost").then((module) => ({ def
 export function FeedbackProvider({ children }: PropsWithChildren) {
   const nextId = useRef(0);
   const [notices, setNotices] = useState<FeedbackNotice[]>([]);
+  const [hostVisible, setHostVisible] = useState(false);
   const show = useCallback((type: FeedbackNotice["type"], content: ReactNode) => {
     nextId.current += 1;
+    setHostVisible(true);
     setNotices((current) => [...current, { id: nextId.current, type, content }]);
   }, []);
   const message = useMemo(() => ({
@@ -21,7 +23,7 @@ export function FeedbackProvider({ children }: PropsWithChildren) {
 
   return (
     <FeedbackContext.Provider value={value}>
-      {nextId.current > 0 ? <Suspense fallback={null}><FeedbackHost notices={notices} onShown={handleShown} /></Suspense> : null}
+      {hostVisible ? <Suspense fallback={null}><FeedbackHost notices={notices} onShown={handleShown} onIdle={() => setHostVisible(false)} /></Suspense> : null}
       {children}
     </FeedbackContext.Provider>
   );

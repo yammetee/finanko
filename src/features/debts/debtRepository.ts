@@ -1,14 +1,8 @@
-import { getSupabaseClient } from "../../shared/api/supabase";
+import { requireSupabaseClient } from "../../shared/api/supabase";
 import { buildDebtProjection } from "./debtMath";
 import type { Debt, DebtEvent, DebtGroup, DebtSnapshot } from "./debtTypes";
 
 type Row = Record<string, unknown>;
-
-async function client() {
-  const value = await getSupabaseClient();
-  if (!value) throw new Error("Supabase is not configured");
-  return value;
-}
 
 const optional = (value: unknown) => value === null || value === undefined ? undefined : String(value);
 
@@ -44,6 +38,31 @@ export function deserializeDebtSnapshot(data: unknown): DebtSnapshot {
     debts: (snapshot.debts ?? []).map(debt),
     events: (snapshot.payments ?? []).map(event),
   };
+}
+
+const DEBT_EVENT_PAGE_SIZE = 500;
+
+async function loadDebtEvents(ownerId: string) {
+  const supabase = await requireSupabaseClient();
+  const rows: Row[] = [];
+  let cursor: { occurredAt: string; sequence: number; id: string } | undefined;
+  do {
+    const { data, error } = await supabase.rpc("get_debt_payments_page", {
+      expected_owner_id: ownerId,
+      cursor_occurred_at: cursor?.occurredAt ?? null,
+      cursor_sequence: cursor?.sequence ?? null,
+      cursor_id: cursor?.id ?? null,
+      page_size: DEBT_EVENT_PAGE_SIZE,
+    });
+    if (error) throw error;
+    const page = (Array.isArray(data) ? data : []) as Row[];
+    rows.push(...page);
+    const last = page[page.length - 1];
+    cursor = page.length === DEBT_EVENT_PAGE_SIZE && last
+      ? { occurredAt: String(last.occurred_at), sequence: Number(last.event_sequence), id: String(last.id) }
+      : undefined;
+  } while (cursor);
+  return rows.map(event);
 }
 
 function serializeDebtEvents(debts: Debt[], events: DebtEvent[]) {
@@ -83,20 +102,23 @@ export function serializeDebtSnapshot(snapshot: DebtSnapshot) {
 }
 
 export async function loadDebtData(ownerId: string) {
-  const supabase = await client();
-  const { data, error } = await supabase.rpc("get_debt_snapshot", { expected_owner_id: ownerId });
+  const supabase = await requireSupabaseClient();
+  const [{ data, error }, events] = await Promise.all([
+    supabase.rpc("get_debt_snapshot", { expected_owner_id: ownerId }),
+    loadDebtEvents(ownerId),
+  ]);
   if (error) throw error;
-  return deserializeDebtSnapshot(data);
+  return { ...deserializeDebtSnapshot(data), events };
 }
 
 export async function saveDebtData(ownerId: string, snapshot: DebtSnapshot) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc("save_debt_snapshot", { expected_owner_id: ownerId, debt_data: serializeDebtSnapshot(snapshot) });
   if (error) throw error;
 }
 
 async function deleteRecord(rpc: "delete_debt_group" | "delete_debt", ownerId: string, id: string) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc(rpc, { expected_owner_id: ownerId, target_id: id });
   if (error) throw error;
 }
@@ -105,7 +127,7 @@ export const deleteDebtGroup = (ownerId: string, id: string) => deleteRecord("de
 export const deleteDebt = (ownerId: string, id: string) => deleteRecord("delete_debt", ownerId, id);
 
 export async function deleteDebtPayment(ownerId: string, id: string, snapshot: DebtSnapshot) {
-  const supabase = await client();
+  const supabase = await requireSupabaseClient();
   const replacementRows = serializeDebtSnapshot(snapshot).payments;
   const { error } = await supabase.rpc("delete_debt_payment", { expected_owner_id: ownerId, target_id: id, replacement_rows: replacementRows });
   if (error) throw error;

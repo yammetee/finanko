@@ -1,15 +1,14 @@
 import { create } from "zustand";
+import { uid } from "../../shared/lib/id";
+import type { LoadState } from "../../shared/types/loadState";
 import { buildDebtProjection } from "./debtMath";
 import { deleteDebt, deleteDebtGroup, deleteDebtPayment, loadDebtData, saveDebtData } from "./debtRepository";
 import type { Debt, DebtEvent, DebtGroup, DebtPayment, DebtReconciliation, DebtSnapshot } from "./debtTypes";
-
-type LoadState = "idle" | "loading" | "ready" | "error";
 
 interface DebtState extends DebtSnapshot {
   ownerId: string | null;
   loadState: LoadState;
   initialize: (ownerId: string) => Promise<void>;
-  reset: () => void;
   saveGroup: (value: Omit<DebtGroup, "id"> & { id?: string }) => Promise<DebtGroup>;
   saveDebt: (value: Omit<Debt, "id"> & { id?: string }) => Promise<Debt>;
   savePayment: (value: Omit<DebtPayment, "id" | "sequence" | "type"> & { id?: string }) => Promise<DebtPayment>;
@@ -19,7 +18,6 @@ interface DebtState extends DebtSnapshot {
   deleteEvent: (id: string) => Promise<void>;
 }
 
-const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 const empty = (): DebtSnapshot => ({ groups: [], debts: [], events: [] });
 let debtSessionVersion = 0;
 
@@ -45,10 +43,6 @@ export const useDebtStore = create<DebtState>()((set, get) => ({
   ownerId: null,
   ...empty(),
   loadState: "idle",
-  reset: () => {
-    debtSessionVersion += 1;
-    set({ ownerId: null, ...empty(), loadState: "idle" });
-  },
   initialize: async (ownerId) => {
     const version = ++debtSessionVersion;
     set({ ownerId, ...empty(), loadState: "loading" });

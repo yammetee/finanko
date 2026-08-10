@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import { Camera, FileText, PenLine } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { DEFAULT_CURRENCY } from "../../shared/constants/expenses";
 import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
@@ -8,9 +9,8 @@ import { formatMoney } from "../../shared/lib/format";
 import type { Expense } from "../../shared/types/expense";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
-import { parseReceiptInput, parseTextInput } from "../receipts/aiParser";
-import { detectAmountInText, detectCurrencyInText, parseTextInputLocally, type ParsedExpense } from "../receipts/expenseParser";
-import { prepareReceiptImage } from "../receipts/receiptImage";
+import { loadTrendChart } from "../../shared/ui/trendChartModule";
+import type { ParsedExpense } from "../receipts/expenseParser";
 import { isDefaultExpenseCategory, sortDefaultExpenseCategories } from "./categoryData";
 import { ExpenseDetailsPage } from "./ExpenseDetailsPage";
 import type { ExpenseFormMode } from "./ExpenseFormPage";
@@ -21,7 +21,7 @@ import {
   buildExpenseView,
   calculateAverageDailyExpense,
   categoryGroupKey,
-  getExpenseTrackingStart,
+  getExpensePeriodRange,
   type ExpenseFilters,
   type ExpensePeriod,
 } from "./expenseAnalytics";
@@ -30,7 +30,7 @@ import { useExpenseStore } from "./expenseStore";
 
 const ExpenseFormPage = lazy(() => import("./ExpenseFormPage").then((module) => ({ default: module.ExpenseFormPage })));
 const ExpenseDateRange = lazy(() => import("./ExpenseDateRange").then((module) => ({ default: module.ExpenseDateRange })));
-const TrendChart = lazy(() => import("../../shared/ui/TrendChart").then((module) => ({ default: module.TrendChart })));
+const TrendChart = lazy(() => loadTrendChart().then((module) => ({ default: module.TrendChart })));
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
 const MOBILE_CATEGORY_LIMIT = 5;
 const HISTORY_LIMIT = 8;
@@ -49,10 +49,23 @@ interface ExpensesPageProps { currencyMode: DisplayCurrency; onCurrencyChange: (
 export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, capitalTotalUsd, debtTotalUsd }: ExpensesPageProps) {
   const { message } = useFeedback();
   const { locale, t } = useI18n();
-  const expenseState = useExpenseStore();
+  const expenseState = useExpenseStore(useShallow((state) => ({
+    categories: state.categories,
+    expenses: state.expenses,
+    trackingStartedAt: state.trackingStartedAt,
+    loadState: state.loadState,
+    rangeLoading: state.rangeLoading,
+    loadedRangeKey: state.loadedRangeKey,
+    loadRange: state.loadRange,
+    addExpenses: state.addExpenses,
+    updateExpense: state.updateExpense,
+    deleteExpense: state.deleteExpense,
+  })));
   const expensesReady = expenseState.loadState === "ready";
   const expensesFailed = expenseState.loadState === "error";
-  const expensesLoading = expenseState.loadState === "idle" || expenseState.loadState === "loading";
+  const expensesLoading = expenseState.loadState === "idle" || expenseState.loadState === "loading" || expenseState.rangeLoading;
+  const loadExpenseRange = expenseState.loadRange;
+  const expenseLoadState = expenseState.loadState;
   const receiptInput = useRef<HTMLInputElement>(null);
   const [formMode, setFormMode] = useState<ExpenseFormMode | null>(null);
   const [draft, setDraft] = useState<ExpenseDraft | null>(null);
@@ -69,6 +82,14 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
     setShowAllHistory(false);
   }, [filters.period, filters.categoryKeys, filters.customRange]);
 
+  const requestedRange = useMemo(() => {
+    const range = getExpensePeriodRange(filters);
+    return range ? { start: range.start.toISOString(), end: range.end.toISOString() } : {};
+  }, [filters]);
+  useEffect(() => {
+    if (expenseLoadState === "ready") void loadExpenseRange(requestedRange).catch(() => undefined);
+  }, [expenseLoadState, loadExpenseRange, requestedRange]);
+
   const expenseCategories = expenseState.categories;
   const primaryCategories = useMemo(
     () => sortDefaultExpenseCategories(expenseCategories.filter(isDefaultExpenseCategory)),
@@ -83,18 +104,18 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
   const displayCurrency = requestedDisplayCurrency;
   const expenseView = useMemo(() => {
     void ratesVersion;
-    return buildExpenseView({ expenses: expenseState.expenses, categories: analyticsCategories, filters, displayCurrency });
-  }, [analyticsCategories, displayCurrency, expenseState.expenses, filters, ratesVersion]);
+    return buildExpenseView({ expenses: expenseState.expenses, categories: analyticsCategories, categoryGroups, filters, displayCurrency });
+  }, [analyticsCategories, categoryGroups, displayCurrency, expenseState.expenses, filters, ratesVersion]);
   const categoryNames = useMemo(() => new Map(categoryGroups.map((group) => [group.key, group.name])), [categoryGroups]);
   const otherKey = categoryGroupKey("Other");
-  const categoryAmounts = currencyMode === "native"
+  const categoryAmounts = useMemo(() => currencyMode === "native"
     ? expenseView.nativeByCategory
     : expenseView.byCategory.map((item) => ({
       ...item,
       currency: displayCurrency,
       convertedValue: item.value,
-    }));
-  const breakdown = categoryAmounts.reduce<Array<(typeof categoryAmounts)[number]>>((items, item) => {
+    })), [currencyMode, displayCurrency, expenseView.byCategory, expenseView.nativeByCategory]);
+  const breakdown = useMemo(() => categoryAmounts.reduce<Array<(typeof categoryAmounts)[number]>>((items, item) => {
     const key = item.key;
     const existing = items.find((candidate) => candidate.key === key && candidate.currency === item.currency);
     if (existing) {
@@ -104,26 +125,22 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
     }
     items.push({ ...item, key, color: key === otherKey ? otherCategory?.color ?? "#8c8c8c" : item.color, name: categoryNames.get(key) ?? (key === otherKey ? t("category.other") : item.name) });
     return items;
-  }, []).sort((left, right) => Math.abs(right.convertedValue) - Math.abs(left.convertedValue));
+  }, []).sort((left, right) => Math.abs(right.convertedValue) - Math.abs(left.convertedValue)), [categoryAmounts, categoryNames, otherCategory?.color, otherKey, t]);
   const breakdownTotal = breakdown.reduce((sum, item) => sum + Math.abs(item.convertedValue), 0);
-  const trackingStartedAt = useMemo(
-    () => getExpenseTrackingStart(expenseState.expenses),
-    [expenseState.expenses],
-  );
-  const average = calculateAverageDailyExpense(
+  const average = useMemo(() => calculateAverageDailyExpense(
     expenseView.history,
     filters,
     expenseView.total,
     dayjs(),
-    trackingStartedAt,
-  );
+    expenseState.trackingStartedAt,
+  ), [expenseState.trackingStartedAt, expenseView.history, expenseView.total, filters]);
   const totalLabel = expensesReady ? formatMoney(expenseView.total, displayCurrency) : "—";
   const averageLabel = expensesReady ? formatMoney(average, displayCurrency) : "—";
   const trend = useMemo(() => buildExpenseTrendBuckets(expenseView.history, filters), [expenseView.history, filters]);
   const selectedCategory = categoryGroups.find((group) => {
     return filters.categoryKeys.includes(group.key);
   })?.key ?? "";
-  const visibleHistory = showAllHistory ? expenseView.history : expenseView.history.slice(0, HISTORY_LIMIT);
+  const visibleHistory = useMemo(() => showAllHistory ? expenseView.history : expenseView.history.slice(0, HISTORY_LIMIT), [expenseView.history, showAllHistory]);
   const hiddenHistoryCount = Math.max(0, expenseView.history.length - HISTORY_LIMIT);
 
   function closeForm() { setFormMode(null); setDraft(null); setEditing(null); setParseError(null); setParsing(false); }
@@ -133,6 +150,10 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
   async function handleReceipt(file: File) {
     setEditing(null); setFormMode("receipt"); setDraft(null); setParseError(null); setParsing(true);
     try {
+      const [{ parseReceiptInput }, { prepareReceiptImage }] = await Promise.all([
+        import("../receipts/aiParser"),
+        import("../receipts/receiptImage"),
+      ]);
       const parsed = await parseReceiptInput({ fileName: file.name, fileDataUrl: await prepareReceiptImage(file), currency: baseCurrency, categories: primaryCategories });
       const items = parsed.items.map((item) => ({ ...item, currency: item.currency ?? parsed.currency }));
       setDraft(parsed.items.length > 0
@@ -148,6 +169,10 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
     setParsing(true); setParseError(null);
     const input = { text, currency: baseCurrency, categories: primaryCategories };
     try {
+      const [{ parseTextInput }, { parseTextInputLocally }] = await Promise.all([
+        import("../receipts/aiParser"),
+        import("../receipts/expenseParser"),
+      ]);
       const parsed = await parseTextInput(input).catch(() => parseTextInputLocally(input));
       const expense = parsed as ParsedExpense;
       const categoryId = expense.items[0]?.categoryId ?? primaryCategories[0]?.id;
@@ -156,6 +181,7 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
         ? { currency: expense.currency, occurredAt: dayjs(), source: "text_ai", items, receiptReview: expense.receiptReview }
         : { ...createEmptyExpenseDraft(expense.currency, categoryId, { name: expense.description || text, amount: expense.total || undefined }), source: "text_ai", receiptReview: expense.receiptReview });
     } catch {
+      const { detectAmountInText, detectCurrencyInText } = await import("../receipts/expenseParser");
       setParseError(t("expense.parserSuggestionOnly"));
       setDraft({ ...createEmptyExpenseDraft(detectCurrencyInText(text) ?? baseCurrency, primaryCategories[0]?.id, { name: text, amount: detectAmountInText(text) ?? undefined }), source: "text_ai" });
     } finally { setParsing(false); }

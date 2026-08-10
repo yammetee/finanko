@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { deleteCapitalEvent, deleteCapitalGroup, deleteCapitalItem, loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation } from "./capitalRepository";
+import { uid } from "../../shared/lib/id";
+import type { LoadState } from "../../shared/types/loadState";
+import { deleteCapitalEvent, deleteCapitalGroup, deleteCapitalItem, loadCapitalData, loadCapitalQuoteHistory, saveCapitalData, saveCapitalHistory, saveCapitalValuation } from "./capitalRepository";
 import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalQuote, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
 import { loadMarketHistory, loadMarketQuotes } from "./marketRepository";
 import { getCapitalTotalUsd } from "./capitalView";
@@ -10,7 +12,6 @@ import { rebuildCapitalHistory } from "./capitalHistory";
 import { addTransferCostBasis, assertCapitalOutflowsWithinBalance } from "./capitalMath";
 import { isCapitalEventTypeAllowed } from "./capitalEventRules";
 
-type LoadState = "idle" | "loading" | "ready" | "error";
 interface CapitalState extends Pick<CapitalSnapshot, "groups" | "items" | "events"> {
   ownerId: string | null;
   quotes: Record<string, CapitalQuote>;
@@ -22,7 +23,6 @@ interface CapitalState extends Pick<CapitalSnapshot, "groups" | "items" | "event
   unavailableQuoteItemIds: string[];
   loadState: LoadState;
   initialize: (ownerId: string) => Promise<void>;
-  reset: () => void;
   saveGroup: (value: Omit<CapitalGroup, "id"> & { id?: string }) => Promise<CapitalGroup>;
   saveItem: (value: Omit<CapitalItem, "id"> & { id?: string }) => Promise<CapitalItem>;
   saveOpeningPosition: (item: Omit<CapitalItem, "id">, quantity: string, invested: string, occurredAt: string) => Promise<CapitalItem>;
@@ -35,7 +35,6 @@ interface CapitalState extends Pick<CapitalSnapshot, "groups" | "items" | "event
   rebuildHistory: () => Promise<void>;
 }
 
-const uid = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 const utcDate = (value = new Date()) => value.toISOString().slice(0, 10);
 let capitalSessionVersion = 0;
 const emptyCapitalState = () => ({
@@ -84,10 +83,6 @@ async function generateExpectedInterest() {
 
 export const useCapitalStore = create<CapitalState>()((set, get) => ({
   ownerId: null, ...emptyCapitalState(), loadState: "idle",
-  reset: () => {
-    capitalSessionVersion += 1;
-    set({ ownerId: null, ...emptyCapitalState(), loadState: "idle" });
-  },
   initialize: async (targetOwnerId) => {
     const version = ++capitalSessionVersion;
     set({ ownerId: targetOwnerId, ...emptyCapitalState(), loadState: "loading" });
@@ -95,10 +90,9 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       const snapshot = await loadCapitalData(targetOwnerId);
       if (version !== capitalSessionVersion || get().ownerId !== targetOwnerId) return;
       const expected = buildExpectedInterestEvents(snapshot.items, snapshot.events);
-      if (expected.length) await saveCapitalData(targetOwnerId, { events: expected });
-      if (version !== capitalSessionVersion || get().ownerId !== targetOwnerId) return;
       const events = [...snapshot.events, ...expected];
-      set({ groups: snapshot.groups, items: snapshot.items, events, quoteHistory: snapshot.quoteHistory ?? [], valuations: snapshot.valuations ?? [], quotes: Object.fromEntries((snapshot.latestQuotes ?? []).map((quote) => [quote.itemId, quote])), loadState: "ready" });
+      set({ groups: snapshot.groups, items: snapshot.items, events, quoteHistory: [], valuations: snapshot.valuations ?? [], quotes: Object.fromEntries((snapshot.latestQuotes ?? []).map((quote) => [quote.itemId, quote])), loadState: "ready" });
+      if (expected.length) void saveCapitalData(targetOwnerId, { events: expected }).catch(() => undefined);
       if (!(snapshot.valuations?.length) && events.some((event) => event.status === "confirmed")) void get().rebuildHistory().catch(() => undefined);
     }
     catch { if (version === capitalSessionVersion && get().ownerId === targetOwnerId) set({ loadState: "error" }); }
@@ -119,8 +113,7 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
     await saveCapitalData(ownerId, { items: [value] });
     if (get().ownerId !== ownerId) return value;
     set((state) => ({ items: [...state.items.filter((entry) => entry.id !== value.id), value] }));
-    void generateExpectedInterest().catch(() => undefined);
-    void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
+    void generateExpectedInterest().then(() => useCapitalStore.getState().rebuildHistory()).catch(() => undefined);
     return value;
   },
   saveOpeningPosition: async (input, quantity, invested, occurredAt) => {
@@ -130,8 +123,7 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
     await saveCapitalData(ownerId, { items: [item], events: [event] });
     if (get().ownerId !== ownerId) return item;
     set((state) => ({ items: [...state.items, item], events: [...state.events, event] }));
-    void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
-    void generateExpectedInterest().catch(() => undefined);
+    void generateExpectedInterest().then(() => useCapitalStore.getState().rebuildHistory()).catch(() => undefined);
     return item;
   },
   saveEvent: async (input) => {
@@ -183,8 +175,9 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
     await saveCapitalData(ownerId, { events: changedCapitalEvents(currentEvents, normalizedEvents, id) });
     if (get().ownerId !== ownerId) return;
     set({ events: normalizedEvents });
-    void useCapitalStore.getState().rebuildHistory().catch(() => undefined);
-    if (status !== "expected") void generateExpectedInterest().catch(() => undefined);
+    void (status !== "expected" ? generateExpectedInterest() : Promise.resolve())
+      .then(() => useCapitalStore.getState().rebuildHistory())
+      .catch(() => undefined);
   },
   refreshQuotes: async () => {
     const ownerId = get().ownerId;
@@ -197,12 +190,11 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       const current = useCapitalStore.getState();
       const merged = { ...current.quotes, ...Object.fromEntries(quotes.map((quote) => [quote.itemId, quote])) };
       const totalUsd = getCapitalTotalUsd(current.items, current.events, merged);
-      await saveCapitalValuation(ownerId, quotes, totalUsd);
-      if (get().ownerId !== ownerId) return;
       const today = utcDate();
       const resolved = new Set(quotes.map((quote) => quote.itemId));
       const unavailableQuoteItemIds = marketItems.filter((item) => !resolved.has(item.id)).map((item) => item.id);
       set((state) => ({ quotes: merged, unavailableQuoteItemIds, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
+      void saveCapitalValuation(ownerId, quotes, totalUsd).catch(() => undefined);
     } catch {
       if (get().ownerId !== ownerId) return;
       const unavailableQuoteItemIds = useCapitalStore.getState().items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id);
@@ -221,9 +213,12 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       const current = useCapitalStore.getState();
       const startDate = current.events.filter((event) => event.status === "confirmed").map((event) => event.occurredAt.slice(0, 10)).sort()[0];
       if (!startDate) return;
-      const fetched = await loadMarketHistory(current.items, startDate).catch(() => []);
+      const [stored, fetched] = await Promise.all([
+        loadCapitalQuoteHistory(ownerId).catch(() => current.quoteHistory),
+        loadMarketHistory(current.items, startDate).catch(() => []),
+      ]);
       if (get().ownerId !== ownerId) return;
-      const keyed = new Map([...current.quoteHistory, ...fetched].map((quote) => [`${quote.itemId}:${quote.provider}:${quote.quotedAt}`, quote]));
+      const keyed = new Map([...stored, ...fetched].map((quote) => [`${quote.itemId}:${quote.provider}:${quote.quotedAt}`, quote]));
       const history = [...keyed.values()];
       const values = rebuildCapitalHistory(current.items, current.events, history);
       await saveCapitalHistory(ownerId, fetched, values);

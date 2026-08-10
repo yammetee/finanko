@@ -18,7 +18,6 @@ async function authenticatedUserId(supabaseUrl: string, publishableKey: string, 
   try {
     const authResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { apikey: publishableKey, authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(5_000),
     });
     if (!authResponse.ok) return null;
     const user = await authResponse.json() as { id?: unknown };

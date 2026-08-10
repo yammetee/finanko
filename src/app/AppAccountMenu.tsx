@@ -7,11 +7,11 @@ import { useI18n } from "../shared/i18n/i18nContext";
 import { useFeedback } from "../shared/ui/feedbackContext";
 import { AppThemeProvider } from "./providers/AppThemeProvider";
 
-export function AppAccountMenu() {
-  return <AppThemeProvider><AppAccountMenuContent /></AppThemeProvider>;
+export function AppAccountMenu({ onClose }: { onClose: () => void }) {
+  return <AppThemeProvider><AppAccountMenuContent onClose={onClose} /></AppThemeProvider>;
 }
 
-function AppAccountMenuContent() {
+function AppAccountMenuContent({ onClose }: { onClose: () => void }) {
   const [open, setOpen] = useState(true);
   const [modal, modalHolder] = useModal();
   const { message } = useFeedback();
@@ -26,6 +26,7 @@ function AppAccountMenuContent() {
       okText: t("account.delete.confirm"),
       cancelText: t("actions.cancel"),
       okButtonProps: { danger: true },
+      afterClose: onClose,
       async onOk() {
         try {
           await deleteAccount();
@@ -55,7 +56,7 @@ function AppAccountMenuContent() {
             if (key === "delete-account") confirmAccountDeletion();
           },
         }}
-        onOpenChange={setOpen}
+        onOpenChange={(next, info) => { setOpen(next); if (!next && info.source === "trigger") onClose(); }}
         open={open}
         placement="bottomRight"
         rootClassName="account-menu"

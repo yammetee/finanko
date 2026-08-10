@@ -18,3 +18,9 @@ export function getSupabaseClient() {
 
   return supabasePromise;
 }
+
+export async function requireSupabaseClient() {
+  const client = await getSupabaseClient();
+  if (!client) throw new Error("Supabase is not configured");
+  return client;
+}

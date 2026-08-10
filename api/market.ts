@@ -16,7 +16,6 @@ interface NormalizedQuote { itemId: string; price: string; currency: "USD"; prov
 interface MarketSearchResult { name: string; symbol: string; type: AssetType; provider: "coingecko" | "nasdaq" | "yahoo"; providerAssetId: string }
 
 const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; evenkvit/1.0)" };
-const SEARCH_TIMEOUT_MS = 4_000;
 const COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
 const MARKET_PROVIDERS: MarketProvider[] = ["bybit", "coingecko", "nasdaq", "yahoo"];
 
@@ -132,13 +131,13 @@ async function fetchRouted(matching: MarketAsset[], load: (provider: MarketProvi
   const asset = matching[0];
   const [primary, fallback] = providerRoute(asset);
   try {
-    return fanOutQuotes(await load(primary, routedAsset(asset, primary, false)), matching);
+    const quotes = await Promise.any([
+      load(primary, routedAsset(asset, primary, false)),
+      load(fallback, routedAsset(asset, fallback, true)),
+    ]);
+    return fanOutQuotes(quotes, matching);
   } catch {
-    try {
-      return fanOutQuotes(await load(fallback, routedAsset(asset, fallback, true)), matching);
-    } catch {
-      return [];
-    }
+    return [];
   }
 }
 
@@ -264,7 +263,7 @@ export async function fetchMarketHistory(assets: MarketAsset[], startDate: strin
 }
 
 export async function searchMarketAssets(query: string, type?: AssetType): Promise<MarketSearchResult[]> {
-  const cryptoRequest = type && type !== "crypto" ? Promise.resolve([]) : fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS) }).then(async (response) => {
+  const cryptoRequest = type && type !== "crypto" ? Promise.resolve([]) : fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`).then(async (response) => {
     if (!response.ok) return [];
     const body = await response.json() as { coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number }> };
     return (body.coins ?? []).flatMap((coin) => {
@@ -272,7 +271,7 @@ export async function searchMarketAssets(query: string, type?: AssetType): Promi
       return coin.id && coin.name && symbol ? [{ name: coin.name, symbol, type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }] : [];
     }).slice(0, 6);
   }).catch(() => []);
-  const securityRequest = type === "crypto" ? Promise.resolve([]) : fetch(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS, signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS) }).then(async (response) => {
+  const securityRequest = type === "crypto" ? Promise.resolve([]) : fetch(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS }).then(async (response) => {
     if (!response.ok) return [];
     const body = await response.json() as { data?: Array<{ symbol?: string; name?: string; asset?: string }> };
     return (body.data ?? []).flatMap((asset) => {
@@ -283,7 +282,7 @@ export async function searchMarketAssets(query: string, type?: AssetType): Promi
         : [];
     });
   }).catch(() => []);
-  const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`, { signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS) }).then(async (response) => {
+  const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetch(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`).then(async (response) => {
     if (!response.ok) return [];
     const body = await response.json() as { quotes?: Array<{ symbol?: string; longname?: string; shortname?: string; quoteType?: string }> };
     return (body.quotes ?? []).flatMap((asset) => {

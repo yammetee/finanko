@@ -1,17 +1,28 @@
 import { Eye, EyeOff, LogIn, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { isSupabaseConfigured } from "../../shared/api/supabase";
-import { initializeExpenseData, resetExpenseData } from "../expenses/expenseStore";
+import { initializeExpenseData, resetExpenseData, useExpenseStore } from "../expenses/expenseStore";
 import { getAuthErrorKey } from "./authErrors";
 import { useAuthStore } from "./authStore";
+import { loadAuthenticatedApp } from "../../app/authenticatedAppModule";
+import { loadTrendChart } from "../../shared/ui/trendChartModule";
 
 interface AuthGateProps { children: React.ReactNode }
 
 export function AuthGate({ children }: AuthGateProps) {
-  const { initialize, signInWithPassword, signUpWithPassword, loading, user } = useAuthStore();
+  const { initialize, signInWithPassword, signUpWithPassword, loading, session } = useAuthStore(useShallow((state) => ({
+    initialize: state.initialize,
+    signInWithPassword: state.signInWithPassword,
+    signUpWithPassword: state.signUpWithPassword,
+    loading: state.loading,
+    session: state.session,
+  })));
+  const expenseOwnerId = useExpenseStore((state) => state.ownerId);
+  const expenseLoadState = useExpenseStore((state) => state.loadState);
   const { t } = useI18n();
-  const currentUser = user();
+  const currentUser = session?.user ?? null;
   const currentUserId = typeof currentUser?.id === "string" ? currentUser.id : null;
   const [authMode, setAuthMode] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
@@ -32,10 +43,12 @@ export function AuthGate({ children }: AuthGateProps) {
       return;
     }
 
+    void loadAuthenticatedApp();
+    void loadTrendChart();
     void initializeExpenseData(currentUserId).catch(() => undefined);
   }, [currentUserId]);
 
-  if (loading) {
+  if (loading || (currentUser && (expenseOwnerId !== currentUserId || expenseLoadState === "idle" || expenseLoadState === "loading"))) {
     return (
       <div className="auth-screen">
         <div className="auth-loader" />

@@ -1,20 +1,25 @@
 import { create } from "zustand";
+import { uid } from "../../shared/lib/id";
+import dayjs from "dayjs";
 import type { Expense } from "../../shared/types/expense";
 import { createDefaultCategories } from "./categoryData";
-import { loadExpenseData, saveCategories, saveExpenses } from "./expenseRepository";
-import type { ExpenseState, NewExpenseInput } from "./expenseTypes";
+import { expenseRangeKey, loadExpenseData, loadExpenses, loadExpenseTrackingStart, saveCategories, saveExpenses } from "./expenseRepository";
+import type { ExpenseRange, ExpenseState, NewExpenseInput } from "./expenseTypes";
 
 let expenseSessionVersion = 0;
+let expenseRangeRequestVersion = 0;
 
-function uid(prefix: string) {
-  return `${prefix}-${crypto.randomUUID()}`;
+export function initialExpenseRange(): ExpenseRange {
+  return { start: dayjs().startOf("month").toISOString(), end: dayjs().endOf("month").toISOString() };
 }
 
 export async function initializeExpenseData(ownerId: string) {
   const version = ++expenseSessionVersion;
-  useExpenseStore.setState({ ownerId, categories: [], expenses: [], loadState: "loading" });
+  expenseRangeRequestVersion += 1;
+  const range = initialExpenseRange();
+  useExpenseStore.setState({ ownerId, categories: [], expenses: [], trackingStartedAt: undefined, loadedRangeKey: null, rangeLoading: false, loadState: "loading" });
   try {
-    let snapshot = await loadExpenseData();
+    let snapshot = await loadExpenseData(range);
     const existingNames = new Set(
       snapshot.categories.map((category) => category.name.trim().toLocaleLowerCase()),
     );
@@ -29,7 +34,7 @@ export async function initializeExpenseData(ownerId: string) {
       };
     }
     if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
-      useExpenseStore.setState({ ...snapshot, loadState: "ready" });
+      useExpenseStore.setState({ ...snapshot, loadedRangeKey: expenseRangeKey(range), loadState: "ready" });
     }
   } catch (error) {
     if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
@@ -41,7 +46,8 @@ export async function initializeExpenseData(ownerId: string) {
 
 export function resetExpenseData() {
   expenseSessionVersion += 1;
-  useExpenseStore.setState({ ownerId: null, categories: [], expenses: [], loadState: "idle" });
+  expenseRangeRequestVersion += 1;
+  useExpenseStore.setState({ ownerId: null, categories: [], expenses: [], trackingStartedAt: undefined, loadedRangeKey: null, rangeLoading: false, loadState: "idle" });
 }
 
 function buildExpense(input: NewExpenseInput, existing?: Expense): Expense {
@@ -60,12 +66,33 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
   ownerId: null,
   categories: [],
   expenses: [],
+  trackingStartedAt: undefined,
+  loadedRangeKey: null,
+  rangeLoading: false,
   loadState: "idle",
+  loadRange: async (range) => {
+    const ownerId = get().ownerId;
+    const key = expenseRangeKey(range);
+    if (!ownerId || get().loadedRangeKey === key) return;
+    const sessionVersion = expenseSessionVersion;
+    const requestVersion = ++expenseRangeRequestVersion;
+    set({ rangeLoading: true });
+    try {
+      const expenses = await loadExpenses(range);
+      if (sessionVersion === expenseSessionVersion && requestVersion === expenseRangeRequestVersion && get().ownerId === ownerId) set({ expenses, loadedRangeKey: key, rangeLoading: false });
+    } catch (error) {
+      if (sessionVersion === expenseSessionVersion && requestVersion === expenseRangeRequestVersion && get().ownerId === ownerId) set({ rangeLoading: false });
+      throw error;
+    }
+  },
   addExpenses: async (inputs) => {
     const expenses = inputs.map((input) => buildExpense(input));
     await saveExpenses(expenses);
     set((current) => ({
       expenses: [...current.expenses, ...expenses],
+      trackingStartedAt: [current.trackingStartedAt, ...expenses.map((expense) => expense.occurredAt)]
+        .filter((value): value is string => Boolean(value))
+        .sort()[0],
     }));
   },
   updateExpense: async (id, input) => {
@@ -73,10 +100,12 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
     if (!existing) throw new Error("Expense not found");
     const updated = buildExpense(input, existing);
     await saveExpenses([updated]);
+    const trackingStartedAt = await loadExpenseTrackingStart().catch(() => get().trackingStartedAt);
     set((current) => ({
       expenses: current.expenses.map((expense) =>
         expense.id === id ? updated : expense,
       ),
+      trackingStartedAt,
     }));
   },
   deleteExpense: async (id) => {
@@ -85,8 +114,10 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
     if (!existing) throw new Error("Expense not found");
     const deleted = { ...existing, deletedAt: new Date().toISOString() };
     await saveExpenses([deleted]);
+    const trackingStartedAt = await loadExpenseTrackingStart().catch(() => get().trackingStartedAt);
     set((current) => ({
       expenses: current.expenses.filter((expense) => expense.id !== id),
+      trackingStartedAt,
     }));
   },
 }));

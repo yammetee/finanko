@@ -1,65 +1,41 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { FeedbackProvider } from "../shared/ui/FeedbackProvider";
 import { ExpensesPage } from "../features/expenses/ExpensesPage";
-import { useCapitalStore } from "../features/capital/capitalStore";
-import { getCapitalTotalUsd } from "../features/capital/capitalView";
 import { useAuthStore } from "../features/auth/authStore";
 import { AppHeader } from "./AppHeader";
 import type { DisplayCurrency } from "../shared/ui/CurrencySwitcher";
 import { refreshLiveExchangeRates } from "../shared/lib/exchangeRates";
-import { useDebtStore } from "../features/debts/debtStore";
-import { getOutstandingDebt } from "../features/debts/debtView";
 import type { AppPage } from "./AppHeader";
+import { useFinancialSummary } from "../features/summary/useFinancialSummary";
+import { convertMoney } from "../shared/lib/currency";
+import type { Currency } from "../shared/types/expense";
+import { FeaturePageState } from "../shared/ui/FeaturePageState";
 
-const CapitalPage = lazy(() => import("../features/capital/CapitalPage").then((module) => ({ default: module.CapitalPage })));
-const DebtPage = lazy(() => import("../features/debts/DebtPage").then((module) => ({ default: module.DebtPage })));
+const CapitalRoute = lazy(() => import("../features/capital/CapitalRoute").then((module) => ({ default: module.CapitalRoute })));
+const DebtRoute = lazy(() => import("../features/debts/DebtRoute").then((module) => ({ default: module.DebtRoute })));
 
 export function AuthenticatedApp() {
   const [page, setPage] = useState<AppPage>("expenses");
   const [currencyMode, setCurrencyMode] = useState<DisplayCurrency>("native");
   const [ratesVersion, setRatesVersion] = useState(0);
   const userId = useAuthStore((state) => state.session?.user.id);
-  const capital = useCapitalStore();
-  const debt = useDebtStore();
-  const initializeDebt = debt.initialize;
-  const resetDebt = debt.reset;
-  const initializeCapital = capital.initialize;
-  const resetCapital = capital.reset;
-  const refreshCapitalQuotes = capital.refreshQuotes;
-  const capitalLoadState = capital.loadState;
+  const { summary, loaded: summaryLoaded, refresh: refreshSummary, updateCapitalTotal } = useFinancialSummary(userId);
   useEffect(() => {
     let active = true;
     void refreshLiveExchangeRates().then((updated) => { if (active && updated) setRatesVersion((value) => value + 1); });
     return () => { active = false; };
   }, []);
-  useEffect(() => {
-    resetCapital();
-    if (!userId) return resetCapital;
-    const current = useCapitalStore.getState();
-    if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
-    return resetCapital;
-  }, [initializeCapital, resetCapital, userId]);
-  useEffect(() => {
-    resetDebt();
-    if (!userId) return resetDebt;
-    const current = useDebtStore.getState();
-    if (current.ownerId !== userId || current.loadState === "idle" || current.loadState === "error") void current.initialize(userId);
-    return resetDebt;
-  }, [initializeDebt, resetDebt, userId]);
-  const marketItemKey = capital.items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id).sort().join(":");
-  useEffect(() => { if (capital.ownerId === userId && capitalLoadState === "ready" && marketItemKey) void refreshCapitalQuotes(); }, [capital.ownerId, capitalLoadState, marketItemKey, refreshCapitalQuotes, userId]);
-  const changePage = (nextPage: AppPage) => {
-    setPage(nextPage);
-    if (nextPage === "capital" && userId && (capital.ownerId !== userId || capitalLoadState === "idle" || capitalLoadState === "error")) void initializeCapital(userId);
-    if (nextPage === "debts" && userId && (debt.ownerId !== userId || debt.loadState === "idle" || debt.loadState === "error")) void initializeDebt(userId);
-  };
-  const capitalReady = Boolean(userId && capital.ownerId === userId && capitalLoadState === "ready");
-  const debtReady = Boolean(userId && debt.ownerId === userId && debt.loadState === "ready");
-  const capitalTotalUsd = capitalReady ? getCapitalTotalUsd(capital.items, capital.events, capital.quotes) : undefined;
-  const debtTotalUsd = debtReady ? getOutstandingDebt(debt.debts, debt.events, "USD") : undefined;
+  const calculatedDebtTotalUsd = useMemo(() => {
+    void ratesVersion;
+    return Object.entries(summary.debtTotals).reduce((total, [currency, value]) => (
+      total + convertMoney(Number(value), currency as Currency, "USD")
+    ), 0);
+  }, [ratesVersion, summary.debtTotals]);
+  const debtTotalUsd = summaryLoaded ? calculatedDebtTotalUsd : undefined;
+  const routeFallback = <FeaturePageState />;
   return (
     <FeedbackProvider>
-      <div className="app-shell"><AppHeader page={page} onPageChange={changePage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} capitalTotalUsd={capitalTotalUsd} debtTotalUsd={debtTotalUsd} /> : page === "capital" ? <Suspense fallback={null}>{capitalReady ? <CapitalPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} debtTotalUsd={debtTotalUsd} /> : null}</Suspense> : <Suspense fallback={null}>{debtReady ? <DebtPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} /> : null}</Suspense>}</main></div>
+      <div className="app-shell"><AppHeader page={page} onPageChange={setPage} /><main className="main-content">{page === "expenses" ? <ExpensesPage currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} capitalTotalUsd={summary.capitalTotalUsd} debtTotalUsd={debtTotalUsd} /> : page === "capital" ? <Suspense fallback={routeFallback}>{userId ? <CapitalRoute userId={userId} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} debtTotalUsd={debtTotalUsd} onCapitalTotalChanged={updateCapitalTotal} /> : null}</Suspense> : <Suspense fallback={routeFallback}>{userId ? <DebtRoute userId={userId} currencyMode={currencyMode} onCurrencyChange={setCurrencyMode} ratesVersion={ratesVersion} onSummaryChanged={refreshSummary} /> : null}</Suspense>}</main></div>
     </FeedbackProvider>
   );
 }

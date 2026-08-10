@@ -5,6 +5,7 @@ import type { Currency } from "../types/expense";
 type RateRow = Record<Currency, number> & { date: string };
 
 const rates = ratesData.rates as RateRow[];
+const sortedRates = [...rates].sort((a, b) => +new Date(b.date) - +new Date(a.date));
 let liveRateRow: RateRow | null = null;
 
 export function setLiveExchangeRates(row: RateRow | null) {
@@ -13,7 +14,6 @@ export function setLiveExchangeRates(row: RateRow | null) {
 
 function getHistoricalRateRow(date?: string) {
   const target = date ? dayjs(date) : dayjs();
-  const sortedRates = [...rates].sort((a, b) => +new Date(b.date) - +new Date(a.date));
   return sortedRates.find((row) => !dayjs(row.date).isAfter(target, "day")) ?? sortedRates[sortedRates.length - 1];
 }
 

@@ -6,13 +6,14 @@ import type { FeedbackNotice } from "./feedbackContext";
 interface FeedbackHostProps {
   notices: FeedbackNotice[];
   onShown: (lastId: number) => void;
+  onIdle: () => void;
 }
 
-export function FeedbackHost({ notices, onShown }: FeedbackHostProps) {
-  return <AppThemeProvider><FeedbackHostContent notices={notices} onShown={onShown} /></AppThemeProvider>;
+export function FeedbackHost({ notices, onShown, onIdle }: FeedbackHostProps) {
+  return <AppThemeProvider><FeedbackHostContent notices={notices} onShown={onShown} onIdle={onIdle} /></AppThemeProvider>;
 }
 
-function FeedbackHostContent({ notices, onShown }: FeedbackHostProps) {
+function FeedbackHostContent({ notices, onShown, onIdle }: FeedbackHostProps) {
   const [message, messageHolder] = useMessage();
   const shown = useRef(new Set<number>());
 
@@ -22,10 +23,14 @@ function FeedbackHostContent({ notices, onShown }: FeedbackHostProps) {
       lastId = Math.max(lastId, notice.id);
       if (shown.current.has(notice.id)) continue;
       shown.current.add(notice.id);
-      message[notice.type](notice.content);
+      const close = message[notice.type](notice.content);
+      void Promise.resolve(close).then(() => {
+        shown.current.delete(notice.id);
+        if (shown.current.size === 0) onIdle();
+      });
     }
     if (lastId > 0) onShown(lastId);
-  }, [message, notices, onShown]);
+  }, [message, notices, onIdle, onShown]);
 
   return messageHolder;
 }

@@ -10,6 +10,8 @@
   "actions.more": "Ещё {count}",
   "actions.parseSmart": "Распознать",
   "actions.retry": "Повторить",
+  "feedback.loading": "Загрузка",
+  "feedback.sectionLoadFailed": "Не удалось загрузить раздел.",
   "actions.signIn": "Войти",
   "actions.signOut": "Выйти",
   "actions.signUp": "Создать аккаунт",

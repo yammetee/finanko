@@ -17,7 +17,7 @@ export interface ExpenseFilters {
   customRange?: [string, string];
 }
 
-interface ExpenseCategoryGroup {
+export interface ExpenseCategoryGroup {
   key: string;
   name: string;
   color: string;
@@ -53,6 +53,7 @@ interface ExpenseViewInput {
   categories: Category[];
   filters: ExpenseFilters;
   displayCurrency: Currency;
+  categoryGroups?: ExpenseCategoryGroup[];
   now?: Dayjs;
 }
 
@@ -154,19 +155,23 @@ export function buildExpenseTrendBuckets(
     cursor = bucketEnd.add(1, "millisecond");
   }
 
+  const chronological = [...history].sort((left, right) => left.expense.occurredAt.localeCompare(right.expense.occurredAt));
+  let entryIndex = 0;
   let cumulativeValue = 0;
   return buckets.map((bucket) => {
-    const entries = history.filter((entry) => {
-      const occurredAt = dayjs(entry.expense.occurredAt);
-      return !occurredAt.isBefore(bucket.start) && !occurredAt.isAfter(bucket.end);
-    });
-    cumulativeValue += entries.reduce((sum, entry) => sum + entry.contribution, 0);
+    let expenseCount = 0;
+    while (entryIndex < chronological.length && dayjs(chronological[entryIndex].expense.occurredAt).isBefore(bucket.start)) entryIndex += 1;
+    while (entryIndex < chronological.length && !dayjs(chronological[entryIndex].expense.occurredAt).isAfter(bucket.end)) {
+      cumulativeValue += chronological[entryIndex].contribution;
+      expenseCount += 1;
+      entryIndex += 1;
+    }
     return {
       key: `${bucket.start.toISOString()}-${bucket.end.toISOString()}`,
       start: bucket.start.toISOString(),
       end: bucket.end.toISOString(),
       value: cumulativeValue,
-      expenseCount: entries.length,
+      expenseCount,
       unit,
     };
   });
@@ -201,21 +206,6 @@ export function calculateAverageDailyExpense(
   return total / dayCount;
 }
 
-export function getExpenseTrackingStart(
-  expenses: Expense[],
-) {
-  const firstExpense = expenses
-    .filter((expense) => !expense.deletedAt)
-    .reduce<Expense | null>((earliest, expense) => {
-      if (!earliest) return expense;
-      return new Date(expense.occurredAt) < new Date(earliest.occurredAt)
-        ? expense
-        : earliest;
-    }, null);
-
-  return firstExpense?.occurredAt;
-}
-
 function isInsidePeriod(expense: Expense, range: PeriodRange | null) {
   if (!range) return true;
   const occurredAt = dayjs(expense.occurredAt);
@@ -227,9 +217,10 @@ export function buildExpenseView({
   categories,
   filters,
   displayCurrency,
+  categoryGroups: providedCategoryGroups,
   now = dayjs(),
 }: ExpenseViewInput) {
-  const categoryGroups = buildExpenseCategoryGroups(categories);
+  const categoryGroups = providedCategoryGroups ?? buildExpenseCategoryGroups(categories);
   const categoryKeyById = new Map(
     categoryGroups.flatMap((group) => group.categoryIds.map((id) => [id, group.key] as const)),
   );
@@ -271,13 +262,7 @@ export function buildExpenseView({
     value: number;
     convertedValue: number;
   }>();
-  const addCategoryAmount = (key: string, expense: Expense) => {
-    const convertedAmount = convertMoney(
-      expense.amount,
-      expense.currency,
-      displayCurrency,
-      expense.occurredAt,
-    );
+  const addCategoryAmount = (key: string, expense: Expense, convertedAmount: number) => {
     categoryTotals.set(key, (categoryTotals.get(key) ?? 0) + convertedAmount);
 
     const nativeKey = `${key}:${expense.currency}`;
@@ -290,9 +275,9 @@ export function buildExpenseView({
     });
   };
 
-  visibleExpenses.forEach((expense) => {
+  history.forEach(({ expense, contribution }) => {
     const key = categoryKeyById.get(expense.categoryId);
-    if (key) addCategoryAmount(key, expense);
+    if (key) addCategoryAmount(key, expense, contribution);
   });
 
   const categoryMeta = new Map(categoryGroups.map((group) => [group.key, group]));
