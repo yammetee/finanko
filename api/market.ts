@@ -206,7 +206,7 @@ async function nasdaqQuote(asset: MarketAsset, signal: AbortSignal): Promise<Nor
 
 async function yahooQuote(asset: MarketAsset, signal: AbortSignal): Promise<NormalizedQuote> {
   const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
-  const response = await fetchWithTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`, { signal }, 8_000);
+  const response = await fetchWithTimeout(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`, { headers: NASDAQ_HEADERS, signal }, 8_000);
   if (!response.ok) throw new Error("Yahoo Finance unavailable");
   const body = await response.json() as { chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; regularMarketTime?: number } }>; error?: unknown } };
   const meta = body.chart?.result?.[0]?.meta;
@@ -263,7 +263,7 @@ async function yahooHistory(asset: MarketAsset, startDate: string, signal: Abort
   const symbol = (asset.providerAssetId || asset.symbol).toUpperCase();
   const period1 = Math.floor(new Date(`${startDate}T00:00:00Z`).getTime() / 1000);
   const period2 = Math.floor(Date.now() / 1000);
-  const response = await fetchWithTimeout(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${period1}&period2=${period2}`, { signal }, 12_000);
+  const response = await fetchWithTimeout(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&period1=${period1}&period2=${period2}`, { headers: NASDAQ_HEADERS, signal }, 12_000);
   if (!response.ok) throw new Error("Yahoo Finance history unavailable");
   const body = await response.json() as { chart?: { result?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }>; error?: unknown } };
   const result = body.chart?.result?.[0];
@@ -299,7 +299,7 @@ export async function searchMarketAssets(query: string, type?: AssetType): Promi
           : [];
       });
     }).catch(() => []);
-  const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`, {}, 8_000).then(async (response) => {
+  const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`, { headers: NASDAQ_HEADERS }, 8_000).then(async (response) => {
       if (!response.ok) return [];
       const body = await response.json() as { quotes?: Array<{ symbol?: string; longname?: string; shortname?: string; quoteType?: string }> };
       return (body.quotes ?? []).flatMap((asset) => {
