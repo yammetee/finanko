@@ -7,6 +7,7 @@ import { getCategoryName } from "../../shared/i18n/displayText";
 import { useI18n } from "../../shared/i18n/i18nContext";
 import { formatMoney } from "../../shared/lib/format";
 import type { Expense } from "../../shared/types/expense";
+import { AnalyticsOverview } from "../../shared/ui/AnalyticsOverview";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
 import type { ParsedExpense } from "../receipts/expenseParser";
@@ -29,7 +30,6 @@ import { useExpenseStore } from "./expenseStore";
 
 const ExpenseFormPage = lazy(() => import("./ExpenseFormPage").then((module) => ({ default: module.ExpenseFormPage })));
 const ExpenseDateRange = lazy(() => import("./ExpenseDateRange").then((module) => ({ default: module.ExpenseDateRange })));
-const TrendChart = lazy(() => import("../../shared/ui/TrendChart").then((module) => ({ default: module.TrendChart })));
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
 const MOBILE_CATEGORY_LIMIT = 5;
 const HISTORY_LIMIT = 8;
@@ -234,10 +234,9 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
       </section>
 
       {!expensesReady || expenseView.history.length > 0 ? (
-        <div className="analytics-grid">
-          <section className="panel chart-panel"><h2>{t("expense.trend")}</h2>{expensesReady ? <Suspense fallback={<div className="chart" aria-hidden="true" />}><TrendChart buckets={trend} currency={displayCurrency} locale={locale} label={t("expense.trend")} /></Suspense> : <div className="chart" aria-hidden="true" />}</section>
-          <section className="panel category-panel"><h2>{t("section.expensesByCategory")}</h2>{breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.convertedValue) / breakdownTotal * 100) : 0; return <button type="button" key={`${item.key}:${item.currency}`} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, item.currency)}</strong><small>{share}%</small></button>; })}</section>
-        </div>
+        <AnalyticsOverview buckets={trend} currency={displayCurrency} locale={locale} chartTitle={t("expense.trend")} chartLabel={t("expense.trend")} chartReady={expensesReady} breakdownTitle={t("section.expensesByCategory")}>
+          {breakdown.map((item) => { const share = breakdownTotal > 0 ? Math.round(Math.abs(item.convertedValue) / breakdownTotal * 100) : 0; return <button type="button" key={`${item.key}:${item.currency}`} onClick={() => chooseCategory(item.key)}><i style={{ background: item.color }} /><span>{item.name}</span><strong>{formatMoney(item.value, item.currency)}</strong><small>{share}%</small></button>; })}
+        </AnalyticsOverview>
       ) : null}
 
       <section className="history-section">

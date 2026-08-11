@@ -4,7 +4,7 @@ import "uplot/dist/uPlot.min.css";
 import type { Locale } from "../i18n/i18nContext";
 import type { Currency } from "../types/expense";
 
-interface TrendPoint {
+export interface TrendPoint {
   key: string;
   start: string;
   end: string;
