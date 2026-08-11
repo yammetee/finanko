@@ -190,8 +190,6 @@
   "capital.ignore": "Ignore",
   "capital.confirmed": "Confirmed",
   "capital.ignored": "Ignored",
-  "capital.chart": "Capital dynamics",
-  "capital.chartLabel": "All-time capital dynamics",
   "capital.byGroup": "Capital by group",
   "capital.filters.allGroups": "All groups",
   "capital.filters.all": "All",

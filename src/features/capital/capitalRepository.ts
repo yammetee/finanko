@@ -1,5 +1,5 @@
 import { requireSupabaseClient } from "../../shared/api/supabase";
-import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
+import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalPortfolio } from "./capitalTypes";
 
 type Row = Record<string, unknown>;
 
@@ -18,7 +18,7 @@ function item(row: Row): CapitalItem {
   const type = row.item_type as CapitalItem["type"];
   const normalizeProvider = (value: unknown): CapitalItem["primaryProvider"] => {
     if (!value) return undefined;
-    if (["bybit", "coingecko", "nasdaq", "tradingview", "yahoo"].includes(String(value))) return value as CapitalItem["primaryProvider"];
+    if (["coingecko", "tradingview"].includes(String(value))) return value as CapitalItem["primaryProvider"];
     return undefined;
   };
   return {
@@ -46,51 +46,37 @@ function event(row: Row): CapitalEvent {
   };
 }
 
-function valuation(row: Row): CapitalValuation {
-  return { date: String(row.snapshot_date), totalUsd: String(row.total_value) };
-}
-
-export async function loadCapitalData(ownerId: string): Promise<CapitalSnapshot> {
+export async function loadCapitalPortfolio(ownerId: string): Promise<CapitalPortfolio> {
   const supabase = await requireSupabaseClient();
-  const { data, error } = await supabase.rpc("get_capital_snapshot", { expected_owner_id: ownerId });
+  const { data, error } = await supabase.rpc("get_capital_portfolio", { expected_owner_id: ownerId });
   if (error) throw error;
-  return deserializeCapitalSnapshot(data);
+  return deserializeCapitalPortfolio(data);
 }
 
-export function deserializeCapitalSnapshot(data: unknown): CapitalSnapshot {
-  const snapshot = (data ?? {}) as Record<string, Row[]>;
+export function deserializeCapitalPortfolio(data: unknown): CapitalPortfolio {
+  const portfolio = (data ?? {}) as Record<string, Row[]>;
   return {
-    groups: (snapshot.groups ?? []).map(group),
-    items: (snapshot.items ?? []).map(item),
-    events: (snapshot.events ?? []).map(event),
-    valuations: (snapshot.snapshots ?? []).map(valuation),
+    groups: (portfolio.groups ?? []).map(group),
+    items: (portfolio.items ?? []).map(item),
+    events: (portfolio.events ?? []).map(event),
   };
-}
-
-export async function saveCapitalValuation(ownerId: string, totalUsd: string) {
-  const supabase = await requireSupabaseClient();
-  const { error } = await supabase.rpc("save_capital_valuation", {
-    expected_owner_id: ownerId,
-    value_usd: totalUsd,
-  });
-  if (error) throw error;
 }
 
 const serializeCapitalEvents = (events: CapitalEvent[] = []) => events.map((value) => ({ id: value.id, item_id: value.itemId, related_item_id: value.relatedItemId ?? null, event_type: value.type, status: value.status, occurred_at: value.occurredAt, quantity: value.quantity ?? null, amount: value.amount ?? null, fee: value.fee ?? null, tax: value.tax ?? null, currency: value.currency, split_ratio: value.splitRatio ?? null, source: value.source, reinvest: value.reinvest ?? false, external_provider: value.externalProvider ?? null, external_id: value.externalId ?? null }));
 
-export function serializeCapitalSnapshot(snapshot: Partial<CapitalSnapshot>) {
+export function serializeCapitalRecords(records: Partial<CapitalPortfolio>) {
   return {
-    groups: snapshot.groups?.map((value) => ({ id: value.id, name: value.name })) ?? [],
-    items: snapshot.items?.map((value) => ({ id: value.id, group_id: value.groupId, name: value.name, item_type: value.type, symbol: value.symbol ?? null, quote_currency: value.quoteCurrency, manual_price: value.manualPrice ?? null, primary_provider: value.primaryProvider ?? null, primary_asset_id: value.primaryAssetId ?? null, fallback_provider: value.fallbackProvider ?? null, fallback_asset_id: value.fallbackAssetId ?? null, default_tax_rate: value.defaultTaxRate ?? null, annual_interest_rate: value.annualInterestRate ?? null, interest_cadence: value.interestCadence ?? null, interest_effective_from: value.interestEffectiveFrom ?? null, interest_compounding: value.interestCompounding ?? false, income_destination_item_id: value.incomeDestinationItemId ?? null })) ?? [],
-    events: serializeCapitalEvents(snapshot.events),
+    groups: records.groups?.map((value) => ({ id: value.id, name: value.name })) ?? [],
+    items: records.items?.map((value) => ({ id: value.id, group_id: value.groupId, name: value.name, item_type: value.type, symbol: value.symbol ?? null, quote_currency: value.quoteCurrency, manual_price: value.manualPrice ?? null, primary_provider: value.primaryProvider ?? null, primary_asset_id: value.primaryAssetId ?? null, fallback_provider: value.fallbackProvider ?? null, fallback_asset_id: value.fallbackAssetId ?? null, default_tax_rate: value.defaultTaxRate ?? null, annual_interest_rate: value.annualInterestRate ?? null, interest_cadence: value.interestCadence ?? null, interest_effective_from: value.interestEffectiveFrom ?? null, interest_compounding: value.interestCompounding ?? false, income_destination_item_id: value.incomeDestinationItemId ?? null })) ?? [],
+    events: serializeCapitalEvents(records.events),
   };
 }
 
-export async function saveCapitalData(ownerId: string, snapshot: Partial<CapitalSnapshot>) {
+export async function saveCapitalRecords(ownerId: string, records: Partial<CapitalPortfolio>) {
   const supabase = await requireSupabaseClient();
-  const { error } = await supabase.rpc("save_capital_snapshot", {
+  const { error } = await supabase.rpc("save_capital_records", {
     expected_owner_id: ownerId,
-    capital_data: serializeCapitalSnapshot(snapshot),
+    capital_records: serializeCapitalRecords(records),
   });
   if (error) throw error;
 }

@@ -45,10 +45,14 @@ export function buildCapitalAssetSubmission(values: AssetFormValues, context: Su
   const market = type === "stock" || type === "fund" || type === "crypto";
   const symbol = normalizeMarketSymbol(context.item?.symbol ?? values.symbol);
   if (market && !symbol) throw new Error("capital_symbol_invalid");
-  const primaryProvider = market ? context.item?.primaryProvider ?? context.provider ?? (type === "crypto" ? "bybit" : "tradingview") : undefined;
-  const primaryAssetId = market ? context.item?.primaryAssetId ?? context.providerAssetId ?? (primaryProvider === "bybit" && symbol ? `${symbol}USDT` : symbol) : undefined;
-  const fallbackProvider = context.item?.fallbackProvider ?? (type === "crypto" ? (primaryProvider === "coingecko" ? "bybit" : "coingecko") : undefined);
-  const fallbackAssetId = context.item?.fallbackAssetId ?? (type === "crypto" && fallbackProvider === "bybit" && symbol ? `${symbol}USDT` : undefined);
+  const primaryProvider = market ? "tradingview" : undefined;
+  const primaryAssetId = market
+    ? context.provider === "tradingview" ? context.providerAssetId : context.item?.primaryProvider === "tradingview" ? context.item.primaryAssetId : symbol
+    : undefined;
+  const fallbackProvider = type === "crypto" ? "coingecko" : undefined;
+  const fallbackAssetId = type === "crypto"
+    ? context.provider === "coingecko" ? context.providerAssetId : context.item?.primaryProvider === "coingecko" ? context.item.primaryAssetId : context.item?.fallbackProvider === "coingecko" ? context.item.fallbackAssetId : undefined
+    : undefined;
   const hasInterest = type === "deposit" && isPositiveCapitalDecimal(values.interestRate);
   const openingQuantity = normalizeCapitalDecimal(values.openingQuantity);
   const openingPrice = normalizeCapitalDecimal(values.openingPrice);
