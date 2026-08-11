@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { uid } from "../../shared/lib/id";
 import type { LoadState } from "../../shared/types/loadState";
-import { deleteCapitalEvent, deleteCapitalGroup, deleteCapitalItem, loadCapitalData, loadCapitalQuoteHistory, saveCapitalData, saveCapitalHistory, saveCapitalValuation } from "./capitalRepository";
+import { deleteCapitalEvent, deleteCapitalGroup, deleteCapitalItem, loadCapitalData, saveCapitalData, saveCapitalHistory, saveCapitalValuation } from "./capitalRepository";
 import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalQuote, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
 import { loadMarketHistory, loadMarketQuotes } from "./marketRepository";
 import { getCapitalTotalUsd } from "./capitalView";
@@ -16,7 +16,6 @@ interface CapitalState extends Pick<CapitalSnapshot, "groups" | "items" | "event
   ownerId: string | null;
   quotes: Record<string, CapitalQuote>;
   valuations: CapitalValuation[];
-  quoteHistory: CapitalQuote[];
   historyLoading: boolean;
   historyPending: boolean;
   quotesLoading: boolean;
@@ -38,7 +37,7 @@ interface CapitalState extends Pick<CapitalSnapshot, "groups" | "items" | "event
 const utcDate = (value = new Date()) => value.toISOString().slice(0, 10);
 let capitalSessionVersion = 0;
 const emptyCapitalState = () => ({
-  groups: [], items: [], events: [], quotes: {}, quoteHistory: [], valuations: [],
+  groups: [], items: [], events: [], quotes: {}, valuations: [],
   quotesLoading: false, unavailableQuoteItemIds: [],
   historyLoading: false, historyPending: false,
 });
@@ -91,7 +90,7 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       if (version !== capitalSessionVersion || get().ownerId !== targetOwnerId) return;
       const expected = buildExpectedInterestEvents(snapshot.items, snapshot.events);
       const events = [...snapshot.events, ...expected];
-      set({ groups: snapshot.groups, items: snapshot.items, events, quoteHistory: [], valuations: snapshot.valuations ?? [], quotes: Object.fromEntries((snapshot.latestQuotes ?? []).map((quote) => [quote.itemId, quote])), loadState: "ready" });
+      set({ groups: snapshot.groups, items: snapshot.items, events, valuations: snapshot.valuations ?? [], quotes: {}, loadState: "ready" });
       if (expected.length) void saveCapitalData(targetOwnerId, { events: expected }).catch(() => undefined);
       if (!(snapshot.valuations?.length) && events.some((event) => event.status === "confirmed")) void get().rebuildHistory().catch(() => undefined);
     }
@@ -189,17 +188,17 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       const quotes = await loadMarketQuotes(marketItems);
       if (get().ownerId !== ownerId) return;
       const current = useCapitalStore.getState();
-      const merged = { ...current.quotes, ...Object.fromEntries(quotes.map((quote) => [quote.itemId, quote])) };
-      const totalUsd = getCapitalTotalUsd(current.items, current.events, merged);
+      const currentQuotes = Object.fromEntries(quotes.map((quote) => [quote.itemId, quote]));
+      const totalUsd = getCapitalTotalUsd(current.items, current.events, currentQuotes);
       const today = utcDate();
       const resolved = new Set(quotes.map((quote) => quote.itemId));
       const unavailableQuoteItemIds = marketItems.filter((item) => !resolved.has(item.id)).map((item) => item.id);
-      set((state) => ({ quotes: merged, unavailableQuoteItemIds, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
-      void saveCapitalValuation(ownerId, quotes, totalUsd).catch(() => undefined);
+      set((state) => ({ quotes: currentQuotes, unavailableQuoteItemIds, valuations: [...state.valuations.filter((value) => value.date !== today), { date: today, totalUsd }] }));
+      void saveCapitalValuation(ownerId, totalUsd).catch(() => undefined);
     } catch {
       if (get().ownerId !== ownerId) return;
       const unavailableQuoteItemIds = useCapitalStore.getState().items.filter((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")).map((item) => item.id);
-      set({ unavailableQuoteItemIds });
+      set({ quotes: {}, unavailableQuoteItemIds });
     } finally { if (get().ownerId === ownerId) set({ quotesLoading: false }); }
   },
   rebuildHistory: async () => {
@@ -214,17 +213,12 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       const current = useCapitalStore.getState();
       const startDate = current.events.filter((event) => event.status === "confirmed").map((event) => event.occurredAt.slice(0, 10)).sort()[0];
       if (!startDate) return;
-      const [stored, fetched] = await Promise.all([
-        loadCapitalQuoteHistory(ownerId).catch(() => current.quoteHistory),
-        loadMarketHistory(current.items, startDate).catch(() => []),
-      ]);
+      const history = await loadMarketHistory(current.items, startDate);
       if (get().ownerId !== ownerId) return;
-      const keyed = new Map([...stored, ...fetched].map((quote) => [`${quote.itemId}:${quote.provider}:${quote.quotedAt}`, quote]));
-      const history = [...keyed.values()];
       const values = rebuildCapitalHistory(current.items, current.events, history);
-      await saveCapitalHistory(ownerId, fetched, values);
+      await saveCapitalHistory(ownerId, values);
       if (get().ownerId !== ownerId) return;
-      set({ quoteHistory: history, valuations: values });
+      set({ valuations: values });
     } finally {
       if (get().ownerId === ownerId) {
         const pending = useCapitalStore.getState().historyPending;

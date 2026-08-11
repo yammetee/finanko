@@ -18,8 +18,8 @@ export function DebtRoute(props: Props) {
   const initialize = useDebtStore((state) => state.initialize);
 
   useEffect(() => {
-    if (ownerId !== props.userId || loadState === "idle") void initialize(props.userId);
-  }, [initialize, loadState, ownerId, props.userId]);
+    void initialize(props.userId);
+  }, [initialize, props.userId]);
 
   if (ownerId !== props.userId || loadState === "idle" || loadState === "loading") return <FeaturePageState />;
   if (loadState === "error") return <FeaturePageState error onRetry={() => void initialize(props.userId)} />;

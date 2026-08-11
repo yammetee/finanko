@@ -21,50 +21,10 @@ interface MarketSearchResult { name: string; symbol: string; type: AssetType; pr
 const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; evenkvit/1.0)" };
 const COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
 const MARKET_PROVIDERS: MarketProvider[] = ["bybit", "coingecko", "nasdaq", "yahoo"];
-const MARKET_CACHE_MAX_ENTRIES = 500;
-const QUOTE_FALLBACK_MAX_AGE_MS = 60 * 60_000;
-const SEARCH_CACHE_TTL_MS = 5 * 60_000;
-const HISTORY_CACHE_TTL_MS = 15 * 60_000;
 const MARKET_RATE_WINDOW_MS = 60_000;
 const MARKET_RATE_LIMITS = { search: 30, quotes: 60, history: 10 } as const;
 
-interface CacheEntry { expiresAt: number; value?: unknown; request?: Promise<unknown> }
-type CachePolicy = "cache-first" | "fallback-only";
-const marketCache = new Map<string, CacheEntry>();
 const marketRateWindows = new Map<string, { startedAt: number; count: number }>();
-
-function pruneMarketCache(now: number) {
-  for (const [key, entry] of marketCache) if (entry.expiresAt <= now) marketCache.delete(key);
-  while (marketCache.size >= MARKET_CACHE_MAX_ENTRIES) {
-    const oldestKey = marketCache.keys().next().value as string | undefined;
-    if (!oldestKey) break;
-    marketCache.delete(oldestKey);
-  }
-}
-
-async function cachedMarketValue<T>(key: string, ttlMs: number, load: () => Promise<T>, policy: CachePolicy = "cache-first"): Promise<T> {
-  const now = Date.now();
-  pruneMarketCache(now);
-  const cached = marketCache.get(key);
-  if (cached && cached.expiresAt > now) {
-    if (cached.request) return cached.request as Promise<T>;
-    if (policy === "cache-first") return cached.value as T;
-  }
-  const fallback = cached?.value !== undefined && cached.expiresAt > now ? cached : undefined;
-  const request = load().then((value) => {
-    marketCache.set(key, { expiresAt: Date.now() + ttlMs, value });
-    return value;
-  }).catch((error) => {
-    if (policy === "fallback-only" && fallback?.value !== undefined && fallback.expiresAt > Date.now()) {
-      marketCache.set(key, { expiresAt: fallback.expiresAt, value: fallback.value });
-      return fallback.value as T;
-    }
-    marketCache.delete(key);
-    throw error;
-  });
-  marketCache.set(key, { expiresAt: fallback?.expiresAt ?? now + ttlMs, value: fallback?.value, request });
-  return request;
-}
 
 function consumeMarketRateLimit(userId: string, mode: keyof typeof MARKET_RATE_LIMITS) {
   const now = Date.now();
@@ -180,30 +140,21 @@ function historyLoader(provider: MarketProvider) {
 
 async function fetchRouted(
   matching: MarketAsset[],
-  cacheScope: string,
-  ttlMs: number,
   load: (provider: MarketProvider, asset: MarketAsset, signal: AbortSignal) => Promise<NormalizedQuote[]>,
-  cachePolicy: CachePolicy = "cache-first",
 ) {
   const asset = matching[0];
   const [primary, fallback] = providerRoute(asset);
-  const cacheKey = [cacheScope, asset.type, primary, asset.providerAssetId ?? asset.symbol, fallback, asset.fallbackAssetId ?? ""].join(":").toLowerCase();
+  const controller = new AbortController();
   try {
-    const loadQuotes = async () => {
-      const controller = new AbortController();
-      try {
-        return await Promise.any([
-          load(primary, routedAsset(asset, primary, false), controller.signal),
-          load(fallback, routedAsset(asset, fallback, true), controller.signal),
-        ]);
-      } finally {
-        controller.abort();
-      }
-    };
-    const quotes = await cachedMarketValue(cacheKey, ttlMs, loadQuotes, cachePolicy);
+    const quotes = await Promise.any([
+      load(primary, routedAsset(asset, primary, false), controller.signal),
+      load(fallback, routedAsset(asset, fallback, true), controller.signal),
+    ]);
     return fanOutQuotes(quotes, matching);
   } catch {
     return [];
+  } finally {
+    controller.abort();
   }
 }
 
@@ -266,10 +217,7 @@ async function yahooQuote(asset: MarketAsset, signal: AbortSignal): Promise<Norm
 export async function fetchMarketQuotes(assets: MarketAsset[]) {
   return (await Promise.all(uniqueAssets(assets).map((matching) => fetchRouted(
     matching,
-    "quote",
-    QUOTE_FALLBACK_MAX_AGE_MS,
     async (provider, asset, signal) => [await quoteLoader(provider)(asset, signal)],
-    "fallback-only",
   )))).flat();
 }
 
@@ -327,16 +275,12 @@ async function yahooHistory(asset: MarketAsset, startDate: string, signal: Abort
 export async function fetchMarketHistory(assets: MarketAsset[], startDate: string) {
   return (await Promise.all(uniqueAssets(assets).map((matching) => fetchRouted(
     matching,
-    `history:${startDate}`,
-    HISTORY_CACHE_TTL_MS,
     (provider, asset, signal) => historyLoader(provider)(asset, startDate, signal),
   )))).flat();
 }
 
 export async function searchMarketAssets(query: string, type?: AssetType): Promise<MarketSearchResult[]> {
-  const cacheKey = `search:${type ?? "all"}:${query.trim().toLowerCase()}`;
-  return cachedMarketValue(cacheKey, SEARCH_CACHE_TTL_MS, async () => {
-    const cryptoRequest = type && type !== "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`, {}, 8_000).then(async (response) => {
+  const cryptoRequest = type && type !== "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`, {}, 8_000).then(async (response) => {
       if (!response.ok) return [];
       const body = await response.json() as { coins?: Array<{ id?: string; name?: string; symbol?: string; market_cap_rank?: number }> };
       return (body.coins ?? []).flatMap((coin) => {
@@ -344,7 +288,7 @@ export async function searchMarketAssets(query: string, type?: AssetType): Promi
         return coin.id && coin.name && symbol ? [{ name: coin.name, symbol, type: "crypto" as const, provider: "coingecko" as const, providerAssetId: coin.id, rank: coin.market_cap_rank ?? Number.MAX_SAFE_INTEGER }] : [];
       }).slice(0, 6);
     }).catch(() => []);
-    const securityRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS }, 8_000).then(async (response) => {
+  const securityRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://api.nasdaq.com/api/autocomplete/slookup/10?search=${encodeURIComponent(query)}`, { headers: NASDAQ_HEADERS }, 8_000).then(async (response) => {
       if (!response.ok) return [];
       const body = await response.json() as { data?: Array<{ symbol?: string; name?: string; asset?: string }> };
       return (body.data ?? []).flatMap((asset) => {
@@ -355,7 +299,7 @@ export async function searchMarketAssets(query: string, type?: AssetType): Promi
           : [];
       });
     }).catch(() => []);
-    const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`, {}, 8_000).then(async (response) => {
+  const yahooRequest = type === "crypto" ? Promise.resolve([]) : fetchWithTimeout(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`, {}, 8_000).then(async (response) => {
       if (!response.ok) return [];
       const body = await response.json() as { quotes?: Array<{ symbol?: string; longname?: string; shortname?: string; quoteType?: string }> };
       return (body.quotes ?? []).flatMap((asset) => {
@@ -367,15 +311,15 @@ export async function searchMarketAssets(query: string, type?: AssetType): Promi
           : [];
       });
     }).catch(() => []);
-    const [crypto, nasdaqSecurities, yahooSecurities] = await Promise.all([cryptoRequest, securityRequest, yahooRequest]);
-    const rankedCrypto = crypto.sort((a, b) => a.rank - b.rank).map((asset) => ({ name: asset.name, symbol: asset.symbol, type: asset.type, provider: asset.provider, providerAssetId: asset.providerAssetId }));
-    const securities = new Map<string, MarketSearchResult>();
-    for (const asset of [...yahooSecurities, ...nasdaqSecurities]) if (!securities.has(`${asset.type}:${asset.symbol}`)) securities.set(`${asset.type}:${asset.symbol}`, asset);
-    return [...rankedCrypto, ...securities.values()].slice(0, 10);
-  });
+  const [crypto, nasdaqSecurities, yahooSecurities] = await Promise.all([cryptoRequest, securityRequest, yahooRequest]);
+  const rankedCrypto = crypto.sort((a, b) => a.rank - b.rank).map((asset) => ({ name: asset.name, symbol: asset.symbol, type: asset.type, provider: asset.provider, providerAssetId: asset.providerAssetId }));
+  const securities = new Map<string, MarketSearchResult>();
+  for (const asset of [...yahooSecurities, ...nasdaqSecurities]) if (!securities.has(`${asset.type}:${asset.symbol}`)) securities.set(`${asset.type}:${asset.symbol}`, asset);
+  return [...rankedCrypto, ...securities.values()].slice(0, 10);
 }
 
 export async function handler(request: ApiRequest, response: ApiResponse) {
+  response.setHeader("Cache-Control", "no-store, max-age=0");
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Headers", "authorization, content-type");
   if (request.method === "OPTIONS") { response.status(204).end(); return; }

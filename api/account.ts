@@ -15,6 +15,7 @@ interface ApiResponse {
 }
 
 export async function handler(request: ApiRequest, response: ApiResponse) {
+  response.setHeader("Cache-Control", "no-store, max-age=0");
   response.setHeader("Allow", "DELETE");
   if (request.method !== "DELETE") {
     response.status(405).json({ error: "Method not allowed" });

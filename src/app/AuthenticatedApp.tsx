@@ -32,7 +32,7 @@ export function AuthenticatedApp() {
   }, []);
   const retryRates = useCallback(async () => {
     setRatesStatus("loading");
-    const updated = await refreshLiveExchangeRates(true);
+    const updated = await refreshLiveExchangeRates();
     setRatesStatus(updated ? "ready" : "error");
     if (updated) setRatesVersion((value) => value + 1);
   }, []);

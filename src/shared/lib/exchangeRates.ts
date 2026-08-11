@@ -13,10 +13,7 @@ function isFiniteRate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-let exchangeRatesRequest: Promise<boolean> | null = null;
-let exchangeRatesLoaded = false;
-
-async function requestLiveExchangeRates() {
+export async function refreshLiveExchangeRates() {
   try {
     const response = await fetchWithTimeout(exchangeRatesUrl, { cache: "no-store" }, 8_000);
     if (!response.ok) return false;
@@ -42,17 +39,8 @@ async function requestLiveExchangeRates() {
       THB: thb,
     };
     setLiveExchangeRates(rates);
-    exchangeRatesLoaded = true;
     return true;
   } catch {
     return false;
   }
-}
-
-export function refreshLiveExchangeRates(force = false) {
-  if (exchangeRatesLoaded && !force) return Promise.resolve(true);
-  exchangeRatesRequest ??= requestLiveExchangeRates().finally(() => {
-    exchangeRatesRequest = null;
-  });
-  return exchangeRatesRequest;
 }

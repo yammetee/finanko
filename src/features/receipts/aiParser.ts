@@ -28,7 +28,7 @@ async function requestAiParser<T>(payload: unknown, strict = false): Promise<T |
     const auth = await getSupabaseAuthClient();
     const session = auth ? (await auth.getSession()).data.session : null;
     if (!session) return null;
-    const response = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ kind: "parse", payload }) });
+    const response = await fetch("/api/ai", { method: "POST", cache: "no-store", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ kind: "parse", payload }) });
     if (response.ok) return await response.json() as T;
     const error = await response.json().catch(() => null) as { error?: string } | null;
     if (response.status === 429 || error?.error === "Daily AI limit reached") {

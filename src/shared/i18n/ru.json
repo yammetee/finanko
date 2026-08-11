@@ -200,7 +200,7 @@
   "capital.filters.cash": "Деньги и вклады",
   "capital.assets": "Активы",
   "capital.average": "Средняя",
-  "capital.quoteStale": "Цена неактуальна",
+  "capital.quoteUnavailable": "Цена недоступна",
   "capital.delete.group.title": "Удалить группу?",
   "capital.delete.item.title": "Удалить актив?",
   "capital.delete.item.description": "{name} будет удалён из капитала вместе с его операциями.",

@@ -40,7 +40,7 @@ export function CapitalAssetDetailsPage({ position, groupName, quoteUnavailable,
       {monthlyInterest !== undefined ? <div><dt>{t(item.defaultTaxRate ? "capital.asset.monthlyIncomeNet" : "capital.asset.monthlyIncome")}</dt><dd className="positive">{formatMoney(Number(decimalString(monthlyInterest)), item.quoteCurrency)}</dd></div> : null}
       <div><dt>{t("capital.result")}</dt><dd className={position.profit < 0 ? "negative" : "positive"}>{formatMoney(position.profit, item.quoteCurrency)}</dd></div>
       {position.netIncome !== "0" ? <div><dt>{t("capital.income")}</dt><dd>{formatMoney(Number(position.netIncome), item.quoteCurrency)}</dd></div> : null}
-      {quoteUnavailable ? <div><dt>{t("capital.asset.price")}</dt><dd className="negative">{t("capital.quoteStale")}</dd></div> : null}
+      {quoteUnavailable ? <div><dt>{t("capital.asset.price")}</dt><dd className="negative">{t("capital.quoteUnavailable")}</dd></div> : null}
     </dl>
     {confirming
       ? <div className="delete-confirm"><p>{t("capital.delete.item.description", { name: item.name })}</p><div><button type="button" onClick={() => setConfirming(false)}>{t("actions.cancel")}</button><button className="danger-button" type="button" onClick={onDelete}>{t("actions.delete")}</button></div></div>

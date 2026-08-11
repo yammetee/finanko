@@ -375,6 +375,7 @@ function attachReceiptReview(value: unknown, ocr: ReceiptOcrResult) {
 }
 
 export async function handler(request: ApiRequest, response: ApiResponse) {
+  response.setHeader("Cache-Control", "no-store, max-age=0");
   if (request.method === "OPTIONS") {
     response.setHeader("Allow", "POST, OPTIONS");
     response.status(204).end();

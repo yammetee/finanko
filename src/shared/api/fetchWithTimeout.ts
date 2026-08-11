@@ -13,7 +13,7 @@ export async function fetchWithTimeout(
   const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, { ...init, cache: "no-store", signal: controller.signal });
   } finally {
     globalThis.clearTimeout(timeoutId);
     sourceSignal?.removeEventListener("abort", abortFromSource);

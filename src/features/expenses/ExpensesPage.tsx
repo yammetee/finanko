@@ -9,7 +9,6 @@ import { formatMoney } from "../../shared/lib/format";
 import type { Expense } from "../../shared/types/expense";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
-import { loadTrendChart } from "../../shared/ui/trendChartModule";
 import type { ParsedExpense } from "../receipts/expenseParser";
 import { isDefaultExpenseCategory, sortDefaultExpenseCategories } from "./categoryData";
 import { ExpenseDetailsPage } from "./ExpenseDetailsPage";
@@ -30,7 +29,7 @@ import { useExpenseStore } from "./expenseStore";
 
 const ExpenseFormPage = lazy(() => import("./ExpenseFormPage").then((module) => ({ default: module.ExpenseFormPage })));
 const ExpenseDateRange = lazy(() => import("./ExpenseDateRange").then((module) => ({ default: module.ExpenseDateRange })));
-const TrendChart = lazy(() => loadTrendChart().then((module) => ({ default: module.TrendChart })));
+const TrendChart = lazy(() => import("../../shared/ui/TrendChart").then((module) => ({ default: module.TrendChart })));
 const PERIODS: ExpensePeriod[] = ["today", "week", "month", "year", "all", "custom"];
 const MOBILE_CATEGORY_LIMIT = 5;
 const HISTORY_LIMIT = 8;
@@ -55,7 +54,6 @@ export function ExpensesPage({ currencyMode, onCurrencyChange, ratesVersion, cap
     trackingStartedAt: state.trackingStartedAt,
     loadState: state.loadState,
     rangeLoading: state.rangeLoading,
-    loadedRangeKey: state.loadedRangeKey,
     retry: state.retry,
     loadRange: state.loadRange,
     addExpenses: state.addExpenses,

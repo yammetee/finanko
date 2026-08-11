@@ -27,10 +27,6 @@ function expenseFromRow(row: Row): Expense {
 
 const EXPENSE_PAGE_SIZE = 500;
 
-export function expenseRangeKey(range: ExpenseRange) {
-  return `${range.start ?? "*"}:${range.end ?? "*"}`;
-}
-
 async function loadExpenses(range: ExpenseRange) {
   const supabase = await requireSupabaseClient();
   const rows: Row[] = [];

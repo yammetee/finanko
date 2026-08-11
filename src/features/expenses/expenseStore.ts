@@ -3,7 +3,7 @@ import { uid } from "../../shared/lib/id";
 import dayjs from "dayjs";
 import type { Expense } from "../../shared/types/expense";
 import { createDefaultCategories } from "./categoryData";
-import { expenseRangeKey, loadExpenseData, loadExpenses, loadExpenseTrackingStart, saveCategories, saveExpenses } from "./expenseRepository";
+import { loadExpenseData, loadExpenses, loadExpenseTrackingStart, saveCategories, saveExpenses } from "./expenseRepository";
 import type { ExpenseRange, ExpenseState, NewExpenseInput } from "./expenseTypes";
 
 let expenseSessionVersion = 0;
@@ -17,7 +17,7 @@ export async function initializeExpenseData(ownerId: string) {
   const version = ++expenseSessionVersion;
   expenseRangeRequestVersion += 1;
   const range = initialExpenseRange();
-  useExpenseStore.setState({ ownerId, categories: [], expenses: [], trackingStartedAt: undefined, loadedRangeKey: null, rangeLoading: false, loadState: "loading" });
+  useExpenseStore.setState({ ownerId, categories: [], expenses: [], trackingStartedAt: undefined, rangeLoading: false, loadState: "loading" });
   const trackingRequest = loadExpenseTrackingStart().catch(() => undefined);
   try {
     let snapshot = await loadExpenseData(range);
@@ -35,7 +35,7 @@ export async function initializeExpenseData(ownerId: string) {
       };
     }
     if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
-      useExpenseStore.setState({ ...snapshot, loadedRangeKey: expenseRangeKey(range), loadState: "ready" });
+      useExpenseStore.setState({ ...snapshot, loadState: "ready" });
       void trackingRequest.then((trackingStartedAt) => {
         if (version === expenseSessionVersion && useExpenseStore.getState().ownerId === ownerId) {
           useExpenseStore.setState({ trackingStartedAt });
@@ -53,7 +53,7 @@ export async function initializeExpenseData(ownerId: string) {
 export function resetExpenseData() {
   expenseSessionVersion += 1;
   expenseRangeRequestVersion += 1;
-  useExpenseStore.setState({ ownerId: null, categories: [], expenses: [], trackingStartedAt: undefined, loadedRangeKey: null, rangeLoading: false, loadState: "idle" });
+  useExpenseStore.setState({ ownerId: null, categories: [], expenses: [], trackingStartedAt: undefined, rangeLoading: false, loadState: "idle" });
 }
 
 function buildExpense(input: NewExpenseInput, existing?: Expense): Expense {
@@ -73,7 +73,6 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
   categories: [],
   expenses: [],
   trackingStartedAt: undefined,
-  loadedRangeKey: null,
   rangeLoading: false,
   retry: async () => {
     const ownerId = useExpenseStore.getState().ownerId;
@@ -82,16 +81,15 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
   loadState: "idle",
   loadRange: async (range) => {
     const ownerId = get().ownerId;
-    const key = expenseRangeKey(range);
-    if (!ownerId || get().loadedRangeKey === key) return;
+    if (!ownerId) return;
     const sessionVersion = expenseSessionVersion;
     const requestVersion = ++expenseRangeRequestVersion;
     set({ rangeLoading: true });
     try {
       const expenses = await loadExpenses(range);
-      if (sessionVersion === expenseSessionVersion && requestVersion === expenseRangeRequestVersion && get().ownerId === ownerId) set({ expenses, loadedRangeKey: key, rangeLoading: false });
+      if (sessionVersion === expenseSessionVersion && requestVersion === expenseRangeRequestVersion && get().ownerId === ownerId) set({ expenses, rangeLoading: false });
     } catch (error) {
-      if (sessionVersion === expenseSessionVersion && requestVersion === expenseRangeRequestVersion && get().ownerId === ownerId) set({ rangeLoading: false });
+      if (sessionVersion === expenseSessionVersion && requestVersion === expenseRangeRequestVersion && get().ownerId === ownerId) set({ expenses: [], rangeLoading: false });
       throw error;
     }
   },
@@ -110,7 +108,7 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
     if (!existing) throw new Error("Expense not found");
     const updated = buildExpense(input, existing);
     await saveExpenses([updated]);
-    const trackingStartedAt = await loadExpenseTrackingStart().catch(() => get().trackingStartedAt);
+    const trackingStartedAt = await loadExpenseTrackingStart().catch(() => undefined);
     set((current) => ({
       expenses: current.expenses.map((expense) =>
         expense.id === id ? updated : expense,
@@ -124,7 +122,7 @@ export const useExpenseStore = create<ExpenseState>()((set, get) => ({
     if (!existing) throw new Error("Expense not found");
     const deleted = { ...existing, deletedAt: new Date().toISOString() };
     await saveExpenses([deleted]);
-    const trackingStartedAt = await loadExpenseTrackingStart().catch(() => get().trackingStartedAt);
+    const trackingStartedAt = await loadExpenseTrackingStart().catch(() => undefined);
     set((current) => ({
       expenses: current.expenses.filter((expense) => expense.id !== id),
       trackingStartedAt,

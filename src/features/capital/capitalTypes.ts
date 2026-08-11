@@ -68,8 +68,6 @@ export interface CapitalSnapshot {
   groups: CapitalGroup[];
   items: CapitalItem[];
   events: CapitalEvent[];
-  latestQuotes?: CapitalQuote[];
-  quoteHistory?: CapitalQuote[];
   valuations?: CapitalValuation[];
 }
 

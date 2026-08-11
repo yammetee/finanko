@@ -1,5 +1,5 @@
 import { requireSupabaseClient } from "../../shared/api/supabase";
-import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalQuote, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
+import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
 
 type Row = Record<string, unknown>;
 
@@ -46,10 +46,6 @@ function event(row: Row): CapitalEvent {
   };
 }
 
-function quote(row: Row): CapitalQuote {
-  return { itemId: String(row.item_id), price: String(row.price), currency: row.quote_currency as CapitalQuote["currency"], provider: String(row.provider), quotedAt: isoTimestamp(row.quoted_at) };
-}
-
 function valuation(row: Row): CapitalValuation {
   return { date: String(row.snapshot_date), totalUsd: String(row.total_value) };
 }
@@ -61,35 +57,26 @@ export async function loadCapitalData(ownerId: string): Promise<CapitalSnapshot>
   return deserializeCapitalSnapshot(data);
 }
 
-export async function loadCapitalQuoteHistory(ownerId: string): Promise<CapitalQuote[]> {
-  const supabase = await requireSupabaseClient();
-  const { data, error } = await supabase.rpc("get_capital_quote_history", { expected_owner_id: ownerId });
-  if (error) throw error;
-  return (Array.isArray(data) ? data : []).map((row) => quote(row as Row));
-}
-
 export function deserializeCapitalSnapshot(data: unknown): CapitalSnapshot {
   const snapshot = (data ?? {}) as Record<string, Row[]>;
   return {
     groups: (snapshot.groups ?? []).map(group),
     items: (snapshot.items ?? []).map(item),
     events: (snapshot.events ?? []).map(event),
-    latestQuotes: (snapshot.quotes ?? []).map(quote),
     valuations: (snapshot.snapshots ?? []).map(valuation),
   };
 }
 
-export async function saveCapitalHistory(ownerId: string, quotes: CapitalQuote[], values: CapitalValuation[]) {
+export async function saveCapitalHistory(ownerId: string, values: CapitalValuation[]) {
   const supabase = await requireSupabaseClient();
-  const { error } = await supabase.rpc("rebuild_capital_history", { expected_owner_id: ownerId, quote_rows: quotes.map((value) => ({ item_id: value.itemId, price: value.price, currency: value.currency, provider: value.provider, quoted_at: value.quotedAt })), snapshot_rows: values.map((value) => ({ date: value.date, total_usd: value.totalUsd })) });
+  const { error } = await supabase.rpc("rebuild_capital_history", { expected_owner_id: ownerId, snapshot_rows: values.map((value) => ({ date: value.date, total_usd: value.totalUsd })) });
   if (error) throw error;
 }
 
-export async function saveCapitalValuation(ownerId: string, quotes: CapitalQuote[], totalUsd: string) {
+export async function saveCapitalValuation(ownerId: string, totalUsd: string) {
   const supabase = await requireSupabaseClient();
   const { error } = await supabase.rpc("save_capital_valuation", {
     expected_owner_id: ownerId,
-    quote_rows: quotes.map((value) => ({ item_id: value.itemId, price: value.price, currency: value.currency, provider: value.provider, quoted_at: value.quotedAt })),
     value_usd: totalUsd,
   });
   if (error) throw error;

@@ -29,7 +29,6 @@ export interface ExpenseSnapshot {
 export interface ExpenseState extends ExpenseSnapshot {
   ownerId: string | null;
   loadState: LoadState;
-  loadedRangeKey: string | null;
   rangeLoading: boolean;
   retry: () => Promise<void>;
   loadRange: (range: ExpenseRange) => Promise<void>;

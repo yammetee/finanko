@@ -126,19 +126,6 @@ create table if not exists finanko_private.capital_snapshots (
   primary key (owner_id, snapshot_date, reporting_currency)
 );
 
-create table if not exists finanko_private.capital_item_quotes (
-  owner_id uuid not null references auth.users(id) on delete cascade,
-  item_id text not null,
-  provider text not null,
-  quote_currency text not null check (quote_currency in ('USD', 'GEL', 'RUB', 'THB')),
-  quoted_at timestamptz not null,
-  price numeric(38,18) not null check (price >= 0),
-  retrieved_at timestamptz not null default now(),
-  primary key (owner_id, item_id, provider, quoted_at),
-  foreign key (item_id, owner_id)
-    references finanko_private.capital_items(id, owner_id) on delete cascade
-);
-
 create index if not exists expenses_owner_occurred_id_active_idx
   on public.expenses(owner_id, occurred_at desc, id desc)
   where deleted_at is null;
@@ -151,7 +138,6 @@ create index if not exists capital_events_owner_item_date_idx on finanko_private
 create index if not exists capital_events_owner_related_item_idx on finanko_private.capital_events(owner_id, related_item_id) where related_item_id is not null;
 create index if not exists capital_events_owner_status_idx on finanko_private.capital_events(owner_id, status, occurred_at);
 create unique index if not exists capital_events_external_unique_idx on finanko_private.capital_events(owner_id, external_provider, external_id) where external_provider is not null and external_id is not null;
-create index if not exists capital_item_quotes_latest_idx on finanko_private.capital_item_quotes(owner_id, item_id, quoted_at desc);
 
 create or replace function finanko_private.set_updated_at()
 returns trigger
@@ -184,7 +170,6 @@ alter table finanko_private.capital_groups enable row level security;
 alter table finanko_private.capital_items enable row level security;
 alter table finanko_private.capital_events enable row level security;
 alter table finanko_private.capital_snapshots enable row level security;
-alter table finanko_private.capital_item_quotes enable row level security;
 
 drop policy if exists owner_access on public.categories;
 create policy owner_access on public.categories
@@ -342,10 +327,6 @@ begin
       'split_ratio', e.split_ratio::text, 'source', e.source, 'reinvest', e.reinvest,
       'external_provider', e.external_provider, 'external_id', e.external_id
     ) order by e.occurred_at, e.id) from finanko_private.capital_events e where e.owner_id = requester_id), '[]'::jsonb),
-    'quotes', coalesce((select jsonb_agg(jsonb_build_object(
-      'item_id', q.item_id, 'provider', q.provider, 'quote_currency', q.quote_currency,
-      'quoted_at', q.quoted_at, 'price', q.price::text
-    )) from (select distinct on (item_id) * from finanko_private.capital_item_quotes where owner_id = requester_id order by item_id, quoted_at desc) q), '[]'::jsonb),
     'snapshots', coalesce((select jsonb_agg(jsonb_build_object(
       'snapshot_date', s.snapshot_date, 'reporting_currency', s.reporting_currency,
       'total_value', s.total_value::text
@@ -361,21 +342,6 @@ end;
 $$;
 revoke all on function public.get_capital_snapshot(uuid) from public, anon;
 grant execute on function public.get_capital_snapshot(uuid) to authenticated;
-
-create or replace function public.get_capital_quote_history(expected_owner_id uuid)
-returns jsonb language plpgsql security definer set search_path = '' stable as $$
-declare requester_id uuid := (select auth.uid());
-begin
-  if requester_id is null then raise exception 'Authentication required' using errcode = '42501'; end if;
-  if expected_owner_id is distinct from requester_id then raise exception 'Authentication context changed' using errcode = '42501'; end if;
-  return coalesce((select jsonb_agg(jsonb_build_object(
-    'item_id', quote.item_id, 'provider', quote.provider, 'quote_currency', quote.quote_currency,
-    'quoted_at', quote.quoted_at, 'price', quote.price::text
-  ) order by quote.quoted_at) from finanko_private.capital_item_quotes quote where quote.owner_id = requester_id), '[]'::jsonb);
-end;
-$$;
-revoke all on function public.get_capital_quote_history(uuid) from public, anon;
-grant execute on function public.get_capital_quote_history(uuid) to authenticated;
 
 create or replace function public.save_capital_snapshot(expected_owner_id uuid, capital_data jsonb)
 returns void
@@ -509,7 +475,8 @@ $$;
 revoke all on function public.delete_capital_group(uuid, text) from public, anon;
 grant execute on function public.delete_capital_group(uuid, text) to authenticated;
 
-create or replace function public.save_capital_valuation(expected_owner_id uuid, quote_rows jsonb, value_usd numeric)
+drop function if exists public.save_capital_valuation(uuid, jsonb, numeric);
+create or replace function public.save_capital_valuation(expected_owner_id uuid, value_usd numeric)
 returns void
 language plpgsql
 security definer
@@ -519,24 +486,17 @@ declare requester_id uuid := (select auth.uid());
 begin
   if requester_id is null then raise exception 'Authentication required' using errcode = '42501'; end if;
   if expected_owner_id is distinct from requester_id then raise exception 'Authentication context changed' using errcode = '42501'; end if;
-  if quote_rows is null or jsonb_typeof(quote_rows) <> 'array' or value_usd is null or value_usd::text in ('NaN', 'Infinity', '-Infinity') then raise exception 'Invalid valuation payload' using errcode = '22023'; end if;
-  if exists (select 1 from jsonb_array_elements(quote_rows) rows(row) where nullif(row->>'price', '') is null or lower(row->>'price') in ('nan', 'infinity', '-infinity', 'inf', '-inf') or (row->>'price')::numeric < 0) then raise exception 'Invalid valuation payload' using errcode = '22023'; end if;
-
-  insert into finanko_private.capital_item_quotes (owner_id, item_id, provider, quote_currency, quoted_at, price)
-  select requester_id, row->>'item_id', row->>'provider', row->>'currency', (row->>'quoted_at')::timestamptz, (row->>'price')::numeric
-  from jsonb_array_elements(quote_rows) rows(row)
-  where exists (select 1 from finanko_private.capital_items i where i.id = row->>'item_id' and i.owner_id = requester_id)
-  on conflict (owner_id, item_id, provider, quoted_at) do update set price = excluded.price, retrieved_at = now();
-
+  if value_usd is null or value_usd::text in ('NaN', 'Infinity', '-Infinity') then raise exception 'Invalid valuation payload' using errcode = '22023'; end if;
   insert into finanko_private.capital_snapshots (owner_id, snapshot_date, reporting_currency, total_value)
   values (requester_id, (now() at time zone 'utc')::date, 'USD', value_usd)
   on conflict (owner_id, snapshot_date, reporting_currency) do update set total_value = excluded.total_value, updated_at = now();
 end;
 $$;
-revoke all on function public.save_capital_valuation(uuid, jsonb, numeric) from public, anon;
-grant execute on function public.save_capital_valuation(uuid, jsonb, numeric) to authenticated;
+revoke all on function public.save_capital_valuation(uuid, numeric) from public, anon;
+grant execute on function public.save_capital_valuation(uuid, numeric) to authenticated;
 
-create or replace function public.rebuild_capital_history(expected_owner_id uuid, quote_rows jsonb, snapshot_rows jsonb)
+drop function if exists public.rebuild_capital_history(uuid, jsonb, jsonb);
+create or replace function public.rebuild_capital_history(expected_owner_id uuid, snapshot_rows jsonb)
 returns void
 language plpgsql
 security definer
@@ -546,23 +506,17 @@ declare requester_id uuid := (select auth.uid());
 begin
   if requester_id is null then raise exception 'Authentication required' using errcode = '42501'; end if;
   if expected_owner_id is distinct from requester_id then raise exception 'Authentication context changed' using errcode = '42501'; end if;
-  if quote_rows is null or snapshot_rows is null or jsonb_typeof(quote_rows) <> 'array' or jsonb_typeof(snapshot_rows) <> 'array' then raise exception 'Invalid history payload' using errcode = '22023'; end if;
-  if exists (select 1 from jsonb_array_elements(quote_rows) rows(row) where nullif(row->>'price', '') is null or lower(row->>'price') in ('nan', 'infinity', '-infinity', 'inf', '-inf') or (row->>'price')::numeric < 0)
+  if snapshot_rows is null or jsonb_typeof(snapshot_rows) <> 'array'
     or exists (select 1 from jsonb_array_elements(snapshot_rows) rows(row) where nullif(row->>'total_usd', '') is null or lower(row->>'total_usd') in ('nan', 'infinity', '-infinity', 'inf', '-inf'))
   then raise exception 'Invalid history payload' using errcode = '22023'; end if;
-  insert into finanko_private.capital_item_quotes (owner_id, item_id, provider, quote_currency, quoted_at, price)
-  select requester_id, row->>'item_id', row->>'provider', row->>'currency', (row->>'quoted_at')::timestamptz, (row->>'price')::numeric
-  from jsonb_array_elements(quote_rows) rows(row)
-  where exists (select 1 from finanko_private.capital_items i where i.id = row->>'item_id' and i.owner_id = requester_id)
-  on conflict (owner_id, item_id, provider, quoted_at) do update set price = excluded.price, retrieved_at = now();
   delete from finanko_private.capital_snapshots where owner_id = requester_id;
   insert into finanko_private.capital_snapshots (owner_id, snapshot_date, reporting_currency, total_value)
   select requester_id, (row->>'date')::date, 'USD', (row->>'total_usd')::numeric
   from jsonb_array_elements(snapshot_rows) rows(row);
 end;
 $$;
-revoke all on function public.rebuild_capital_history(uuid, jsonb, jsonb) from public, anon;
-grant execute on function public.rebuild_capital_history(uuid, jsonb, jsonb) to authenticated;
+revoke all on function public.rebuild_capital_history(uuid, jsonb) from public, anon;
+grant execute on function public.rebuild_capital_history(uuid, jsonb) to authenticated;
 
 -- Independent debt domain. Keep this contract aligned with the debt migration.
 create schema if not exists finanko_private;
@@ -729,13 +683,6 @@ begin
   if requester_id is null then raise exception 'Authentication required' using errcode = '42501'; end if;
   if expected_owner_id is distinct from requester_id then raise exception 'Authentication context changed' using errcode = '42501'; end if;
   return jsonb_build_object(
-    'capital_total_usd', (
-      select snapshot.total_value::text
-      from finanko_private.capital_snapshots snapshot
-      where snapshot.owner_id = requester_id and snapshot.reporting_currency = 'USD'
-      order by snapshot.snapshot_date desc
-      limit 1
-    ),
     'debt_totals', coalesce((
       select jsonb_object_agg(totals.currency, totals.total::text)
       from (
