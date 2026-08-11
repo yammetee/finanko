@@ -6,11 +6,13 @@ import { convertMoney } from "../../shared/lib/currency";
 import { formatMoney } from "../../shared/lib/format";
 import { CurrencySwitcher, type DisplayCurrency } from "../../shared/ui/CurrencySwitcher";
 import { useFeedback } from "../../shared/ui/feedbackContext";
+import { TrendChart } from "../../shared/ui/TrendChart";
 import { CapitalAssetDetailsPage } from "./CapitalAssetDetailsPage";
 import type { CapitalAssetSubmission } from "./capitalAssetSubmission";
 import { sumCapitalValues } from "./capitalCurrency";
 import { getCapitalEventLabel, getCapitalItemLabel } from "./capitalLabels";
 import { useCapitalStore } from "./capitalStore";
+import { buildCurrentPriceCapitalTrend } from "./capitalTrend";
 import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalItemType } from "./capitalTypes";
 import { buildCapitalPositions } from "./capitalView";
 
@@ -73,6 +75,14 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
   })).filter((group) => group.value !== 0).sort((left, right) => Math.abs(right.value) - Math.abs(left.value)), [displayUsd, positions, state.groups, typeFilter]);
   const groupBreakdownTotal = groupBreakdown.reduce((sum, group) => sum + Math.abs(group.value), 0);
   const pending = useMemo(() => state.events.filter((event) => event.status === "expected"), [state.events]);
+  const capitalTrend = useMemo(() => buildCurrentPriceCapitalTrend(state.items, state.events, state.quotes, new Date().toISOString().slice(0, 10)).map((point) => ({
+    key: point.date,
+    start: `${point.date}T00:00:00Z`,
+    end: `${point.date}T23:59:59Z`,
+    value: displayUsd(point.totalUsd),
+    expenseCount: 1,
+    unit: "day" as const,
+  })), [displayUsd, state.events, state.items, state.quotes]);
   const groupsById = useMemo(() => new Map(state.groups.map((group) => [group.id, group])), [state.groups]);
   const itemsById = useMemo(() => new Map(state.items.map((item) => [item.id, item])), [state.items]);
   const unavailableQuoteItemIds = useMemo(() => new Set(state.unavailableQuoteItemIds), [state.unavailableQuoteItemIds]);
@@ -127,7 +137,10 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
     </section>
 
     {state.groups.length > 1 || hasTypeFilters ? <section className="filters">{state.groups.length > 1 ? <div className="button-filter"><button aria-pressed={activeGroupFilter === "all"} className={activeGroupFilter === "all" ? "active" : ""} onClick={() => setGroupFilter("all")}>{t("capital.filters.allGroups")}</button>{state.groups.map((group) => <button aria-pressed={activeGroupFilter === group.id} className={activeGroupFilter === group.id ? "active" : ""} key={group.id} onClick={() => setGroupFilter(group.id)}>{group.name}</button>)}</div> : null}{hasTypeFilters ? <div className="button-filter">{(["all","market","crypto","cash"] as TypeFilter[]).map((type) => <button aria-pressed={typeFilter === type} className={typeFilter === type ? "active" : ""} key={type} onClick={() => setTypeFilter(type)}>{t(`capital.filters.${type}`)}</button>)}</div> : null}</section> : null}
-    {groupBreakdown.length ? <div className="analytics-grid"><section className="panel category-panel"><h2>{t("capital.byGroup")}</h2>{groupBreakdown.map((group) => { const share = groupBreakdownTotal > 0 ? Math.round(Math.abs(group.value) / groupBreakdownTotal * 100) : 0; return <button type="button" key={group.id} onClick={() => setGroupFilter(group.id)}><i style={{ background: group.color }}/><span>{group.name}</span><strong>{formatMoney(group.value, displayCurrency)}</strong><small>{share}%</small></button>; })}</section></div> : null}
+    {capitalTrend.length || groupBreakdown.length ? <div className="analytics-grid">
+      {capitalTrend.length ? <section className="panel chart-panel"><h2>{t("capital.chart")}</h2><TrendChart buckets={capitalTrend} currency={displayCurrency} locale={locale} label={t("capital.chartLabel")}/></section> : null}
+      {groupBreakdown.length ? <section className="panel category-panel"><h2>{t("capital.byGroup")}</h2>{groupBreakdown.map((group) => { const share = groupBreakdownTotal > 0 ? Math.round(Math.abs(group.value) / groupBreakdownTotal * 100) : 0; return <button type="button" key={group.id} onClick={() => setGroupFilter(group.id)}><i style={{ background: group.color }}/><span>{group.name}</span><strong>{formatMoney(group.value, displayCurrency)}</strong><small>{share}%</small></button>; })}</section> : null}
+    </div> : null}
     {pending.length ? <section className="panel pending-events"><h2>{t("capital.pending")}</h2>{pending.map((event) => <div key={event.id}><span>{itemsById.get(event.itemId)?.name} · {getCapitalEventLabel(event.type, locale)} · {eventValue(event)}</span><button aria-label={t("actions.edit")} onClick={() => setEditor({ kind: "event", value: event })}><Pencil size={15}/></button><button aria-label={t("capital.confirm")} onClick={() => void runAction(() => state.setEventStatus(event.id, "confirmed"), t("capital.confirmed"))}><Check size={15}/></button><button aria-label={t("capital.ignore")} onClick={() => void runAction(() => state.setEventStatus(event.id, "ignored"), t("capital.ignored"))}><X size={15}/></button></div>)}</section> : null}
     <section className="history-section capital-list"><div className="section-heading"><h2>{t("capital.assets")}</h2><span>{visible.length}</span></div>{visible.map((position) => { const logoUrl = state.quotes[position.item.id]?.logoUrl; return <button type="button" className="capital-row capital-row-detailed" key={position.item.id} onClick={() => setSelectedItemId(position.item.id)}><span className="capital-asset-icon" aria-hidden="true"><span>{assetMonogram(position.item)}</span>{logoUrl ? <img key={logoUrl} src={logoUrl} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.hidden = true; }}/>: null}</span><div><strong>{position.item.name}</strong><span>{groupsById.get(position.item.groupId)?.name} · {position.item.symbol || getCapitalItemLabel(position.item.type, locale).toLocaleLowerCase(locale)}</span><small>{t("capital.asset.quantity")}: {position.quantity} · {t("capital.average")}: {formatMoney(Number(position.averageCost), position.item.quoteCurrency)}</small>{position.netIncome !== "0" ? <small>{t("capital.income")}: {formatMoney(Number(position.netIncome), position.item.quoteCurrency)}</small> : null}</div><div><strong>{formatMoney(position.value, position.item.quoteCurrency)}</strong>{unavailableQuoteItemIds.has(position.item.id) ? <small className="negative">{t("capital.quoteUnavailable")}</small> : null}<small className={position.profit < 0 ? "negative" : "positive"}>{t("capital.result")}: {formatMoney(position.profit, position.item.quoteCurrency)}</small></div><ChevronRight size={16}/></button>; })}</section>
   </>;

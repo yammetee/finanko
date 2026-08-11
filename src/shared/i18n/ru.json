@@ -190,6 +190,8 @@
   "capital.ignore": "Игнорировать",
   "capital.confirmed": "Подтверждено",
   "capital.ignored": "Проигнорировано",
+  "capital.chart": "Динамика капитала",
+  "capital.chartLabel": "Динамика капитала по текущим ценам",
   "capital.byGroup": "Капитал по группам",
   "capital.filters.allGroups": "Все группы",
   "capital.filters.all": "Все",
