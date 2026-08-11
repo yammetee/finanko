@@ -1,5 +1,3 @@
-export const MARKET_REQUEST_LIMIT = 30;
-
 const MARKET_SYMBOL_PATTERN = /^[A-Z0-9._-]{1,32}$/;
 
 export function normalizeMarketSymbol(value: unknown) {

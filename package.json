@@ -11,7 +11,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:integration": "RUN_LIVE_MARKET_TESTS=1 vitest run supabase/capital.integration.test.ts integration/market.live.test.ts --reporter=verbose",
+    "test:integration": "vitest run supabase/capital.integration.test.ts --reporter=verbose",
     "preview": "vite preview"
   },
   "dependencies": {

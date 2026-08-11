@@ -45,10 +45,10 @@ export function buildCapitalAssetSubmission(values: AssetFormValues, context: Su
   const market = type === "stock" || type === "fund" || type === "crypto";
   const symbol = normalizeMarketSymbol(context.item?.symbol ?? values.symbol);
   if (market && !symbol) throw new Error("capital_symbol_invalid");
-  const primaryProvider = market ? context.item?.primaryProvider ?? context.provider ?? (type === "crypto" ? "bybit" : "nasdaq") : undefined;
+  const primaryProvider = market ? context.item?.primaryProvider ?? context.provider ?? (type === "crypto" ? "bybit" : "tradingview") : undefined;
   const primaryAssetId = market ? context.item?.primaryAssetId ?? context.providerAssetId ?? (primaryProvider === "bybit" && symbol ? `${symbol}USDT` : symbol) : undefined;
-  const fallbackProvider = context.item?.fallbackProvider ?? (type === "crypto" ? (primaryProvider === "coingecko" ? "bybit" : "coingecko") : market ? "yahoo" : undefined);
-  const fallbackAssetId = context.item?.fallbackAssetId ?? (type === "crypto" ? (fallbackProvider === "bybit" && symbol ? `${symbol}USDT` : undefined) : symbol);
+  const fallbackProvider = context.item?.fallbackProvider ?? (type === "crypto" ? (primaryProvider === "coingecko" ? "bybit" : "coingecko") : undefined);
+  const fallbackAssetId = context.item?.fallbackAssetId ?? (type === "crypto" && fallbackProvider === "bybit" && symbol ? `${symbol}USDT` : undefined);
   const hasInterest = type === "deposit" && isPositiveCapitalDecimal(values.interestRate);
   const openingQuantity = normalizeCapitalDecimal(values.openingQuantity);
   const openingPrice = normalizeCapitalDecimal(values.openingPrice);

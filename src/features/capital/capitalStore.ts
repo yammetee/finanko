@@ -1,14 +1,13 @@
 import { create } from "zustand";
 import { uid } from "../../shared/lib/id";
 import type { LoadState } from "../../shared/types/loadState";
-import { deleteCapitalEvent, deleteCapitalGroup, deleteCapitalItem, loadCapitalData, saveCapitalData, saveCapitalHistory } from "./capitalRepository";
+import { deleteCapitalEvent, deleteCapitalGroup, deleteCapitalItem, loadCapitalData, saveCapitalData, saveCapitalValuation } from "./capitalRepository";
 import type { CapitalEvent, CapitalGroup, CapitalItem, CapitalQuote, CapitalSnapshot, CapitalValuation } from "./capitalTypes";
-import { loadMarketHistory, loadMarketQuotes } from "./marketRepository";
+import { loadMarketQuotes } from "./marketRepository";
 import { getCapitalTotalUsd } from "./capitalView";
 import { convertCapitalMoney } from "./capitalCurrency";
 import { capitalEventTimestamp, compareCapitalEvents } from "./capitalEventTime";
 import { buildExpectedInterestEvents } from "./interestRules";
-import { rebuildCapitalHistory } from "./capitalHistory";
 import { addTransferCostBasis, assertCapitalOutflowsWithinBalance } from "./capitalMath";
 import { isCapitalEventTypeAllowed } from "./capitalEventRules";
 
@@ -16,7 +15,6 @@ interface CapitalState extends Pick<CapitalSnapshot, "groups" | "items" | "event
   ownerId: string | null;
   quotes: Record<string, CapitalQuote>;
   valuations: CapitalValuation[];
-  historyLoading: boolean;
   quotesLoading: boolean;
   unavailableQuoteItemIds: string[];
   loadState: LoadState;
@@ -37,7 +35,6 @@ let capitalSessionVersion = 0;
 const emptyCapitalState = () => ({
   groups: [], items: [], events: [], quotes: {}, valuations: [],
   quotesLoading: false, unavailableQuoteItemIds: [],
-  historyLoading: false,
 });
 const isMarketItem = (item: CapitalItem) => item.type === "stock" || item.type === "fund" || item.type === "crypto";
 const convertEventsToCurrency = (events: CapitalEvent[], currency: CapitalItem["quoteCurrency"]) => events.map((event) => {
@@ -171,22 +168,17 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
     if (status !== "expected") await generateExpectedInterest();
   },
   refreshMarketData: async () => {
-    if (get().quotesLoading || get().historyLoading) return;
+    if (get().quotesLoading) return;
     const ownerId = get().ownerId;
     if (!ownerId) return;
     const current = get();
     const marketItems = current.items.filter((item) => item.symbol && isMarketItem(item));
     if (!marketItems.length) return;
-    const startDate = current.events.filter((event) => event.status === "confirmed").map((event) => event.occurredAt.slice(0, 10)).sort()[0];
-    set({ quotesLoading: true, historyLoading: true });
+    set({ quotesLoading: true });
     try {
       let quotes: CapitalQuote[];
-      let history: CapitalQuote[];
       try {
-        [quotes, history] = await Promise.all([
-          loadMarketQuotes(marketItems),
-          startDate ? loadMarketHistory(current.items, startDate) : Promise.resolve([]),
-        ]);
+        quotes = await loadMarketQuotes(marketItems);
       } catch (error) {
         if (get().ownerId === ownerId) set({ quotes: {}, unavailableQuoteItemIds: marketItems.map((item) => item.id) });
         throw error;
@@ -197,13 +189,12 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       const today = utcDate();
       const resolved = new Set(quotes.map((quote) => quote.itemId));
       const unavailableQuoteItemIds = marketItems.filter((item) => !resolved.has(item.id)).map((item) => item.id);
-      const historyValues = startDate ? rebuildCapitalHistory(current.items, current.events, history) : current.valuations;
-      const valuations = [...historyValues.filter((value) => value.date !== today), { date: today, totalUsd }];
+      const valuations = [...current.valuations.filter((value) => value.date !== today), { date: today, totalUsd }];
       set({ quotes: currentQuotes, unavailableQuoteItemIds, valuations });
-      await saveCapitalHistory(ownerId, valuations);
+      await saveCapitalValuation(ownerId, totalUsd);
       if (get().ownerId !== ownerId) return;
     } finally {
-      if (get().ownerId === ownerId) set({ quotesLoading: false, historyLoading: false });
+      if (get().ownerId === ownerId) set({ quotesLoading: false });
     }
   },
 }));

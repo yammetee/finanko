@@ -18,10 +18,15 @@ export function CapitalRoute(props: Props) {
   const ownerId = useCapitalStore((state) => state.ownerId);
   const loadState = useCapitalStore((state) => state.loadState);
   const initialize = useCapitalStore((state) => state.initialize);
+  const refreshMarketData = useCapitalStore((state) => state.refreshMarketData);
 
   useEffect(() => {
-    void initialize(userId);
-  }, [initialize, userId]);
+    let active = true;
+    void initialize(userId).then(() => {
+      if (active && useCapitalStore.getState().ownerId === userId) return refreshMarketData();
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [initialize, refreshMarketData, userId]);
 
   if (ownerId !== userId || loadState === "idle" || loadState === "loading") return <FeaturePageState />;
   if (loadState === "error") return <FeaturePageState error onRetry={() => void initialize(userId)} />;

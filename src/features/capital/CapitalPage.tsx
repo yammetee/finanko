@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Pencil, Plus, RefreshCw, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Plus, X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useI18n } from "../../shared/i18n/i18nContext";
@@ -33,8 +33,6 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
     events: value.events,
     quotes: value.quotes,
     valuations: value.valuations,
-    historyLoading: value.historyLoading,
-    quotesLoading: value.quotesLoading,
     unavailableQuoteItemIds: value.unavailableQuoteItemIds,
     saveGroup: value.saveGroup,
     saveItem: value.saveItem,
@@ -42,7 +40,6 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
     saveEvent: value.saveEvent,
     deleteItem: value.deleteItem,
     setEventStatus: value.setEventStatus,
-    refreshMarketData: value.refreshMarketData,
   })));
   const [editor, setEditor] = useState<Editor>(null);
   const [saving, setSaving] = useState(false);
@@ -81,7 +78,6 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
   const groupsById = useMemo(() => new Map(state.groups.map((group) => [group.id, group])), [state.groups]);
   const itemsById = useMemo(() => new Map(state.items.map((item) => [item.id, item])), [state.items]);
   const unavailableQuoteItemIds = useMemo(() => new Set(state.unavailableQuoteItemIds), [state.unavailableQuoteItemIds]);
-  const hasMarketItems = useMemo(() => state.items.some((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")), [state.items]);
   const eventValue = (event: CapitalEvent) => event.type === "split" ? `${event.splitRatio}×` : event.type === "transfer" && event.quantity ? event.quantity : event.amount ? formatMoney(Number(event.amount), event.currency) : event.quantity ?? "";
 
   const save = async (action: () => Promise<unknown>) => {
@@ -129,12 +125,12 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
   return <>
     <section className="summary-header">
       <div className="summary-copy"><span>{t("capital.total")}</span><div className="summary-total"><strong>{formatMoney(displayUsd(total), displayCurrency)}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{t("capital.invested")} {formatMoney(displayUsd(invested), displayCurrency)}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(displayUsd(result), displayCurrency)}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(displayUsd(income), displayCurrency)}</span><b aria-hidden="true">·</b><span className="summary-async-metric">{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(displayUsd(debtTotalUsd), displayCurrency)}</span></small></div>
-      <div className="quick-actions"><button type="button" onClick={() => setEditor({ kind: "group" })}><Plus size={16}/>{t("capital.group.title")}</button><button className="primary" type="button" disabled={!state.groups.length} onClick={() => setEditor({ kind: "item" })}><Plus size={16}/>{t("capital.asset.title")}</button><button type="button" disabled={!state.items.length} onClick={() => setEditor({ kind: "event" })}><Plus size={16}/>{t("capital.event.title")}</button><button type="button" disabled={!hasMarketItems || state.quotesLoading || state.historyLoading} onClick={() => void runAction(state.refreshMarketData, t("capital.market.updated"))}><RefreshCw className={state.quotesLoading || state.historyLoading ? "spin" : undefined} size={16}/>{t("capital.market.refresh")}</button></div>
+      <div className="quick-actions"><button type="button" onClick={() => setEditor({ kind: "group" })}><Plus size={16}/>{t("capital.group.title")}</button><button className="primary" type="button" disabled={!state.groups.length} onClick={() => setEditor({ kind: "item" })}><Plus size={16}/>{t("capital.asset.title")}</button><button type="button" disabled={!state.items.length} onClick={() => setEditor({ kind: "event" })}><Plus size={16}/>{t("capital.event.title")}</button></div>
     </section>
 
     {state.groups.length > 1 || hasTypeFilters ? <section className="filters">{state.groups.length > 1 ? <div className="button-filter"><button aria-pressed={activeGroupFilter === "all"} className={activeGroupFilter === "all" ? "active" : ""} onClick={() => setGroupFilter("all")}>{t("capital.filters.allGroups")}</button>{state.groups.map((group) => <button aria-pressed={activeGroupFilter === group.id} className={activeGroupFilter === group.id ? "active" : ""} key={group.id} onClick={() => setGroupFilter(group.id)}>{group.name}</button>)}</div> : null}{hasTypeFilters ? <div className="button-filter">{(["all","market","crypto","cash"] as TypeFilter[]).map((type) => <button aria-pressed={typeFilter === type} className={typeFilter === type ? "active" : ""} key={type} onClick={() => setTypeFilter(type)}>{t(`capital.filters.${type}`)}</button>)}</div> : null}</section> : null}
     {capitalTrend.length || groupBreakdown.length ? <div className="analytics-grid">
-      {capitalTrend.length ? <section className="panel chart-panel"><h2>{t("capital.chart")}{state.historyLoading ? <RefreshCw className="spin" size={14}/> : null}</h2><TrendChart buckets={capitalTrend} currency={displayCurrency} locale={locale} label={t("capital.chartLabel")}/></section> : null}
+      {capitalTrend.length ? <section className="panel chart-panel"><h2>{t("capital.chart")}</h2><TrendChart buckets={capitalTrend} currency={displayCurrency} locale={locale} label={t("capital.chartLabel")}/></section> : null}
       {groupBreakdown.length ? <section className="panel category-panel"><h2>{t("capital.byGroup")}</h2>{groupBreakdown.map((group) => { const share = groupBreakdownTotal > 0 ? Math.round(Math.abs(group.value) / groupBreakdownTotal * 100) : 0; return <button type="button" key={group.id} onClick={() => setGroupFilter(group.id)}><i style={{ background: group.color }}/><span>{group.name}</span><strong>{formatMoney(group.value, displayCurrency)}</strong><small>{share}%</small></button>; })}</section> : null}
     </div> : null}
     {pending.length ? <section className="panel pending-events"><h2>{t("capital.pending")}</h2>{pending.map((event) => <div key={event.id}><span>{itemsById.get(event.itemId)?.name} · {getCapitalEventLabel(event.type, locale)} · {eventValue(event)}</span><button aria-label={t("actions.edit")} onClick={() => setEditor({ kind: "event", value: event })}><Pencil size={15}/></button><button aria-label={t("capital.confirm")} onClick={() => void runAction(() => state.setEventStatus(event.id, "confirmed"), t("capital.confirmed"))}><Check size={15}/></button><button aria-label={t("capital.ignore")} onClick={() => void runAction(() => state.setEventStatus(event.id, "ignored"), t("capital.ignored"))}><X size={15}/></button></div>)}</section> : null}

@@ -17,9 +17,9 @@ export interface CapitalItem {
   symbol?: string;
   quoteCurrency: CapitalCurrency;
   manualPrice?: string;
-  primaryProvider?: "bybit" | "coingecko" | "nasdaq" | "yahoo";
+  primaryProvider?: "bybit" | "coingecko" | "nasdaq" | "tradingview" | "yahoo";
   primaryAssetId?: string;
-  fallbackProvider?: "bybit" | "coingecko" | "nasdaq" | "yahoo";
+  fallbackProvider?: "bybit" | "coingecko" | "nasdaq" | "tradingview" | "yahoo";
   fallbackAssetId?: string;
   annualInterestRate?: string;
   interestCadence?: "monthly" | "quarterly" | "yearly";
@@ -41,7 +41,7 @@ export interface CapitalAssetSuggestion {
   name: string;
   symbol: string;
   type: "stock" | "fund" | "crypto";
-  provider: "coingecko" | "nasdaq" | "yahoo";
+  provider: "coingecko" | "nasdaq" | "tradingview" | "yahoo";
   providerAssetId: string;
 }
 

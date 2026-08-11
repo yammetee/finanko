@@ -18,7 +18,7 @@ function item(row: Row): CapitalItem {
   const type = row.item_type as CapitalItem["type"];
   const normalizeProvider = (value: unknown): CapitalItem["primaryProvider"] => {
     if (!value) return undefined;
-    if (["bybit", "coingecko", "nasdaq", "yahoo"].includes(String(value))) return value as CapitalItem["primaryProvider"];
+    if (["bybit", "coingecko", "nasdaq", "tradingview", "yahoo"].includes(String(value))) return value as CapitalItem["primaryProvider"];
     return undefined;
   };
   return {
@@ -65,12 +65,6 @@ export function deserializeCapitalSnapshot(data: unknown): CapitalSnapshot {
     events: (snapshot.events ?? []).map(event),
     valuations: (snapshot.snapshots ?? []).map(valuation),
   };
-}
-
-export async function saveCapitalHistory(ownerId: string, values: CapitalValuation[]) {
-  const supabase = await requireSupabaseClient();
-  const { error } = await supabase.rpc("rebuild_capital_history", { expected_owner_id: ownerId, snapshot_rows: values.map((value) => ({ date: value.date, total_usd: value.totalUsd })) });
-  if (error) throw error;
 }
 
 export async function saveCapitalValuation(ownerId: string, totalUsd: string) {
