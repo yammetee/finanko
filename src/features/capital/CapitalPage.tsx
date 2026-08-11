@@ -34,6 +34,7 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
     quotes: value.quotes,
     valuations: value.valuations,
     historyLoading: value.historyLoading,
+    quotesLoading: value.quotesLoading,
     unavailableQuoteItemIds: value.unavailableQuoteItemIds,
     saveGroup: value.saveGroup,
     saveItem: value.saveItem,
@@ -41,6 +42,7 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
     saveEvent: value.saveEvent,
     deleteItem: value.deleteItem,
     setEventStatus: value.setEventStatus,
+    refreshMarketData: value.refreshMarketData,
   })));
   const [editor, setEditor] = useState<Editor>(null);
   const [saving, setSaving] = useState(false);
@@ -79,6 +81,7 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
   const groupsById = useMemo(() => new Map(state.groups.map((group) => [group.id, group])), [state.groups]);
   const itemsById = useMemo(() => new Map(state.items.map((item) => [item.id, item])), [state.items]);
   const unavailableQuoteItemIds = useMemo(() => new Set(state.unavailableQuoteItemIds), [state.unavailableQuoteItemIds]);
+  const hasMarketItems = useMemo(() => state.items.some((item) => item.symbol && (item.type === "stock" || item.type === "fund" || item.type === "crypto")), [state.items]);
   const eventValue = (event: CapitalEvent) => event.type === "split" ? `${event.splitRatio}×` : event.type === "transfer" && event.quantity ? event.quantity : event.amount ? formatMoney(Number(event.amount), event.currency) : event.quantity ?? "";
 
   const save = async (action: () => Promise<unknown>) => {
@@ -116,7 +119,7 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
     return <CapitalAssetDetailsPage
       position={selectedPosition}
       groupName={groupsById.get(selectedPosition.item.groupId)?.name}
-      quoteUnavailable={unavailableQuoteItemIds.has(selectedPosition.item.id) || selectedPosition.priceSource === "missing"}
+      quoteUnavailable={unavailableQuoteItemIds.has(selectedPosition.item.id)}
       onBack={() => setSelectedItemId(null)}
       onEdit={() => latestOpening ? setEditor({ kind: "event", value: latestOpening }) : setEditor({ kind: "item", value: selectedPosition.item })}
       onDelete={() => void runAction(async () => { await state.deleteItem(selectedPosition.item.id); setSelectedItemId(null); }, t("capital.deleted"))}
@@ -126,7 +129,7 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
   return <>
     <section className="summary-header">
       <div className="summary-copy"><span>{t("capital.total")}</span><div className="summary-total"><strong>{formatMoney(displayUsd(total), displayCurrency)}</strong><CurrencySwitcher value={currencyMode} onChange={onCurrencyChange}/></div><small><span>{t("capital.invested")} {formatMoney(displayUsd(invested), displayCurrency)}</span><b aria-hidden="true">·</b><span className={Number(result) < 0 ? "negative" : "positive"}>{t("capital.result")} {formatMoney(displayUsd(result), displayCurrency)}</span><b aria-hidden="true">·</b><span>{t("capital.income")} {formatMoney(displayUsd(income), displayCurrency)}</span><b aria-hidden="true">·</b><span className="summary-async-metric">{t("debt.total")} {debtTotalUsd === undefined ? "—" : formatMoney(displayUsd(debtTotalUsd), displayCurrency)}</span></small></div>
-      <div className="quick-actions"><button type="button" onClick={() => setEditor({ kind: "group" })}><Plus size={16}/>{t("capital.group.title")}</button><button className="primary" type="button" disabled={!state.groups.length} onClick={() => setEditor({ kind: "item" })}><Plus size={16}/>{t("capital.asset.title")}</button><button type="button" disabled={!state.items.length} onClick={() => setEditor({ kind: "event" })}><Plus size={16}/>{t("capital.event.title")}</button></div>
+      <div className="quick-actions"><button type="button" onClick={() => setEditor({ kind: "group" })}><Plus size={16}/>{t("capital.group.title")}</button><button className="primary" type="button" disabled={!state.groups.length} onClick={() => setEditor({ kind: "item" })}><Plus size={16}/>{t("capital.asset.title")}</button><button type="button" disabled={!state.items.length} onClick={() => setEditor({ kind: "event" })}><Plus size={16}/>{t("capital.event.title")}</button><button type="button" disabled={!hasMarketItems || state.quotesLoading || state.historyLoading} onClick={() => void runAction(state.refreshMarketData, t("capital.market.updated"))}><RefreshCw className={state.quotesLoading || state.historyLoading ? "spin" : undefined} size={16}/>{t("capital.market.refresh")}</button></div>
     </section>
 
     {state.groups.length > 1 || hasTypeFilters ? <section className="filters">{state.groups.length > 1 ? <div className="button-filter"><button aria-pressed={activeGroupFilter === "all"} className={activeGroupFilter === "all" ? "active" : ""} onClick={() => setGroupFilter("all")}>{t("capital.filters.allGroups")}</button>{state.groups.map((group) => <button aria-pressed={activeGroupFilter === group.id} className={activeGroupFilter === group.id ? "active" : ""} key={group.id} onClick={() => setGroupFilter(group.id)}>{group.name}</button>)}</div> : null}{hasTypeFilters ? <div className="button-filter">{(["all","market","crypto","cash"] as TypeFilter[]).map((type) => <button aria-pressed={typeFilter === type} className={typeFilter === type ? "active" : ""} key={type} onClick={() => setTypeFilter(type)}>{t(`capital.filters.${type}`)}</button>)}</div> : null}</section> : null}
@@ -135,6 +138,6 @@ export function CapitalPage({ ratesVersion, debtTotalUsd, currencyMode, onCurren
       {groupBreakdown.length ? <section className="panel category-panel"><h2>{t("capital.byGroup")}</h2>{groupBreakdown.map((group) => { const share = groupBreakdownTotal > 0 ? Math.round(Math.abs(group.value) / groupBreakdownTotal * 100) : 0; return <button type="button" key={group.id} onClick={() => setGroupFilter(group.id)}><i style={{ background: group.color }}/><span>{group.name}</span><strong>{formatMoney(group.value, displayCurrency)}</strong><small>{share}%</small></button>; })}</section> : null}
     </div> : null}
     {pending.length ? <section className="panel pending-events"><h2>{t("capital.pending")}</h2>{pending.map((event) => <div key={event.id}><span>{itemsById.get(event.itemId)?.name} · {getCapitalEventLabel(event.type, locale)} · {eventValue(event)}</span><button aria-label={t("actions.edit")} onClick={() => setEditor({ kind: "event", value: event })}><Pencil size={15}/></button><button aria-label={t("capital.confirm")} onClick={() => void runAction(() => state.setEventStatus(event.id, "confirmed"), t("capital.confirmed"))}><Check size={15}/></button><button aria-label={t("capital.ignore")} onClick={() => void runAction(() => state.setEventStatus(event.id, "ignored"), t("capital.ignored"))}><X size={15}/></button></div>)}</section> : null}
-    <section className="history-section capital-list"><div className="section-heading"><h2>{t("capital.assets")}</h2><span>{visible.length}</span></div>{visible.map((position) => <button type="button" className="capital-row capital-row-detailed" key={position.item.id} onClick={() => setSelectedItemId(position.item.id)}><div><strong>{position.item.name}</strong><span>{groupsById.get(position.item.groupId)?.name} · {position.item.symbol || getCapitalItemLabel(position.item.type, locale).toLocaleLowerCase(locale)}</span><small>{t("capital.asset.quantity")}: {position.quantity} · {t("capital.average")}: {formatMoney(Number(position.averageCost), position.item.quoteCurrency)}</small>{position.netIncome !== "0" ? <small>{t("capital.income")}: {formatMoney(Number(position.netIncome), position.item.quoteCurrency)}</small> : null}</div><div><strong>{formatMoney(position.value, position.item.quoteCurrency)}</strong>{unavailableQuoteItemIds.has(position.item.id) || position.priceSource === "missing" ? <small className="negative">{t("capital.quoteUnavailable")}</small> : null}<small className={position.profit < 0 ? "negative" : "positive"}>{t("capital.result")}: {formatMoney(position.profit, position.item.quoteCurrency)}</small></div><ChevronRight size={16}/></button>)}</section>
+    <section className="history-section capital-list"><div className="section-heading"><h2>{t("capital.assets")}</h2><span>{visible.length}</span></div>{visible.map((position) => <button type="button" className="capital-row capital-row-detailed" key={position.item.id} onClick={() => setSelectedItemId(position.item.id)}><div><strong>{position.item.name}</strong><span>{groupsById.get(position.item.groupId)?.name} · {position.item.symbol || getCapitalItemLabel(position.item.type, locale).toLocaleLowerCase(locale)}</span><small>{t("capital.asset.quantity")}: {position.quantity} · {t("capital.average")}: {formatMoney(Number(position.averageCost), position.item.quoteCurrency)}</small>{position.netIncome !== "0" ? <small>{t("capital.income")}: {formatMoney(Number(position.netIncome), position.item.quoteCurrency)}</small> : null}</div><div><strong>{formatMoney(position.value, position.item.quoteCurrency)}</strong>{unavailableQuoteItemIds.has(position.item.id) ? <small className="negative">{t("capital.quoteUnavailable")}</small> : null}<small className={position.profit < 0 ? "negative" : "positive"}>{t("capital.result")}: {formatMoney(position.profit, position.item.quoteCurrency)}</small></div><ChevronRight size={16}/></button>)}</section>
   </>;
 }

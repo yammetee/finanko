@@ -1,4 +1,4 @@
-import { getAuthenticatedUserId } from "../src/server/supabaseAuth";
+import { getAuthenticatedUserId } from "./_serverRequest";
 
 interface ApiRequest {
   method?: string;

@@ -1,5 +1,4 @@
-import { fetchWithTimeout } from "../src/shared/api/fetchWithTimeout";
-import { getAuthenticatedUserId } from "../src/server/supabaseAuth";
+import { fetchWithTimeout, getAuthenticatedUserId } from "./_serverRequest";
 
 const MARKET_REQUEST_LIMIT = 30;
 const MARKET_SYMBOL_PATTERN = /^[A-Z0-9._-]{1,32}$/;

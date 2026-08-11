@@ -1,6 +1,5 @@
 import { GoTrueAdminApi } from "@supabase/auth-js";
-import { fetchWithTimeout } from "../src/shared/api/fetchWithTimeout";
-import { getAuthenticatedUserId } from "../src/server/supabaseAuth";
+import { fetchWithTimeout, getAuthenticatedUserId } from "./_serverRequest";
 
 interface ApiRequest {
   method?: string;

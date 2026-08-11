@@ -201,6 +201,8 @@
   "capital.assets": "Активы",
   "capital.average": "Средняя",
   "capital.quoteUnavailable": "Цена недоступна",
+  "capital.market.refresh": "Обновить рынок",
+  "capital.market.updated": "Рыночные данные обновлены",
   "capital.delete.group.title": "Удалить группу?",
   "capital.delete.item.title": "Удалить актив?",
   "capital.delete.item.description": "{name} будет удалён из капитала вместе с его операциями.",

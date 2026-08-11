@@ -201,6 +201,8 @@
   "capital.assets": "Assets",
   "capital.average": "Average",
   "capital.quoteUnavailable": "Price is unavailable",
+  "capital.market.refresh": "Refresh market",
+  "capital.market.updated": "Market data updated",
   "capital.delete.group.title": "Delete group?",
   "capital.delete.item.title": "Delete asset?",
   "capital.delete.item.description": "{name} will be removed from capital together with its events.",
