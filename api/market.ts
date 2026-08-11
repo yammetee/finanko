@@ -22,13 +22,14 @@ const NASDAQ_HEADERS = { Accept: "application/json, text/plain, */*", "User-Agen
 const COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", USDT: "tether", USDC: "usd-coin" };
 const MARKET_PROVIDERS: MarketProvider[] = ["bybit", "coingecko", "nasdaq", "yahoo"];
 const MARKET_CACHE_MAX_ENTRIES = 500;
-const QUOTE_CACHE_TTL_MS = 60_000;
+const QUOTE_FALLBACK_MAX_AGE_MS = 60 * 60_000;
 const SEARCH_CACHE_TTL_MS = 5 * 60_000;
 const HISTORY_CACHE_TTL_MS = 15 * 60_000;
 const MARKET_RATE_WINDOW_MS = 60_000;
 const MARKET_RATE_LIMITS = { search: 30, quotes: 60, history: 10 } as const;
 
 interface CacheEntry { expiresAt: number; value?: unknown; request?: Promise<unknown> }
+type CachePolicy = "cache-first" | "fallback-only";
 const marketCache = new Map<string, CacheEntry>();
 const marketRateWindows = new Map<string, { startedAt: number; count: number }>();
 
@@ -41,22 +42,27 @@ function pruneMarketCache(now: number) {
   }
 }
 
-async function cachedMarketValue<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+async function cachedMarketValue<T>(key: string, ttlMs: number, load: () => Promise<T>, policy: CachePolicy = "cache-first"): Promise<T> {
   const now = Date.now();
+  pruneMarketCache(now);
   const cached = marketCache.get(key);
   if (cached && cached.expiresAt > now) {
     if (cached.request) return cached.request as Promise<T>;
-    return cached.value as T;
+    if (policy === "cache-first") return cached.value as T;
   }
-  pruneMarketCache(now);
+  const fallback = cached?.value !== undefined && cached.expiresAt > now ? cached : undefined;
   const request = load().then((value) => {
     marketCache.set(key, { expiresAt: Date.now() + ttlMs, value });
     return value;
   }).catch((error) => {
+    if (policy === "fallback-only" && fallback?.value !== undefined && fallback.expiresAt > Date.now()) {
+      marketCache.set(key, { expiresAt: fallback.expiresAt, value: fallback.value });
+      return fallback.value as T;
+    }
     marketCache.delete(key);
     throw error;
   });
-  marketCache.set(key, { expiresAt: now + ttlMs, request });
+  marketCache.set(key, { expiresAt: fallback?.expiresAt ?? now + ttlMs, value: fallback?.value, request });
   return request;
 }
 
@@ -177,12 +183,13 @@ async function fetchRouted(
   cacheScope: string,
   ttlMs: number,
   load: (provider: MarketProvider, asset: MarketAsset, signal: AbortSignal) => Promise<NormalizedQuote[]>,
+  cachePolicy: CachePolicy = "cache-first",
 ) {
   const asset = matching[0];
   const [primary, fallback] = providerRoute(asset);
   const cacheKey = [cacheScope, asset.type, primary, asset.providerAssetId ?? asset.symbol, fallback, asset.fallbackAssetId ?? ""].join(":").toLowerCase();
   try {
-    const quotes = await cachedMarketValue(cacheKey, ttlMs, async () => {
+    const loadQuotes = async () => {
       const controller = new AbortController();
       try {
         return await Promise.any([
@@ -192,7 +199,8 @@ async function fetchRouted(
       } finally {
         controller.abort();
       }
-    });
+    };
+    const quotes = await cachedMarketValue(cacheKey, ttlMs, loadQuotes, cachePolicy);
     return fanOutQuotes(quotes, matching);
   } catch {
     return [];
@@ -259,8 +267,9 @@ export async function fetchMarketQuotes(assets: MarketAsset[]) {
   return (await Promise.all(uniqueAssets(assets).map((matching) => fetchRouted(
     matching,
     "quote",
-    QUOTE_CACHE_TTL_MS,
+    QUOTE_FALLBACK_MAX_AGE_MS,
     async (provider, asset, signal) => [await quoteLoader(provider)(asset, signal)],
+    "fallback-only",
   )))).flat();
 }
 

@@ -180,6 +180,7 @@ export const useCapitalStore = create<CapitalState>()((set, get) => ({
       .catch(() => undefined);
   },
   refreshQuotes: async () => {
+    if (get().quotesLoading) return;
     const ownerId = get().ownerId;
     if (!ownerId) return;
     set({ quotesLoading: true });
