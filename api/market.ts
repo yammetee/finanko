@@ -357,25 +357,4 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
   catch { response.status(503).json({ error: "Market data unavailable" }); }
 }
 
-async function fetchHandler(request: Request) {
-  let body: unknown;
-  if (request.method === "POST") {
-    try { body = await request.json(); }
-    catch { return Response.json({ error: "Invalid JSON" }, { status: 400 }); }
-  }
-  let status = 200;
-  let responseBody: unknown;
-  const headers = new Headers();
-  const adapter: ApiResponse = {
-    status(code) { status = code; return adapter; },
-    json(payload) { responseBody = payload; },
-    setHeader(name, value) { headers.set(name, value); },
-    end() {},
-  };
-  await handler({ method: request.method, headers: { authorization: request.headers.get("authorization") ?? undefined }, body }, adapter);
-  if (responseBody === undefined) return new Response(null, { status, headers });
-  headers.set("content-type", "application/json");
-  return new Response(JSON.stringify(responseBody), { status, headers });
-}
-
-export default { fetch: fetchHandler };
+export default handler;

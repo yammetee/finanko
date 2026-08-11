@@ -58,23 +58,4 @@ export async function handler(request: ApiRequest, response: ApiResponse) {
   response.status(204).end();
 }
 
-async function fetchHandler(request: Request) {
-  let status = 200;
-  let responseBody: unknown;
-  const headers = new Headers();
-  const adapter: ApiResponse = {
-    status(code) { status = code; return adapter; },
-    json(payload) { responseBody = payload; },
-    setHeader(name, value) { headers.set(name, value); },
-    end() {},
-  };
-  await handler({
-    method: request.method,
-    headers: { authorization: request.headers.get("authorization") ?? undefined },
-  }, adapter);
-  if (responseBody === undefined) return new Response(null, { status, headers });
-  headers.set("content-type", "application/json");
-  return new Response(JSON.stringify(responseBody), { status, headers });
-}
-
-export default { fetch: fetchHandler };
+export default handler;
